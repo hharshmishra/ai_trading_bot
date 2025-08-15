@@ -1,0 +1,56 @@
+# Binance & Crypto APIs
+ccxt
+python-binance
+
+# Technical indicators
+pandas-ta
+ta-lib
+
+# Web app / API (optional for orchestration)
+fastapi
+uvicorn
+
+# Date & time utilities
+python-dateutil
+
+# Logging & config
+python-dotenv
+
+# Backtesting (optional but useful for validation)
+backtrader
+
+# Core data handling
+pandas
+numpy
+requests
+beautifulsoup4
+newspaper3k
+python-dateutil
+python-dotenv
+
+# Chart pattern recognition
+candle-analyzer
+
+# AI & NLP
+openai
+transformers
+sentence-transformers
+
+# Vector database
+pinecone-client
+
+# Reinforcement Learning
+stable-baselines3
+gymnasium
+ray[rllib]
+
+# API / Orchestration
+fastapi
+uvicorn
+
+# Backtesting & simulation
+backtrader
+
+# Visualization (optional but helpful)
+matplotlib
+plotly
