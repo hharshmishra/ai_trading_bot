@@ -281,8 +281,8 @@ class NewsAgent:
 
     def run(self, pair: str) -> Dict[str, Any]:
         state = NEWS_GRAPH.invoke({"pair": pair})
-        overall = OverallScanJSON.model_validate(state.overall_json)
-        pairj = PairScanJSON.model_validate(state.pair_json)
+        overall = OverallScanJSON.model_validate(state["overall_json"])
+        pairj = PairScanJSON.model_validate(state["pair_json"])
 
         feats = features_from_jsons(overall, pairj)
         action = self._rl.select_action(feats)
