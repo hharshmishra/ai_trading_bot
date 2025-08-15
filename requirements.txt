@@ -29,7 +29,9 @@ python-dateutil
 python-dotenv
 
 # Chart pattern recognition
-candle-analyzer
+# candle-analyzer
+# streaming-indicators
+
 
 # AI & NLP
 openai
@@ -54,3 +56,8 @@ backtrader
 # Visualization (optional but helpful)
 matplotlib
 plotly
+
+langchain
+langgraph
+openai>=1.30.0
+pydantic
