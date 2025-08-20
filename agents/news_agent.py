@@ -348,5 +348,7 @@ if __name__ == "__main__":
     agent = NewsAgent()
     out = agent.run("BTCUSDT")
     print(json.dumps(out, indent=2))
+    user_input_str = input("Enter a floating-point number: ")
+    float_number = float(user_input_str)
     # later, after you verify outcome, call:
-    # agent.learn(out["action"], reward=1.0)   # or -4.0
+    agent.learn(out["action"], reward=float_number)   # or -4.0
