@@ -37,7 +37,8 @@ if __name__ == "__main__":
     raw = agent.decide(symbol, timeframe)
     cleaned = structure_output(raw)
     print(cleaned)
+    # name = input("Please enter true outcome: ")
 
     # --- later, after you know the outcome, call learn()
     # Suppose our action made profit -> reward:
-    # agent.learn(predicted_action=out.action, true_outcome="buy")   # or "sell"/"skip"
+    # agent.learn(predicted_action=raw.action, true_outcome=name)   # or "sell"/"skip"

@@ -208,9 +208,6 @@ class IndicatorAgent:
         out["supertrend"] = st["SUPERT_10_3.0"]
         out["supertrend_dir"] = st["SUPERTd_10_3.0"]   # 1 = bullish, -1 = bearish
 
-        # Put custom indicators here (they can add columns)
-        out = ci.apply_nadaraya_watson_envelope(out)
-
         return out
 
     def _type2_rules(self, raw: pd.DataFrame) -> Dict[str, Any]:
@@ -295,7 +292,7 @@ class IndicatorAgent:
 
         # You can add more custom direct-signal producers here (AlphaTrend, etc.)
         # Each should return: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": "alpha_trend"}
-        print(signals)
+
         return signals
 
     def _merge_direct_signals(self, signals: List[Dict[str, Any]]) -> Dict[str, Any]:

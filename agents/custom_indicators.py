@@ -88,8 +88,6 @@ def apply_nadaraya_watson_envelope(
         out["nwe_mae"] = mae
         out["nwe_upper"] = out["nwe_out"] + out["nwe_mae"]
         out["nwe_lower"] = out["nwe_out"] - out["nwe_mae"]
-        
-        print(out)
 
         return out
     
@@ -127,6 +125,8 @@ def apply_nadaraya_watson_envelope(
         df["nwe_mae"] = nwe_mae
         df["nwe_upper"] = nwe_upper
         df["nwe_lower"] = nwe_lower
+        
+        print(df)
         
         return df
 
