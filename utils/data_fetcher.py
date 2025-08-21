@@ -58,18 +58,46 @@ class DataFetcher:
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
+    # def get_ohlcv(self, symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+    #     path = self._csv_path(symbol, timeframe)
+
+    #     if self.prefer_csv:
+    #         csv = self.load_csv(symbol, timeframe)
+    #         if csv is not None:
+    #             return csv.tail(limit)
+
+    #         # if CSV missing → fetch live, save, then return
+    #         df = self.fetch_ccxt(symbol, timeframe, limit=limit)
+    #         df.to_csv(path, index=False)
+    #         return df
+
+    #     # If prefer_csv = False → always fetch live
+    #     return self.fetch_ccxt(symbol, timeframe, limit=limit)
+
     def get_ohlcv(self, symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
         path = self._csv_path(symbol, timeframe)
 
         if self.prefer_csv:
+            # Try loading existing CSV
             csv = self.load_csv(symbol, timeframe)
-            if csv is not None:
-                return csv.tail(limit)
+            if csv is None or csv.empty:
+                df = self.fetch_ccxt(symbol, timeframe, limit=limit)
+                df.to_csv(path, index=False)
+                return df
 
-            # if CSV missing → fetch live, save, then return
-            df = self.fetch_ccxt(symbol, timeframe, limit=limit)
-            df.to_csv(path, index=False)
-            return df
+            if csv is not None and not csv.empty:
+                # Fetch latest candles
+                new_df = self.fetch_ccxt(symbol, timeframe, limit=limit)
+
+                # Merge & drop duplicates (by timestamp)
+                df = pd.concat([csv, new_df]).drop_duplicates(subset=["timestamp"], keep="last")
+
+                # Keep only last `limit` rows (rolling window)
+                df = df.tail(limit)
+
+                # Save back to CSV
+                df.to_csv(path, index=False)
+                return df
 
         # If prefer_csv = False → always fetch live
         return self.fetch_ccxt(symbol, timeframe, limit=limit)

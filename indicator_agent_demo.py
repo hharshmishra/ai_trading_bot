@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # CSV first. If you want live data, set prefer_csv=False (requires ccxt).
     agent = IndicatorAgent(prefer_csv=False)  # change to False for live ccxt
 
-    symbol = "BTCUSDT"
+    symbol = "LINKUSDT"
     timeframe = "1h"          # ccxt e.g. "1m","5m","15m","1h","4h","1d"
     raw = agent.decide(symbol, timeframe)
     cleaned = structure_output(raw)

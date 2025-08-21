@@ -3,6 +3,6 @@
         "type1": 0.65,
         "type2": 0.35
     },
-    "total_points": 0,
-    "history": []
+    "direct_signals": {},
+    "score": 0
 }

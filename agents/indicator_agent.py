@@ -50,8 +50,8 @@ def _load_policy():
     except (json.JSONDecodeError, FileNotFoundError):
         default_policy = {
             "weights": {"type1": 0.65, "type2": 0.35},
-            "total_points": 0,
-            "history": []
+            "direct_signals": {},
+            "score": 0
         }
         with open(POLICY_PATH, "w") as f:
             json.dump(default_policy, f, indent=4)
@@ -284,7 +284,9 @@ class IndicatorAgent:
 
     def _collect_direct_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         signals = []
-
+            # Ensure indicator columns exist
+        df = ci.apply_nadaraya_watson_envelope(df)
+        
         # Example: Nadaraya-Watson envelope direct signal (if you implement it)
         sig = ci.direct_signal_from_nwe(df)
         if sig:
@@ -293,7 +295,7 @@ class IndicatorAgent:
 
         # You can add more custom direct-signal producers here (AlphaTrend, etc.)
         # Each should return: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": "alpha_trend"}
-
+        print(signals)
         return signals
 
     def _merge_direct_signals(self, signals: List[Dict[str, Any]]) -> Dict[str, Any]:
