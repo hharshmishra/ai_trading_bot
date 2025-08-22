@@ -1,8 +1,13 @@
 {
-    "weights": {
-        "type1": 0.65,
-        "type2": 0.35
-    },
-    "direct_signals": {},
-    "score": 0
+  "weights": {
+    "type1": 0.65,
+    "type2": 0.35
+  },
+  "direct_signals": {
+    "nwe": {
+      "weight": 0.6299999999999999,
+      "score": -4
+    }
+  },
+  "score": -4
 }

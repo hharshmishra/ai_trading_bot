@@ -126,8 +126,6 @@ def apply_nadaraya_watson_envelope(
         df["nwe_upper"] = nwe_upper
         df["nwe_lower"] = nwe_lower
         
-        print(df)
-        
         return df
 
 
@@ -235,3 +233,71 @@ def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]: #Old 
         return {"signal": "skip", "confidence": 0.5}
 
     return {"signal": signal, "confidence": conf}
+
+def chandelier_exit(df: pd.DataFrame, atr_period: int = 22, atr_mult: float = 3.0, use_close: bool = True):
+    """
+    Implements the Chandelier Exit indicator.
+    
+    Args:
+        df (pd.DataFrame): DataFrame with ['open','high','low','close'] columns.
+        atr_period (int): ATR period (default = 22).
+        atr_mult (float): Multiplier for ATR (default = 3.0).
+        use_close (bool): Whether to use close price for extremums (default = True).
+
+    Returns:
+        pd.DataFrame: Original df with added ['long_stop','short_stop','ce_signal'] columns.
+                      ce_signal = 'buy', 'sell', or None
+    """
+    high = df['high']
+    low = df['low']
+    close = df['close']
+
+    # --- Calculate ATR ---
+    tr1 = high - low
+    tr2 = abs(high - close.shift(1))
+    tr3 = abs(low - close.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(atr_period).mean()
+
+    atr_multiplied = atr_mult * atr
+
+    # --- Long Stop ---
+    if use_close:
+        highest_close = close.rolling(atr_period).max()
+        long_stop = highest_close - atr_multiplied
+    else:
+        highest_high = high.rolling(atr_period).max()
+        long_stop = highest_high - atr_multiplied
+
+    long_stop_prev = long_stop.shift(1)
+    long_stop = np.where(close.shift(1) > long_stop_prev, np.maximum(long_stop, long_stop_prev), long_stop)
+
+    # --- Short Stop ---
+    if use_close:
+        lowest_close = close.rolling(atr_period).min()
+        short_stop = lowest_close + atr_multiplied
+    else:
+        lowest_low = low.rolling(atr_period).min()
+        short_stop = lowest_low + atr_multiplied
+
+    short_stop_prev = short_stop.shift(1)
+    short_stop = np.where(close.shift(1) < short_stop_prev, np.minimum(short_stop, short_stop_prev), short_stop)
+
+    # --- Direction ---
+    dir_val = np.where(close > short_stop_prev, 1, np.where(close < long_stop_prev, -1, np.nan))
+    dir_val = pd.Series(dir_val).fillna(method='ffill')  # forward-fill direction
+
+    # --- Signals ---
+    buy_signal = (dir_val == 1) & (pd.Series(dir_val).shift(1) == -1)
+    sell_signal = (dir_val == -1) & (pd.Series(dir_val).shift(1) == 1)
+
+    # --- Assign outputs ---
+    df['long_stop'] = long_stop
+    df['short_stop'] = short_stop
+    df['ce_signal'] = None
+    df.loc[buy_signal, 'ce_signal'] = 'buy'
+    df.loc[sell_signal, 'ce_signal'] = 'sell'
+    
+    print(df)
+
+    return df

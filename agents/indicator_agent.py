@@ -291,6 +291,15 @@ class IndicatorAgent:
             signals.append(sig)
 
         # You can add more custom direct-signal producers here (AlphaTrend, etc.)
+        # --- Chandelier Exit Example ---
+        df = ci.chandelier_exit(df)   # adds long_stop, short_stop, ce_signal columns
+        latest = df.iloc[-1]
+        if latest['ce_signal'] in ["buy", "sell"]:
+            signals.append({
+                "signal": latest['ce_signal'],
+                "confidence": 0.9,  # you can adjust logic to give partial confidence
+                "name": "chandelier_exit"
+            })
         # Each should return: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": "alpha_trend"}
 
         return signals
