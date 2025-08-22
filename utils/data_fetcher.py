@@ -12,7 +12,7 @@ class DataFetcher:
       data/{SYMBOL}_{TIMEFRAME}.csv  e.g., BTCUSDT_1h.csv
     """
 
-    def __init__(self, prefer_csv: bool = True):
+    def __init__(self, prefer_csv: bool = False):
         self.prefer_csv = prefer_csv
         try:
             import ccxt  # noqa: F401

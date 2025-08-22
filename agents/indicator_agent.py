@@ -88,7 +88,7 @@ class IndicatorAgent:
     to learn credibility for each direct-signal plugin.
     """
 
-    def __init__(self, prefer_csv: bool = True):
+    def __init__(self, prefer_csv: bool = False):
         _ensure_logs()
         self.data = DataFetcher(prefer_csv=prefer_csv)
         self.policy = _load_policy()

@@ -346,7 +346,7 @@ class NewsAgent:
 # =========================
 if __name__ == "__main__":
     agent = NewsAgent()
-    out = agent.run("BTCDOMUSDT")
+    out = agent.run("SPX")
     print(json.dumps(out, indent=2))
     user_input_str = input("Enter a floating-point number: ")
     float_number = float(user_input_str)

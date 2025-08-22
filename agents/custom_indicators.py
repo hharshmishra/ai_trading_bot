@@ -361,6 +361,4 @@ def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volu
     df.loc[df['alpha_trend'] > df['alpha_trend_prev'], 'alpha_signal'] = 'buy'
     df.loc[df['alpha_trend'] < df['alpha_trend_prev'], 'alpha_signal'] = 'sell'
     
-    print(df)
-
     return df
