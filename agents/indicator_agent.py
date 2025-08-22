@@ -300,8 +300,18 @@ class IndicatorAgent:
                 "confidence": 0.9,  # you can adjust logic to give partial confidence
                 "name": "chandelier_exit"
             })
+            
+        df = ci.alpha_trend(df)
+        latest = df.iloc[-1]
+        if latest['alpha_signal'] in ["buy", "sell"]:
+            signals.append({
+                "signal": latest['alpha_signal'],
+                "confidence": 0.9,
+                "name": "alpha_trend"
+            })
+        
         # Each should return: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": "alpha_trend"}
-
+        
         return signals
 
     def _merge_direct_signals(self, signals: List[Dict[str, Any]]) -> Dict[str, Any]:

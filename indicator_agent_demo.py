@@ -32,13 +32,13 @@ if __name__ == "__main__":
     # CSV first. If you want live data, set prefer_csv=False (requires ccxt).
     agent = IndicatorAgent(prefer_csv=False)  # change to False for live ccxt
 
-    symbol = "POLUSDT"
-    timeframe = "5m"          # ccxt e.g. "1m","5m","15m","1h","4h","1d"
+    symbol = "BTCDOMUSDT"
+    timeframe = "4h"          # ccxt e.g. "1m","5m","15m","1h","4h","1d"
     raw = agent.decide(symbol, timeframe)
     cleaned = structure_output(raw)
     print(cleaned)
-    # name = input("Please enter true outcome: ")
+    name = input("Please enter true outcome: ")
 
     # --- later, after you know the outcome, call learn()
     # Suppose our action made profit -> reward:
-    # agent.learn(predicted_action=raw.action, true_outcome=name)   # or "sell"/"skip"
+    agent.learn(predicted_action=raw.action, true_outcome=name)   # or "sell"/"skip"

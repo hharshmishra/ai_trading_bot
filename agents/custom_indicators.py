@@ -297,6 +297,69 @@ def chandelier_exit(df: pd.DataFrame, atr_period: int = 22, atr_mult: float = 3.
     df['ce_signal'] = None
     df.loc[buy_signal, 'ce_signal'] = 'buy'
     df.loc[sell_signal, 'ce_signal'] = 'sell'
+
+    return df
+
+def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volume: bool = True):
+    """
+    AlphaTrend indicator (converted from PineScript).
+    
+    Parameters:
+        df (pd.DataFrame): must contain ['open','high','low','close','volume']
+        coeff (float): multiplier (default 1.0)
+        period (int): lookback period (default 14)
+        use_volume (bool): whether to use MFI (True) or RSI (False)
+    
+    Returns:
+        df (pd.DataFrame): with added columns:
+            - 'alpha_trend'
+            - 'alpha_trend_prev'
+            - 'alpha_signal' ('buy', 'sell', or None)
+    """
+
+    # Average True Range (ATR)
+    df['h-l'] = df['high'] - df['low']
+    df['h-c'] = abs(df['high'] - df['close'].shift())
+    df['l-c'] = abs(df['low'] - df['close'].shift())
+    tr = df[['h-l', 'h-c', 'l-c']].max(axis=1)
+    df['atr'] = tr.rolling(period).mean()
+
+    # Money Flow Index (MFI) if volume exists, else RSI
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    if use_volume:
+        mf = typical_price * df['volume']
+        positive_mf = mf.where(typical_price > typical_price.shift(), 0.0)
+        negative_mf = mf.where(typical_price < typical_price.shift(), 0.0)
+        mfi_ratio = positive_mf.rolling(period).sum() / negative_mf.rolling(period).sum()
+        df['osc'] = 100 - (100 / (1 + mfi_ratio))
+    else:
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+        rs = gain / loss
+        df['osc'] = 100 - (100 / (1 + rs))
+
+    # AlphaTrend core calculation
+    upT = df['low'] - df['atr'] * coeff
+    downT = df['high'] + df['atr'] * coeff
+
+    alpha = np.zeros(len(df))
+    for i in range(len(df)):
+        if i == 0:
+            alpha[i] = df['close'].iloc[0]  # init
+        else:
+            if df['osc'].iloc[i] >= 50:
+                alpha[i] = upT.iloc[i] if upT.iloc[i] > alpha[i-1] else alpha[i-1]
+            else:
+                alpha[i] = downT.iloc[i] if downT.iloc[i] < alpha[i-1] else alpha[i-1]
+
+    df['alpha_trend'] = alpha
+    df['alpha_trend_prev'] = df['alpha_trend'].shift(2)
+
+    # Signals
+    df['alpha_signal'] = None
+    df.loc[df['alpha_trend'] > df['alpha_trend_prev'], 'alpha_signal'] = 'buy'
+    df.loc[df['alpha_trend'] < df['alpha_trend_prev'], 'alpha_signal'] = 'sell'
     
     print(df)
 
