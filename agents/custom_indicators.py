@@ -141,6 +141,50 @@ def _crossover(prev_close: float, close: float, prev_thr: float, thr: float) -> 
 
 def direct_signal_from_nwe(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     """
+    Return signal based on last closed bar:
+      - BUY  if close < nwe_lower
+      - SELL if close > nwe_upper
+      - else SKIP
+    Confidence is scaled by how far price is outside the envelope.
+    """
+    cols = {"nwe_out","nwe_mae","nwe_upper","nwe_lower","close"}
+    if not cols.issubset(set(df.columns)):
+        return None
+
+    d = df.dropna(subset=["nwe_upper","nwe_lower","close"])
+    if len(d) < 1:
+        return None
+
+    last = d.iloc[-1]
+    close = float(last["close"])
+    up = float(last["nwe_upper"])
+    lo = float(last["nwe_lower"])
+    band = float(last["nwe_mae"])
+
+    signal = "skip"
+    conf = 0.5
+
+    if close < lo:
+        # BUY
+        signal = "buy"
+        if band > 1e-12:
+            conf = float(np.clip(0.55 + 0.45 * abs(lo - close) / band, 0.55, 0.99))
+        else:
+            conf = 0.6
+
+    elif close > up:
+        # SELL
+        signal = "sell"
+        if band > 1e-12:
+            conf = float(np.clip(0.55 + 0.45 * abs(close - up) / band, 0.55, 0.99))
+        else:
+            conf = 0.6
+
+    return {"signal": signal, "confidence": conf}
+
+
+def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]: #Old without repainting
+    """
     Inspect the LAST CLOSED BAR and return a discrete signal if an event occurred:
       - BUY  if crossunder(close, lower)
       - SELL if crossover(close, upper)
@@ -191,4 +235,3 @@ def direct_signal_from_nwe(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         return {"signal": "skip", "confidence": 0.5}
 
     return {"signal": signal, "confidence": conf}
-
