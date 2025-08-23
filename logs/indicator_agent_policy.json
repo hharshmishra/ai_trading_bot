@@ -5,13 +5,13 @@
   },
   "direct_signals": {
     "alpha_trend": {
-      "weight": 0.5599999999999998,
-      "score": -8
+      "weight": 0.5399999999999998,
+      "score": -11
     },
     "nwe": {
-      "weight": 0.8,
-      "score": 2
+      "weight": 0.73,
+      "score": -2
     }
   },
-  "score": -6
+  "score": -13
 }
