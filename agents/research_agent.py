@@ -41,7 +41,7 @@ ECOSYSTEMS: Dict[str, List[str]] = {
     'ethereum': ['ETH', 'ETC', 'LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'LRC', 'MATIC'],
     'binance_smart_chain': ['BNB', 'CAKE', 'AUTO', 'BUNNY', 'BIFI'],
     'solana': ['SOL', 'RAY', 'SRM', 'FIDA', 'ROPE'],
-    'cardano': ['ADA', 'COTI', 'ERG'],
+    'cardano': ['ADA', 'COTI'],
     'polkadot': ['DOT', 'KSM', 'OCEAN', 'AKRO'],
     'avalanche': ['AVAX', 'PNG', 'JOE'],
     'cosmos': ['ATOM', 'OSMO', 'JUNO', 'SCRT'],

@@ -1,17 +1,8 @@
 {
-  "weights": {
-    "type1": 0.65,
-    "type2": 0.35
-  },
-  "direct_signals": {
-    "alpha_trend": {
-      "weight": 0.5399999999999998,
-      "score": -11
+    "weights": {
+        "type1": 0.65,
+        "type2": 0.35
     },
-    "nwe": {
-      "weight": 0.73,
-      "score": -2
-    }
-  },
-  "score": -13
+    "direct_signals": {},
+    "score": 0
 }
