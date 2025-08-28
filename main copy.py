@@ -67,15 +67,15 @@ logger.addHandler(results_handler)
 # Configurable settings
 # =====================
 # Symbols to analyse (USDT-margined on Binance)
-SYMBOLS = [
-    "AAVE","ADA","ALGO","AR","ARB","ATOM","AVAX","AXS","BCH","BNB",
-    "BTC","CAKE","COMP","CRV","DOGE","DOT","DYDX","ENJ","ETC","ETH",
-    "FET","FIL","FLOW","GALA","GMT","GRT","ICP","IMX","INJ","LINK",
-    "LRC","LUNA","MANA","MKR","NEAR","OP","POL","PYTH","RENDER","SAND",
-    "SHIB","SNX","SOL","STORJ","THETA","UNI","WLD","XRP"
-]
+# SYMBOLS = [
+#     "AAVE","ADA","ALGO","AR","ARB","ATOM","AVAX","AXS","BCH","BNB",
+#     "BTC","CAKE","COMP","CRV","DOGE","DOT","DYDX","ENJ","ETC","ETH",
+#     "FET","FIL","FLOW","GALA","GMT","GRT","ICP","IMX","INJ","LINK",
+#     "LRC","LUNA","MANA","MKR","NEAR","OP","POL","PYTH","RENDER","SAND",
+#     "SHIB","SNX","SOL","STORJ","THETA","UNI","WLD","XRP"
+# ]
 
-# SYMBOLS = ["SOL"]
+SYMBOLS = ["SOL"]
 SYMBOLS = [s + "USDT" for s in SYMBOLS]
 
 # Timeframes we may schedule
@@ -107,8 +107,7 @@ def now_ist() -> datetime:
 
 def is_candle_close_minute(dt: datetime) -> bool:
     """Candle closes at the 30th minute of every hour in IST per user requirement."""
-    return dt.minute == 37
-    # return True
+    return dt.minute == 54
 
 
 def timeframes_due(dt: datetime) -> List[str]:
@@ -487,7 +486,7 @@ async def scheduler_loop():
                 await session_gc()
             except Exception:
                 pass
-        await asyncio.sleep(10)
+        await asyncio.sleep(180)
 
 
 def main():
