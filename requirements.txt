@@ -1,32 +1,35 @@
+# Python 3.11.3
 # Binance & Crypto APIs
-ccxt
-python-binance
+ccxt==4.5.2
+python-binance==1.0.29
 
 # Technical indicators
-pandas-ta
-ta-lib
+pandas-ta==0.3.14b0
+ta-lib==0.6.6
 
 # Web app / API (optional for orchestration)
-fastapi
-uvicorn
+fastapi==0.116.1
+uvicorn==0.35.0
 
 # Date & time utilities
-python-dateutil
+python-dateutil==2.8.2
 
 # Logging & config
-python-dotenv
+python-dotenv==1.0.0
 
 # Backtesting (optional but useful for validation)
-backtrader
+backtrader==1.9.78.123
 
 # Core data handling
-pandas
-numpy
-requests
-beautifulsoup4
-newspaper3k
-python-dateutil
-python-dotenv
+# pandas==2.2.2
+# numpy==1.26.4 #python 3.12.3
+
+pandas==2.0.3
+numpy==1.25.0
+requests==2.31.0
+beautifulsoup4==4.12.2
+newspaper3k==0.2.8
+python-dateutil==2.8.2
 
 # Chart pattern recognition
 # candle-analyzer
@@ -34,33 +37,25 @@ python-dotenv
 
 
 # AI & NLP
-openai
-transformers
-sentence-transformers
+openai==1.102.0
+transformers==4.55.4
+sentence-transformers==5.1.0
 
 # Vector database
-pinecone-client
+pinecone-client==6.0.0
 
 # Reinforcement Learning
-stable-baselines3
-gymnasium
-ray[rllib]
-
-# API / Orchestration
-fastapi
-uvicorn
-
-# Backtesting & simulation
-backtrader
+stable-baselines3==2.7.0
+gymnasium==1.1.1
+ray[rllib]==2.49.0
 
 # Visualization (optional but helpful)
-matplotlib
-plotly
+matplotlib==3.8.2
+plotly==6.3.0
 
-langchain
-langgraph
-openai>=1.30.0
-pydantic
+langchain==0.3.27
+langgraph==0.4.3
+pydantic==2.11.7
 
-telegram
-python-telegram-bot
+telegram==0.0.1
+python-telegram-bot==22.3

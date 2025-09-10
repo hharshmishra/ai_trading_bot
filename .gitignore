@@ -35,3 +35,9 @@ env/
 dist/
 build/
 .DS_Store
+
+python-3.11.3/
+
+__pycache__/
+agents/__pycache__
+brain/__pycache__

@@ -50,14 +50,14 @@ logger.addHandler(results_handler)
 # Configurable settings
 # =====================
 # Symbols to analyse (USDT-margined on Binance)
-# SYMBOLS = [
-#     "AAVE","ADA","ALGO","AR","ARB","ATOM","AVAX","AXS","BCH","BNB",
-#     "BTC","CAKE","COMP","CRV","DOGE","DOT","DYDX","ENJ","ETC","ETH",
-#     "FET","FIL","FLOW","GALA","GMT","GRT","ICP","IMX","INJ","LINK",
-#     "LRC","LUNA","MANA","MKR","NEAR","OP","POL","PYTH","RENDER","SAND",
-#     "SHIB","SNX","SOL","STORJ","THETA","UNI","WLD","XRP"
-# ]
-SYMBOLS = ["TAO", "BTC"]
+SYMBOLS = [
+    "AAVE","ADA","ALGO","AR","ARB","ATOM","AVAX","AXS","BCH","BNB",
+    "BTC","CAKE","COMP","CRV","DOGE","DOT","DYDX","ENJ","ETC","ETH",
+    "FET","FIL","FLOW","GALA","GMT","GRT","ICP","IMX","INJ","LINK",
+    "LRC","LUNA","MANA","MKR","NEAR","OP","POL","PYTH","RENDER","SAND",
+    "SHIB","SNX","SOL","STORJ","THETA","UNI","WLD","XRP"
+]
+# SYMBOLS = ["TAO", "BTC"]
 SYMBOLS = [s + "USDT" for s in SYMBOLS]
 
 # Timeframes
@@ -97,23 +97,23 @@ def now_ist() -> datetime:
 def is_candle_close_minute(dt: datetime) -> bool:
     """For testing, returns True. In production, use dt.minute == 30"""
     # Uncomment for production:
-    # return dt.minute == 30
-    return True  # For testing
+    return dt.minute == 30
+    # return True  # For testing
 
 
 def timeframes_due(dt: datetime) -> List[str]:
     """Return which TFs to run at this close."""
     # For testing, just return 4h
-    due = [TF_4H]
+    # due = [TF_4H]
     
     # Uncomment for production:
-    # due = [TF_1H]
-    # if dt.hour % 4 == 0:
-    #     due.append(TF_4H)
-    # if dt.hour == 0:  # daily close
-    #     due.append(TF_1D)
-    #     if dt.weekday() == 0:  # Monday
-    #         due.append(TF_1W)
+    due = []
+    if dt.hour % 4 == 0:
+        due.append(TF_4H)
+    if dt.hour == 0:  # daily close
+        due.append(TF_1D)
+        if dt.weekday() == 0:  # Monday
+            due.append(TF_1W)
     
     return due
 
@@ -149,7 +149,7 @@ def should_emit_signal(res: Dict[str, Any]) -> Tuple[bool, str, str, float, str]
         return False, final_action, nwe_action, final_conf, ""
 
     # Other TFs: conf>=0.10 OR NWE direct (non-skip)
-    conf_hit = final_conf >= 0.10
+    conf_hit = final_conf >= 0.80
     nwe_hit = nwe_action in ("buy", "sell")
 
     if conf_hit and nwe_hit:
@@ -494,18 +494,18 @@ async def clear_cache():
 
 async def scheduler_loop(app: Optional[Application]):
     """Main scheduler loop with improved efficiency."""
-    last_run_minute = None
+    last_run_ts = None
     logger.info("Scheduler started")
     
     while True:
         try:
-            dt = now_ist()
+            dt = now_ist().replace(second=0, microsecond=0) 
             
             # Check if it's time to run
-            if is_candle_close_minute(dt) and dt.minute != last_run_minute:
-                last_run_minute = dt.minute
+            if is_candle_close_minute(dt) and dt != last_run_ts:
+                last_run_ts = dt
                 tfs = timeframes_due(dt)
-                
+                print(dt)
                 logger.info(f"Running batch at {dt.strftime('%Y-%m-%d %H:%M:%S')} for timeframes: {tfs}")
                 
                 # Run analysis batch

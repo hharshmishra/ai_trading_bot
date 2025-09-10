@@ -38,7 +38,7 @@ PRED_LOG    = "logs/research_predictions.jsonl"
 
 # Ecosystem map (editable). Symbols should be BASE asset tickers (no /USDT).
 ECOSYSTEMS: Dict[str, List[str]] = {
-    'ethereum': ['ETH', 'ETC', 'LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'LRC', 'MATIC'],
+    'ethereum': ['ETH', 'ETC', 'LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'LRC', 'POL'],
     'binance_smart_chain': ['BNB', 'CAKE', 'AUTO', 'BUNNY', 'BIFI'],
     'solana': ['SOL', 'RAY', 'SRM', 'FIDA', 'ROPE'],
     'cardano': ['ADA', 'COTI'],
@@ -46,7 +46,7 @@ ECOSYSTEMS: Dict[str, List[str]] = {
     'avalanche': ['AVAX', 'PNG', 'JOE'],
     'cosmos': ['ATOM', 'OSMO', 'JUNO', 'SCRT'],
     'defi': ['LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'CRV', 'BAL', '1INCH', 'PENDLE', 'DYDX'],
-    'layer2': ['MATIC', 'LRC', 'IMX', 'METIS', 'ARB', 'OP', 'POL', 'MANTA'],
+    'layer2': ['POL', 'LRC', 'IMX', 'METIS', 'ARB', 'OP', 'POL', 'MANTA'],
     'gaming': ['AXS', 'SLP', 'SAND', 'MANA', 'ENJ', 'ALICE', 'GALA'],
     'nft': ['FLOW', 'ENJ', 'SAND', 'MANA', 'THETA'],
     'oracle': ['LINK', 'BAND', 'TRB', 'PYTH'],
@@ -62,14 +62,14 @@ ECOSYSTEMS: Dict[str, List[str]] = {
 
 # For Logic 1 (ecosystem), define up to 3 driver coins per ecosystem in priority order.
 ECOSYSTEM_DRIVERS: Dict[str, List[str]] = {
-    'ethereum': ['ETH', 'MATIC', 'LINK'],
+    'ethereum': ['ETH', 'POL', 'LINK'],
     'solana': ['SOL', 'JUP', 'PYTH'],
     'binance_smart_chain': ['BNB', 'CAKE'],
     'polkadot': ['DOT', 'KSM'],
     'avalanche': ['AVAX'],
     'cosmos': ['ATOM', 'OSMO'],
     'defi': ['LINK', 'AAVE', 'UNI'],
-    'layer2': ['MATIC', 'ARB', 'OP'],
+    'layer2': ['POL', 'ARB', 'OP'],
     'ai': ['FET', 'RNDR', 'INJ'],
     'meme': ['DOGE', 'SHIB'],
 }
@@ -429,7 +429,7 @@ class ResearchAgent:
         """
         pairs_btc = ["BTCUSDT"]
         pairs_eth = ["ETHUSDT", "ETHBTC"]
-        alt_basket = ["LINKUSDT", "MATICUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+        alt_basket = ["LINKUSDT", "POLUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
 
         votes = []
         def trend_of(pair):
