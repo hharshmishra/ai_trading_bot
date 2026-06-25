@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pandas_ta"
+version = "0.3.14b0"
+description = "Vendored pandas_ta 0.3.14b0 (upstream removed from PyPI + GitHub). numpy.NaN patched for numpy>=2 resilience. Pin numpy<2 + pandas<3 for full compat."
+requires-python = ">=3.8"
+dependencies = ["pandas"]
+
+[tool.setuptools.packages.find]
+include = ["pandas_ta*"]

@@ -4,7 +4,12 @@ ccxt==4.5.2
 python-binance==1.0.29
 
 # Technical indicators
-pandas-ta==0.3.14b0
+# pandas_ta 0.3.14b0 was REMOVED from PyPI and its upstream GitHub repo is gone,
+# so the pinned version is no longer installable. It is vendored under
+# vendor/pandas-ta/ (the `from numpy import NaN` refs patched for numpy>=2).
+# Installs as the importable `pandas_ta` package. Requires numpy<2 + pandas<3
+# (pinned below) for full compatibility.
+./vendor/pandas-ta
 ta-lib==0.6.6
 
 # Web app / API (optional for orchestration)
