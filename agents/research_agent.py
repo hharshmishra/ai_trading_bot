@@ -217,11 +217,18 @@ class ResearchAgent:
                timeframe: str,
                indicator_agent: Optional[Any] = None,
                news_agent: Optional[Any] = None,
-               limit: int = 500) -> Dict[str, Any]:
+               limit: int = 500,
+               market_context: Optional[Any] = None) -> Dict[str, Any]:
         """
         Returns a dict: {
            agent, chartName, timeframe, action, confidence, details
         }
+
+        When ``market_context`` (a shared MarketContext built once per cycle) is
+        supplied, the market-wide logics (ecosystem drivers, SPX, money-flow,
+        BTC dominance, DXY) are READ from it instead of fanning out per coin —
+        the same values, computed once. Falls back to the original per-coin path
+        when ``market_context`` is None.
         """
         base = _strip_suffix(symbol)
         child_df = self.data.get_ohlcv(symbol, timeframe, limit=limit)
@@ -235,12 +242,21 @@ class ResearchAgent:
             except Exception:
                 parent_df = None
 
-        # Compute features from 5 logics
-        eco_score, eco_news, eco_ind, eco_details = self._logic1_ecosystem(base, timeframe, indicator_agent, news_agent)
-        spx_news, spx_details = self._logic2_spx(news_agent)
-        money_flow, mf_details = self._logic3_money_flow(timeframe, indicator_agent, news_agent)
-        btdom_effect, btd_details = self._logic4_btcdominance(timeframe, indicator_agent, news_agent)
-        dxy_news, dxy_details = self._logic5_dxy(news_agent)
+        # Compute features from the 5 logics. With a shared MarketContext, the
+        # market-wide pieces are read from it (zero per-coin agent calls); only
+        # the coin-specific child/parent trends are computed locally.
+        if market_context is not None:
+            eco_score, eco_news, eco_ind, eco_details = self._logic1_from_context(base, market_context)
+            spx_news, spx_details = market_context.spx_score, market_context.details.get("spx", {})
+            money_flow, mf_details = market_context.money_flow_phase, market_context.details.get("money_flow", {})
+            btdom_effect, btd_details = market_context.btdom_effect, market_context.details.get("btcdominance", {})
+            dxy_news, dxy_details = market_context.dxy_score, market_context.details.get("dxy", {})
+        else:
+            eco_score, eco_news, eco_ind, eco_details = self._logic1_ecosystem(base, timeframe, indicator_agent, news_agent)
+            spx_news, spx_details = self._logic2_spx(news_agent)
+            money_flow, mf_details = self._logic3_money_flow(timeframe, indicator_agent, news_agent)
+            btdom_effect, btd_details = self._logic4_btcdominance(timeframe, indicator_agent, news_agent)
+            dxy_news, dxy_details = self._logic5_dxy(news_agent)
 
         child_trend = self._child_trend(child_df)
         parent_trend = self._parent_trend(parent_df, indicator_agent, timeframe)
@@ -380,6 +396,29 @@ class ResearchAgent:
             "indicator_driver_votes": ind_raw,
             "news_driver_votes": news_raw,
             "external_ecosystem_sent": ext_sent
+        }
+
+    def _logic1_from_context(self, base: str, ctx: Any) -> Tuple[float, float, float, Dict[str, Any]]:
+        """Logic 1 using precomputed driver scores from a shared MarketContext.
+
+        Bit-for-bit equivalent to _logic1_ecosystem: same primary ecosystem,
+        same driver set (excluding the coin, capped at 3), same per-driver scores
+        averaged the same way — only the per-coin indicator/news calls are gone.
+        """
+        ecos = self._ecos_for_asset(base)
+        if not ecos:
+            return 0.0, 0.0, 0.0, {"ecosystems": []}
+        eco = ecos[0]
+        ind_scores, news_scores = ctx.eco_scores(base, eco)
+        eco_ind = float(np.tanh(np.mean(ind_scores))) if ind_scores else 0.0
+        eco_news = float(np.tanh(np.mean(news_scores))) if news_scores else 0.0
+        eco_score = float(np.clip(0.6 * eco_ind + 0.4 * eco_news, -1.0, 1.0))
+        drivers = ECOSYSTEM_DRIVERS.get(eco, ECOSYSTEMS.get(eco, [])[:3])
+        return eco_score, eco_news, eco_ind, {
+            "ecosystems": ecos,
+            "primary": eco,
+            "drivers": [d + "USDT" for d in drivers if d != base][:3],
+            "source": "market_context",
         }
 
     def _ecos_for_asset(self, base: str) -> List[str]:

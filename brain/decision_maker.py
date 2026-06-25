@@ -157,8 +157,14 @@ class DecisionMaker:
         # fallback
         return {"action": "skip", "confidence": 0.0, "raw": raw_out}
 
-    def decide(self, symbol: str, timeframe: str, use_agents: Optional[Tuple[str, ...]] = ("indicator", "research", "news")) -> Dict[str, Any]:
-        """Call child agents according to use_agents and aggregate a final decision."""
+    def decide(self, symbol: str, timeframe: str, use_agents: Optional[Tuple[str, ...]] = ("indicator", "research", "news"), market_context: Optional[Any] = None) -> Dict[str, Any]:
+        """Call child agents according to use_agents and aggregate a final decision.
+
+        ``market_context`` (a shared MarketContext built once per cycle) is passed
+        to the research agent and reused for the news overall scan, so a full
+        cycle costs ~73 LLM calls instead of ~576. Without it, the original
+        per-coin path runs unchanged.
+        """
         agent_results: Dict[str, Dict[str, Any]] = {}
 
         # call indicator agent
@@ -174,16 +180,17 @@ class DecisionMaker:
         res_out = None
         if "research" in use_agents:
             try:
-                res_out = self.research.decide(symbol, timeframe, indicator_agent=self.indicator, news_agent=self.news)
+                res_out = self.research.decide(symbol, timeframe, indicator_agent=self.indicator, news_agent=self.news, market_context=market_context)
             except Exception as e:
                 res_out = None
         agent_results["research"] = self._coerce_agent_out(res_out, "research")
 
-        # call news agent
+        # call news agent (reuse the shared overall scan when a context is given)
         news_out = None
         if "news" in use_agents:
             try:
-                news_out = self.news.run(symbol)
+                shared_overall = market_context.overall_json if market_context is not None else None
+                news_out = self.news.run(symbol, overall_json=shared_overall)
             except Exception as e:
                 news_out = None
         agent_results["news"] = self._coerce_agent_out(news_out, "news")

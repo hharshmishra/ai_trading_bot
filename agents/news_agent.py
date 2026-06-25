@@ -3,15 +3,16 @@ import os
 import random
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 from dotenv import load_dotenv
 load_dotenv()
 
-# --- OpenAI (official SDK) ---
-# pip install openai>=1.30.0
-from openai import OpenAI
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# --- LLM access (provider-agnostic, lazy, call-counted) ---
+# Routed through agents.llm_client so the model/provider lives in one place and
+# every call is counted for the Phase 1 cost verification. No API key needed at
+# import time (the SDK client is built lazily on first real call).
+from agents.llm_client import chat_json as llm_chat_json
 
 # --- LangChain / LangGraph ---
 # pip install langchain langgraph pydantic
@@ -187,17 +188,12 @@ Only return JSON. No extra text.
 )
 
 def _chat_json(prompt: str) -> Dict[str, Any]:
+    """Call the shared provider-agnostic LLM client (JSON-only output).
+
+    The model/provider lives in agents.llm_client; every call is counted there
+    so the Phase 1 cost reduction (~576 -> ~73 calls/cycle) is measurable.
     """
-    Call OpenAI with JSON-only output. Requires OPENAI_API_KEY.
-    Adjust model name if needed.
-    """
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",  # use any JSON-capable model you have access to
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
-    )
-    content = resp.choices[0].message.content
-    return json.loads(content)
+    return llm_chat_json(prompt)
 
 
 # =========================
@@ -279,10 +275,34 @@ class NewsAgent:
         self._last_pair: str | None = None
         self._last_raw: Dict[str, Any] | None = None
 
-    def run(self, pair: str) -> Dict[str, Any]:
-        state = NEWS_GRAPH.invoke({"pair": pair})
-        overall = OverallScanJSON.model_validate(state["overall_json"])
-        pairj = PairScanJSON.model_validate(state["pair_json"])
+    def scan_overall(self) -> OverallScanJSON:
+        """Run ONLY the market-wide panic/sentiment scan (1 LLM call).
+
+        This scan is pair-independent, so the orchestrator computes it ONCE per
+        cycle and injects it into every run()/driver scan — eliminating the
+        ~288 identical overall scans that dominated the old per-coin cost.
+        """
+        data = _chat_json(OVERALL_PROMPT.format())
+        return OverallScanJSON.model_validate(data)
+
+    def scan_pair(self, pair: str) -> PairScanJSON:
+        """Run ONLY the pair-specific scan (1 LLM call)."""
+        data = _chat_json(PAIR_PROMPT.format(pair=pair))
+        return PairScanJSON.model_validate(data)
+
+    def run(self, pair: str, overall_json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Analyse a pair.
+
+        If ``overall_json`` (a shared overall scan) is passed, the market-wide
+        scan is reused instead of recomputed, so a per-symbol run costs 1 LLM
+        call (pair only) instead of 2. Return schema is unchanged.
+        """
+        overall = (
+            OverallScanJSON.model_validate(overall_json)
+            if overall_json is not None
+            else self.scan_overall()
+        )
+        pairj = self.scan_pair(pair)
 
         feats = features_from_jsons(overall, pairj)
         action = self._rl.select_action(feats)
