@@ -170,6 +170,31 @@ class IndicatorAgent:
         _save_policy(pol)
         self.policy = pol
 
+    def apply_reward(self, blend: Dict[str, Any], reward: float):
+        """Stateless RL update — replays the Type1/Type2 weight nudge from the
+        PASSED ``blend`` snapshot (decide()'s details["blend"]) instead of
+        re-reading the entire multi-MB predictions log on every call (the old
+        learn() did, an O(file-size) operation). Also fixes the concurrency
+        race: the graded prediction's own blend is applied, not whatever ran
+        last.
+        """
+        pol = _load_policy()
+        pol["score"] = pol.get("score", 0) + reward
+        sign = 1 if reward > 0 else -1
+        pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + sign*0.03*blend.get("type1_share", 0.5), 0.05, 0.95))
+        pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + sign*0.03*blend.get("type2_share", 0.5), 0.05, 0.95))
+        s = pol["weights"]["type1"] + pol["weights"]["type2"]
+        pol["weights"]["type1"] = round(pol["weights"]["type1"]/s, 4)
+        pol["weights"]["type2"] = round(pol["weights"]["type2"]/s, 4)
+        fired = blend.get("fired_direct")
+        if fired:
+            d = pol["direct_signals"].get(fired, {"weight": 0.7, "score": 0})
+            d["score"] += reward
+            d["weight"] = float(np.clip(d["weight"] + (0.05 if reward > 0 else -0.07), 0.1, 0.95))
+            pol["direct_signals"][fired] = d
+        _save_policy(pol)
+        self.policy = pol
+
     # ----------------- INTERNALS -----------------
 
     def _standardize(self, df: pd.DataFrame) -> pd.DataFrame:

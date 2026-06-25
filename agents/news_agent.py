@@ -319,7 +319,10 @@ class NewsAgent:
             "pair_json": pairj.model_dump(),
             "action": action_to_label(action),
             "confidence": max(overall.confidence, pairj.confidence),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            # RL replay payload: everything apply_reward() needs to train on THIS
+            # prediction later, independent of any mutable instance state.
+            "rl": {"features": feats, "action_idx": action},
         }
 
         # Also write a line-log for traceability
@@ -359,6 +362,17 @@ class NewsAgent:
         }
         with open("logs/predictions_log.json", "a") as f:
             f.write(json.dumps(learn_log) + "\n")
+
+    def apply_reward(self, features: List[float] | None, action_idx: int | None, reward: float):
+        """Stateless RL update — train on the PASSED prediction, not on mutable
+        instance state (``_last_*``). This is the fix for the concurrency
+        feature-race: the grader / Telegram callback replays the exact graded
+        prediction (recorded at decide time), so 48 pairs analysed concurrently
+        no longer clobber each other's learning signal.
+        """
+        if features is None or action_idx is None:
+            return
+        self._rl.update(list(features), int(action_idx), float(reward))
 
 
 # =========================

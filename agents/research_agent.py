@@ -313,7 +313,9 @@ class ResearchAgent:
             "timeframe": timeframe,
             "action": action,
             "confidence": round(confidence,4),
-            "details": details
+            "details": details,
+            # RL replay payload for stateless, race-free reward application.
+            "rl": {"feats": feats, "action_idx": action_idx},
         }
 
     def learn(self, predicted_action: str | int, true_outcome: str | float | int | None = None, reward: Optional[float] = None):
@@ -329,6 +331,14 @@ class ResearchAgent:
         elif reward is None:
             reward = -1.0
         self._rl.update(self._last_feats, self._last_action, float(reward))
+
+    def apply_reward(self, feats: Optional[List[float]], action_idx: Optional[int], reward: float):
+        """Stateless RL update (see NewsAgent.apply_reward). Trains on the passed
+        prediction snapshot rather than instance state, so concurrent per-pair
+        analyses never clobber each other's learning signal."""
+        if feats is None or action_idx is None:
+            return
+        self._rl.update(list(feats), int(action_idx), float(reward))
 
     # ---------- Logic 1: Ecosystem regime ----------
     def _logic1_ecosystem(self, base: str, timeframe: str, indicator_agent: Optional[Any], news_agent: Optional[Any]) -> Tuple[float,float,float,Dict[str,Any]]:
