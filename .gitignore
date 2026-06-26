@@ -20,6 +20,16 @@ env/
 *.log
 *.tmp
 
+# Runtime data (SQLite DB + old prediction logs) — kept out of git.
+# Learned RL policies (logs/*.json) ARE tracked.
+logs/*.jsonl
+logs/*.db
+logs/*.db-wal
+logs/*.db-shm
+
+# Input docs / scratch
+*.docx
+
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
