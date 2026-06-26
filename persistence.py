@@ -104,6 +104,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(active);
 CREATE INDEX IF NOT EXISTS idx_sessions_pairtf ON sessions(pair, tf, active);
+
+CREATE TABLE IF NOT EXISTS news_items (
+    id               TEXT PRIMARY KEY,    -- stable hash of url/title
+    source           TEXT,
+    title            TEXT,
+    body             TEXT,
+    url              TEXT,
+    published_ts     REAL,
+    ingested_ts      REAL,
+    assets           TEXT,                -- JSON list of base tickers
+    embedding        BLOB,                -- float32 vector bytes
+    sentiment_cached TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_news_pub ON news_items(published_ts);
 """
 
 # Columns on `predictions` that hold JSON and must be (de)serialised.
@@ -363,6 +377,78 @@ class Store:
                 "UPDATE sessions SET active = 0 WHERE active = 1 AND created_ts < ?", (cutoff_ts,))
             self.conn.commit()
         return stale
+
+    # ------------------------------------------------------------------ #
+    # News items (RAG corpus)
+    # ------------------------------------------------------------------ #
+    def has_news_item(self, item_id: str) -> bool:
+        with self._lock:
+            return self.conn.execute("SELECT 1 FROM news_items WHERE id = ?", (item_id,)).fetchone() is not None
+
+    def add_news_item(self, *, item_id: str, source: str, title: str, body: str, url: str,
+                      published_ts: Optional[float], assets: List[str], embedding: Optional[bytes] = None,
+                      sentiment_cached: Optional[str] = None, ingested_ts: Optional[float] = None) -> None:
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO news_items "
+                "(id, source, title, body, url, published_ts, ingested_ts, assets, embedding, sentiment_cached) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (item_id, source, title, body, url, published_ts,
+                 ingested_ts if ingested_ts is not None else time.time(),
+                 _dumps(assets), embedding, sentiment_cached))
+            self.conn.commit()
+
+    def news_embeddings(self, since_ts: Optional[float] = None):
+        """[(id, embedding_bytes), ...] for items that have an embedding."""
+        q = "SELECT id, embedding FROM news_items WHERE embedding IS NOT NULL"
+        args: tuple = ()
+        if since_ts is not None:
+            q += " AND published_ts >= ?"
+            args = (since_ts,)
+        with self._lock:
+            return [(r["id"], r["embedding"]) for r in self.conn.execute(q, args).fetchall()]
+
+    def get_news_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            r = self.conn.execute("SELECT * FROM news_items WHERE id = ?", (item_id,)).fetchone()
+        if r is None:
+            return None
+        d = dict(r)
+        d["assets"] = _loads(d.get("assets"))
+        return d
+
+    def recent_news_for_asset(self, asset: str, since_ts: Optional[float] = None,
+                              limit: int = 5) -> List[Dict[str, Any]]:
+        like = f'%"{asset.upper()}"%'
+        q = "SELECT * FROM news_items WHERE assets LIKE ?"
+        args: list = [like]
+        if since_ts is not None:
+            q += " AND published_ts >= ?"
+            args.append(since_ts)
+        q += " ORDER BY published_ts DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self.conn.execute(q, tuple(args)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["assets"] = _loads(d.get("assets"))
+            out.append(d)
+        return out
+
+    def set_sentiment_cached(self, item_id: str, sentiment: str) -> None:
+        with self._lock:
+            self.conn.execute("UPDATE news_items SET sentiment_cached = ? WHERE id = ?",
+                              (sentiment, item_id))
+            self.conn.commit()
+
+    def cached_sentiment_for_asset(self, asset: str) -> Optional[str]:
+        like = f'%"{asset.upper()}"%'
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT sentiment_cached FROM news_items WHERE assets LIKE ? AND sentiment_cached IS NOT NULL "
+                "ORDER BY published_ts DESC LIMIT 1", (like,)).fetchone()
+        return r["sentiment_cached"] if r else None
 
 
 # --------------------------------------------------------------------------- #

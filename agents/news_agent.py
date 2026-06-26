@@ -275,34 +275,45 @@ class NewsAgent:
         self._last_pair: str | None = None
         self._last_raw: Dict[str, Any] | None = None
 
-    def scan_overall(self) -> OverallScanJSON:
+    def scan_overall(self, headlines: Optional[List[str]] = None) -> OverallScanJSON:
         """Run ONLY the market-wide panic/sentiment scan (1 LLM call).
 
         This scan is pair-independent, so the orchestrator computes it ONCE per
         cycle and injects it into every run()/driver scan — eliminating the
         ~288 identical overall scans that dominated the old per-coin cost.
+        When ``headlines`` (retrieved via RAG) are passed, they ground the model
+        in real news instead of stale training data.
         """
-        data = _chat_json(OVERALL_PROMPT.format())
-        return OverallScanJSON.model_validate(data)
+        prompt = OVERALL_PROMPT.format()
+        if headlines:
+            prompt += ("\n\nRecent market headlines (ground your analysis in these):\n"
+                       + "\n".join(f"- {h}" for h in headlines))
+        return OverallScanJSON.model_validate(_chat_json(prompt))
 
-    def scan_pair(self, pair: str) -> PairScanJSON:
-        """Run ONLY the pair-specific scan (1 LLM call)."""
-        data = _chat_json(PAIR_PROMPT.format(pair=pair))
-        return PairScanJSON.model_validate(data)
+    def scan_pair(self, pair: str, headlines: Optional[List[str]] = None) -> PairScanJSON:
+        """Run ONLY the pair-specific scan (1 LLM call), optionally grounded in
+        RAG-retrieved headlines for the pair."""
+        prompt = PAIR_PROMPT.format(pair=pair)
+        if headlines:
+            prompt += ("\n\nRecent headlines for this pair (ground your analysis in these):\n"
+                       + "\n".join(f"- {h}" for h in headlines))
+        return PairScanJSON.model_validate(_chat_json(prompt))
 
-    def run(self, pair: str, overall_json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run(self, pair: str, overall_json: Optional[Dict[str, Any]] = None,
+            headlines: Optional[List[str]] = None) -> Dict[str, Any]:
         """Analyse a pair.
 
         If ``overall_json`` (a shared overall scan) is passed, the market-wide
         scan is reused instead of recomputed, so a per-symbol run costs 1 LLM
-        call (pair only) instead of 2. Return schema is unchanged.
+        call (pair only) instead of 2. ``headlines`` (RAG) ground the pair scan.
+        Return schema is unchanged.
         """
         overall = (
             OverallScanJSON.model_validate(overall_json)
             if overall_json is not None
             else self.scan_overall()
         )
-        pairj = self.scan_pair(pair)
+        pairj = self.scan_pair(pair, headlines=headlines)
 
         feats = features_from_jsons(overall, pairj)
         action = self._rl.select_action(feats)
