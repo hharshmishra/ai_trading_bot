@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitReinforceX — System Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#06070f; --void2:#0a0c1a; --ink:#0e1124; --ink2:#141833;
+    --line:rgba(140,150,210,.14); --line2:rgba(140,150,210,.28);
+    --cyan:#22d3ee; --violet:#7c5cff; --magenta:#ff4d8d; --mint:#34f5c5; --amber:#ffcf5c;
+    --text:#e8eaf6; --muted:#9499c4; --faint:#646a96;
+    --g1:linear-gradient(120deg,var(--cyan),var(--violet) 55%,var(--magenta));
+    --g2:linear-gradient(135deg,var(--violet),var(--magenta));
+    --glass:rgba(20,24,52,.55); --glass2:rgba(16,19,42,.72);
+    --shadow:0 30px 80px -30px rgba(0,0,0,.85);
+    --radius:18px;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:"Space Grotesk","Inter",system-ui,sans-serif;
+    --body:"Inter",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--void); color:var(--text); font-family:var(--body);
+    line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  body::before{ /* ambient gradient haze */
+    content:""; position:fixed; inset:-20%; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(40% 50% at 78% 8%, rgba(124,92,255,.20), transparent 60%),
+      radial-gradient(45% 55% at 12% 22%, rgba(34,211,238,.14), transparent 60%),
+      radial-gradient(50% 60% at 60% 100%, rgba(255,77,141,.13), transparent 60%);
+    filter:saturate(1.1);
+  }
+  a{color:inherit}
+  ::selection{background:rgba(124,92,255,.4)}
+
+  /* ---------- layout rail ---------- */
+  .rail{
+    position:fixed; left:0; top:0; height:100vh; width:230px; z-index:40;
+    padding:26px 20px; display:flex; flex-direction:column; gap:8px;
+    border-right:1px solid var(--line); background:linear-gradient(180deg,rgba(8,9,18,.7),rgba(8,9,18,.35));
+    backdrop-filter:blur(10px);
+  }
+  .brand{display:flex; align-items:center; gap:11px; margin-bottom:22px}
+  .mark{width:34px;height:34px;border-radius:10px;background:var(--g1);position:relative;flex:0 0 auto;
+    box-shadow:0 0 22px rgba(124,92,255,.55), inset 0 0 12px rgba(255,255,255,.25)}
+  .mark::after{content:"";position:absolute;inset:6px;border-radius:6px;border:1.5px solid rgba(7,8,15,.85)}
+  .brand b{font-family:var(--disp);font-weight:700;letter-spacing:-.02em;font-size:16px}
+  .brand span{display:block;font-size:10px;color:var(--faint);letter-spacing:.18em;text-transform:uppercase}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+  .nav a{
+    font-size:12.5px;color:var(--muted);text-decoration:none;padding:7px 11px;border-radius:9px;
+    display:flex;align-items:center;gap:10px;transition:.25s; letter-spacing:.01em;
+  }
+  .nav a .dot{width:6px;height:6px;border-radius:50%;background:var(--line2);transition:.25s;flex:0 0 auto}
+  .nav a:hover{color:var(--text);background:rgba(124,92,255,.08)}
+  .nav a.active{color:var(--text);background:rgba(124,92,255,.12)}
+  .nav a.active .dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .rail .pulse{margin-top:auto;font-size:11px;color:var(--faint);display:flex;align-items:center;gap:8px}
+  .pulse i{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 12px var(--mint);animation:beat 1.8s infinite}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+
+  .wrap{margin-left:230px;position:relative;z-index:1}
+  section{padding:96px 7vw;max-width:1180px;margin:0 auto;scroll-margin-top:20px}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan);
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:18px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:linear-gradient(90deg,var(--cyan),transparent)}
+  h2{font-family:var(--disp);font-weight:600;font-size:clamp(26px,3.4vw,40px);letter-spacing:-.025em;margin:0 0 14px;line-height:1.08}
+  h2 em{font-style:normal;background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--muted);font-size:16.5px;max-width:62ch}
+  .grad{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* ---------- hero ---------- */
+  .hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;position:relative;
+    padding-top:60px;padding-bottom:60px;max-width:none}
+  #constellation{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  .hero-inner{position:relative;z-index:2;max-width:1180px;margin:0 auto;width:100%;padding:0 7vw}
+  .hero h1{font-family:var(--disp);font-weight:700;letter-spacing:-.04em;line-height:.92;
+    font-size:clamp(54px,9vw,128px);margin:14px 0 10px}
+  .hero h1 .x{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 40px rgba(124,92,255,.35))}
+  .tagline{font-family:var(--disp);font-size:clamp(17px,2.2vw,24px);color:var(--text);font-weight:500;margin:0 0 14px;letter-spacing:-.01em}
+  .hero p.sub{color:var(--muted);max-width:60ch;font-size:16.5px}
+  .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+  .chip{display:flex;flex-direction:column;gap:2px;padding:14px 20px;border-radius:14px;
+    background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(8px);min-width:150px}
+  .chip b{font-family:var(--disp);font-size:24px;font-weight:600;letter-spacing:-.02em}
+  .chip span{font-size:11px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+  .scrollcue{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);font-family:var(--mono);
+    font-size:11px;color:var(--faint);letter-spacing:.2em;z-index:2;animation:float 2.4s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,7px)}}
+
+  /* ---------- cards / glass ---------- */
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+  .card{position:relative;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px;backdrop-filter:blur(9px);box-shadow:var(--shadow);transition:border-color .3s, transform .1s;
+    transform-style:preserve-3d;will-change:transform}
+  .card:hover{border-color:var(--line2)}
+  .card .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;margin-bottom:16px;
+    font-family:var(--mono);font-weight:700;font-size:15px;background:rgba(124,92,255,.12);border:1px solid var(--line2)}
+  .card h3{font-family:var(--disp);font-size:18.5px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+  .card h3 small{display:block;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.05em;font-weight:400;margin-top:3px}
+  .card p{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+  .tags{display:flex;flex-wrap:wrap;gap:7px}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--text);padding:4px 9px;border-radius:7px;
+    background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2)}
+  .tag.v{background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.26)}
+  .tag.m{background:rgba(255,77,141,.1);border-color:rgba(255,77,141,.26)}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ---------- architecture flow ---------- */
+  .flow{display:flex;flex-direction:column;gap:14px;margin-top:30px}
+  .layer{display:grid;grid-template-columns:160px 1fr;gap:18px;align-items:center}
+  .layer .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);text-align:right}
+  .nodes{display:flex;flex-wrap:wrap;gap:10px}
+  .node{position:relative;padding:13px 17px;border-radius:13px;background:var(--glass2);border:1px solid var(--line);
+    font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:10px;backdrop-filter:blur(6px)}
+  .node small{font-family:var(--mono);font-size:10.5px;color:var(--faint);font-weight:400}
+  .node.cy{border-color:rgba(34,211,238,.32);box-shadow:0 0 22px -8px var(--cyan)}
+  .node.vi{border-color:rgba(124,92,255,.36);box-shadow:0 0 22px -8px var(--violet)}
+  .node.ma{border-color:rgba(255,77,141,.34);box-shadow:0 0 22px -8px var(--magenta)}
+  .node.mi{border-color:rgba(52,245,197,.32);box-shadow:0 0 22px -8px var(--mint)}
+  .node .led{width:8px;height:8px;border-radius:50%;background:currentColor;flex:0 0 auto}
+  .cy .led{color:var(--cyan)} .vi .led{color:var(--violet)} .ma .led{color:var(--magenta)} .mi .led{color:var(--mint)}
+  .conn{height:18px;display:flex;justify-content:center;align-items:center}
+  .conn::before{content:"";width:1px;height:100%;background:linear-gradient(180deg,var(--line2),transparent)}
+  .archnote{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--faint);
+    border-left:2px solid var(--violet);padding-left:14px}
+
+  /* ---------- loop diagram ---------- */
+  .loop{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:30px}
+  .loopstep{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative}
+  .loopstep .n{font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:.1em}
+  .loopstep h4{font-family:var(--disp);font-size:16px;margin:8px 0 8px;font-weight:600}
+  .loopstep p{color:var(--muted);font-size:14px;margin:0}
+  .params{width:100%;border-collapse:collapse;margin-top:14px;font-family:var(--mono);font-size:12.5px}
+  .params th,.params td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  .params th{color:var(--faint);font-weight:500;letter-spacing:.08em;text-transform:uppercase;font-size:10.5px}
+  .params td b{color:var(--mint)}
+  .reward{display:inline-flex;gap:10px;margin-top:6px;font-family:var(--mono);font-size:13px}
+  .reward .up{color:var(--mint)} .reward .dn{color:var(--magenta)}
+
+  /* ---------- schema ---------- */
+  .schema{font-family:var(--mono);font-size:12.5px}
+  .schema .tname{color:var(--cyan);font-weight:700;letter-spacing:.04em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .schema .tname::before{content:"▣";color:var(--violet)}
+  .col{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .col span:first-child{color:var(--text)} .col span:last-child{color:var(--faint)}
+
+  /* ---------- cost ---------- */
+  .cost{display:grid;grid-template-columns:1fr 1.1fr;gap:34px;align-items:center;margin-top:24px}
+  .bignum{font-family:var(--disp);font-weight:700;letter-spacing:-.04em;line-height:.9;font-size:clamp(50px,8vw,96px)}
+  .bignum s{text-decoration:none;color:var(--faint);font-size:.42em;vertical-align:middle;margin-right:14px;position:relative}
+  .bignum s::after{content:"";position:absolute;left:-4px;right:-4px;top:52%;height:3px;background:var(--magenta);transform:rotate(-9deg)}
+  .bar{height:34px;border-radius:9px;display:flex;align-items:center;padding:0 14px;font-family:var(--mono);font-size:12px;margin-bottom:10px;color:#08101a;font-weight:700}
+  .bar.old{background:linear-gradient(90deg,#3a3050,#6a5a86);color:var(--text);width:100%}
+  .bar.new{background:var(--g1);width:18%}
+
+  /* ---------- telegram mock ---------- */
+  .tg{max-width:430px;background:var(--ink);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+  .tg .bar2{background:rgba(124,92,255,.1);padding:11px 16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+  .bubble{margin:16px;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.16);border-radius:14px;border-top-left-radius:4px;padding:15px 16px;font-size:13.5px;line-height:1.7}
+  .bubble .h{font-weight:700;color:var(--magenta);letter-spacing:.04em}
+  .bubble .row{display:flex;justify-content:space-between;gap:10px;margin-top:3px}
+  .bubble .k{color:var(--faint)} .bubble .val{font-weight:600}
+  .bubble .buy{color:var(--mint)} .bubble .dis{color:var(--faint);font-size:11.5px;font-style:italic;margin-top:10px;display:block}
+  .kb{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:0 16px 16px}
+  .kb button{font-family:var(--body);font-size:12.5px;padding:10px;border-radius:9px;border:1px solid var(--line2);
+    background:rgba(124,92,255,.1);color:var(--text);cursor:pointer;transition:.2s}
+  .kb button:hover{background:rgba(124,92,255,.22)}
+  .kb .full{grid-column:1/-1;background:rgba(255,77,141,.08);border-color:rgba(255,77,141,.24)}
+
+  /* ---------- timeline ---------- */
+  .tl{position:relative;margin-top:30px;padding-left:32px}
+  .tl::before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,var(--cyan),var(--violet),var(--magenta))}
+  .tli{position:relative;padding:0 0 26px 8px}
+  .tli::before{content:"";position:absolute;left:-30px;top:5px;width:14px;height:14px;border-radius:50%;
+    background:var(--void);border:2.5px solid var(--violet);box-shadow:0 0 14px rgba(124,92,255,.5)}
+  .tli .ph{font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.14em;text-transform:uppercase}
+  .tli h4{font-family:var(--disp);font-size:17px;margin:5px 0 5px;font-weight:600}
+  .tli p{color:var(--muted);font-size:14px;margin:0}
+  .tli .done{color:var(--mint)}
+
+  /* ---------- bug cards ---------- */
+  .bug h3{color:var(--magenta)}
+  .bug .step{font-family:var(--mono);font-size:12.5px;margin:9px 0;padding-left:16px;position:relative;color:var(--muted)}
+  .bug .step::before{position:absolute;left:0;font-weight:700}
+  .bug .sym::before{content:"!";color:var(--amber)}
+  .bug .cau::before{content:"?";color:var(--cyan)}
+  .bug .fix::before{content:"✓";color:var(--mint)}
+  .bug .fix{color:var(--text)}
+
+  .deploycode{font-family:var(--mono);font-size:12.5px;background:var(--void2);border:1px solid var(--line);
+    border-radius:12px;padding:18px 20px;color:var(--muted);overflow-x:auto;line-height:1.9}
+  .deploycode .c{color:var(--faint)} .deploycode .p{color:var(--mint)}
+
+  footer{margin-left:230px;padding:50px 7vw 70px;border-top:1px solid var(--line);position:relative;z-index:1;color:var(--faint);font-size:13px}
+  footer b{font-family:var(--disp);color:var(--text)}
+  .warn{font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:10px;letter-spacing:.03em}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:960px){
+    .rail{transform:translateX(-100%)} .wrap,footer{margin-left:0}
+    .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:1fr} .g2{grid-template-columns:1fr}
+    .loop,.cost{grid-template-columns:1fr} .layer{grid-template-columns:1fr;gap:8px} .layer .lbl{text-align:left}
+    section{padding:70px 6vw}
+  }
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.scrollcue,.pulse i{animation:none}}
+  .card:focus-visible,.nav a:focus-visible,.kb button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+</style>
+</head>
+<body>
+
+<aside class="rail">
+  <div class="brand"><div class="mark"></div><div><b>BitReinforceX</b><span>System Design</span></div></div>
+  <nav class="nav" id="nav">
+    <a href="#idea"><span class="dot"></span>The idea</a>
+    <a href="#arch"><span class="dot"></span>Architecture</a>
+    <a href="#agents"><span class="dot"></span>The agents</a>
+    <a href="#loop"><span class="dot"></span>Self-training loop</a>
+    <a href="#data"><span class="dot"></span>Data model</a>
+    <a href="#cost"><span class="dot"></span>The cost fix</a>
+    <a href="#bugs"><span class="dot"></span>Bugs killed</a>
+    <a href="#phases"><span class="dot"></span>The 6 phases</a>
+    <a href="#signals"><span class="dot"></span>Signals</a>
+    <a href="#deploy"><span class="dot"></span>Stack &amp; deploy</a>
+  </nav>
+  <div class="pulse"><i></i> grader live · 60s</div>
+</aside>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero" id="top">
+    <canvas id="constellation" aria-hidden="true"></canvas>
+    <div class="hero-inner">
+      <div class="eyebrow">AI crypto signal system · self-training</div>
+      <h1>BitReinforce<span class="x">X</span></h1>
+      <p class="tagline">Reinforcing your trades with AI power.</p>
+      <p class="sub">Three reinforcement-learning agents, one decision brain, and a loop that grades its own predictions against realized price. A modular monolith that runs one async process — advisory only, it never places orders.</p>
+      <div class="chips">
+        <div class="chip"><b class="grad">488 → 85</b><span>LLM calls / cycle</span></div>
+        <div class="chip"><b>22 / 22</b><span>tests green</span></div>
+        <div class="chip"><b>6</b><span>phases shipped</span></div>
+        <div class="chip"><b>48</b><span>pairs · 4 timeframes</span></div>
+      </div>
+    </div>
+    <div class="scrollcue">scroll ↓</div>
+  </header>
+
+  <!-- IDEA -->
+  <section id="idea">
+    <div class="eyebrow">01 — premise</div>
+    <h2>A bot that <em>learns from being right or wrong</em>.</h2>
+    <p class="lead">Every hour, at the :30 IST candle close, the system analyses 48 crypto pairs across the timeframes that are due. Each pair runs through three specialist agents into a decision brain; the brain emits a buy / sell / skip with a confidence. Strong signals go to Telegram. Then — and this is the point — N candles later the system fetches what price <em>actually did</em> and rewards or punishes every agent on its own prediction. No human required.</p>
+    <div class="grid g4" style="margin-top:34px">
+      <div class="card reveal"><div class="ic" style="color:var(--cyan)">◷</div><h3>Scheduled</h3><p>IST :30 candle close. Hourly→1h; every 4h→4h+1h; daily→1d+4h+1h; Monday→+1w.</p></div>
+      <div class="card reveal"><div class="ic" style="color:var(--violet)">⌬</div><h3>Multi-agent</h3><p>News · Indicator · Research feed a weighted Brain that learns which agent to trust.</p></div>
+      <div class="card reveal"><div class="ic" style="color:var(--mint)">↻</div><h3>Self-grading</h3><p>Realized forward return vs a per-timeframe threshold → automatic +1 / −4 reward.</p></div>
+      <div class="card reveal"><div class="ic" style="color:var(--magenta)">✶</div><h3>RAG-grounded</h3><p>Real headlines, deduped and embedded, injected into the LLM instead of stale memory.</p></div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="arch">
+    <div class="eyebrow">02 — system design</div>
+    <h2>One process. <em>Six layers.</em> One SQLite file.</h2>
+    <p class="lead">A modular monolith was the right altitude for a solo operator: the core optimization is sharing one in-memory market-context object across 48 analyses — a network boundary would re-introduce the cost it removes. Every arrow below is a function call today; each could become a queue later.</p>
+
+    <div class="flow">
+      <div class="layer"><div class="lbl">Sources</div><div class="nodes">
+        <div class="node cy"><span class="led"></span>Binance <small>CCXT · OHLCV</small></div>
+        <div class="node cy"><span class="led"></span>RSS + CryptoPanic <small>headlines</small></div>
+      </div></div>
+      <div class="conn"></div>
+      <div class="layer"><div class="lbl">Ingest + RAG</div><div class="nodes">
+        <div class="node mi"><span class="led"></span>ingestion.py <small>normalize · tag assets</small></div>
+        <div class="node mi"><span class="led"></span>rag.py <small>embed · dedup ≥0.9 · retrieve</small></div>
+      </div></div>
+      <div class="conn"></div>
+      <div class="layer"><div class="lbl">Per cycle</div><div class="nodes">
+        <div class="node cy"><span class="led"></span>scheduler <small>IST :30 cascade</small></div>
+        <div class="node vi"><span class="led"></span>market_context.py <small>built ONCE / cycle</small></div>
+      </div></div>
+      <div class="conn"></div>
+      <div class="layer"><div class="lbl">Per pair ×48</div><div class="nodes">
+        <div class="node vi"><span class="led"></span>brain / decision_maker</div>
+        <div class="node"><span class="led"></span>News agent</div>
+        <div class="node"><span class="led"></span>Indicator agent</div>
+        <div class="node"><span class="led"></span>Research agent</div>
+      </div></div>
+      <div class="conn"></div>
+      <div class="layer"><div class="lbl">Emit</div><div class="nodes">
+        <div class="node cy"><span class="led"></span>signals.py <small>gate</small></div>
+        <div class="node ma"><span class="led"></span>Telegram <small>customer · dev+buttons</small></div>
+        <div class="node ma"><span class="led"></span>control bot <small>/news /indicator …</small></div>
+      </div></div>
+      <div class="conn"></div>
+      <div class="layer"><div class="lbl">State + learn</div><div class="nodes">
+        <div class="node vi"><span class="led"></span>persistence.py <small>SQLite · WAL</small></div>
+        <div class="node mi"><span class="led"></span>grader.py <small>every 60s · realized price → reward</small></div>
+      </div></div>
+    </div>
+    <p class="archnote">scheduler + grader run as background asyncio tasks inside the SAME long-lived Telegram Application — the fix that makes inline-button feedback reliable.</p>
+  </section>
+
+  <!-- AGENTS -->
+  <section id="agents">
+    <div class="eyebrow">03 — the minds</div>
+    <h2>Three specialists, <em>one brain</em>.</h2>
+    <p class="lead">Each agent is a small contextual-bandit reinforcement learner with its own persisted policy. They were kept from the original build and edited surgically — the hard-won logic and accumulated learning stayed intact.</p>
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card reveal"><div class="ic" style="color:var(--cyan)">N</div>
+        <h3>News agent<small>agents/news_agent.py · 5-feature bandit</small></h3>
+        <p>OpenAI gpt-4o-mini, split into a market-wide overall scan + a per-pair scan. RAG headlines ground the prompt; quiet coins reuse cached sentiment and skip the call.</p>
+        <div class="tags"><span class="tag">overall + pair json</span><span class="tag">panic detection</span><span class="tag v">SELL / SKIP / BUY</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--violet)">I</div>
+        <h3>Indicator agent<small>agents/indicator_agent.py · learned blend</small></h3>
+        <p>Type-1 direct signals (Nadaraya-Watson Envelope, Chandelier Exit, AlphaTrend) blended with Type-2 raw rules. Learns the Type-1/Type-2 weight and each signal's credibility.</p>
+        <div class="tags"><span class="tag">NWE</span><span class="tag">Chandelier</span><span class="tag">AlphaTrend</span><span class="tag v">MA·RSI·MACD·BB·StochRSI·SuperTrend</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--magenta)">R</div>
+        <h3>Research agent<small>agents/research_agent.py · 10-feature bandit</small></h3>
+        <p>Five macro logics: ecosystem regime, S&amp;P 500 influence, money-flow phase (BTC→ETH→large→small caps), BTC dominance effect on alts, and DXY inverse relation.</p>
+        <div class="tags"><span class="tag m">ecosystem</span><span class="tag m">SPX</span><span class="tag m">money-flow</span><span class="tag m">BTC.D</span><span class="tag m">DXY⁻¹</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--mint)">B</div>
+        <h3>Brain<small>brain/decision_maker.py · learned priorities</small></h3>
+        <p>Weighted aggregation: score = Σ(weight · action · confidence). Buy &gt; 0.05, sell &lt; −0.05, else skip. Priorities start indicator &gt; research &gt; news and drift with evidence.</p>
+        <div class="tags"><span class="tag">weighted vote</span><span class="tag v">priority learning</span><span class="tag mi">deadzone → skip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOOP -->
+  <section id="loop">
+    <div class="eyebrow">04 — the centerpiece</div>
+    <h2>It <em>trains itself</em> on realized price.</h2>
+    <p class="lead">Every prediction is recorded with each agent's RL replay payload and a grade-due time. Later the grader replays that exact snapshot — so reward always lands on the right prediction, even under the concurrent 48-pair batch.</p>
+    <div class="loop">
+      <div class="loopstep reveal"><div class="n">RECORD</div><h4>Snapshot at predict time</h4><p>News + research feature vectors, indicator blend, brain weights, entry price and grade-due time → one SQLite row.</p></div>
+      <div class="loopstep reveal"><div class="n">WAIT</div><h4>k candles later</h4><p>The grader (every 60s) pulls predictions whose horizon has printed and fetches the realized candle close.</p></div>
+      <div class="loopstep reveal"><div class="n">JUDGE</div><h4>Forward return vs threshold</h4><p>r = (close<sub>k</sub> − entry) / entry. r ≥ +θ → buy, r ≤ −θ → sell, else skip (in-band means skip was right).</p></div>
+      <div class="loopstep reveal"><div class="n">REINFORCE</div><h4>Reward each agent</h4><p>Stateless apply_reward from the stored payload. <span class="reward"><span class="up">+1 correct</span><span class="dn">−4 wrong</span></span></p></div>
+    </div>
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card reveal">
+        <h3 style="margin-bottom:4px">Grading parameters <small style="font-family:var(--mono);color:var(--faint);font-weight:400">tunable in grader.py</small></h3>
+        <table class="params">
+          <tr><th>Timeframe</th><th>Horizon k</th><th>Threshold θ</th></tr>
+          <tr><td>1h</td><td><b>3 candles</b></td><td>0.4%</td></tr>
+          <tr><td>4h</td><td><b>2 candles</b></td><td>1.0%</td></tr>
+          <tr><td>1d</td><td><b>1 candle</b></td><td>2.5%</td></tr>
+          <tr><td>1w</td><td><b>1 candle</b></td><td>5.0%</td></tr>
+        </table>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-bottom:4px">Manual override</h3>
+        <p>The dev Telegram channel can correct any signal — <b style="color:var(--text)">manual beats auto</b>. The grader only auto-grades <code style="font-family:var(--mono);color:var(--cyan)">pending</code> rows; if a human disagrees with an already-auto-graded prediction, a correction reward = <code style="font-family:var(--mono);color:var(--mint)">manual − auto</code> is applied so the net effect equals the human verdict. Every reward is tagged <span class="tag">auto</span> <span class="tag v">manual</span> <span class="tag m">correction</span> for audit.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section id="data">
+    <div class="eyebrow">05 — durable state</div>
+    <h2>Everything in <em>one SQLite file</em>.</h2>
+    <p class="lead">WAL mode, a single write-serialized connection — safe for the 48-pair thread pool. It replaced scattered, unbounded JSON/JSONL files and an in-memory session dict that lost every open feedback button on restart.</p>
+    <div class="grid g3 schema" style="margin-top:30px">
+      <div class="card reveal"><div class="tname">predictions</div>
+        <div class="col"><span>pair · tf · cycle_id</span><span>identity</span></div>
+        <div class="col"><span>entry_price · grade_due_ts</span><span>timing</span></div>
+        <div class="col"><span>news_feats · action_idx</span><span>json</span></div>
+        <div class="col"><span>research_feats · action_idx</span><span>json</span></div>
+        <div class="col"><span>indicator_blend</span><span>json</span></div>
+        <div class="col"><span>brain_weights</span><span>json</span></div>
+        <div class="col"><span>label_source · graded</span><span>state</span></div>
+      </div>
+      <div class="card reveal"><div class="tname">outcomes</div>
+        <div class="col"><span>prediction_id</span><span>fk</span></div>
+        <div class="col"><span>realized_return</span><span>real</span></div>
+        <div class="col"><span>realized_label</span><span>buy/sell/skip</span></div>
+        <div class="col"><span>threshold · horizon_k</span><span>params</span></div>
+        <div class="col"><span>graded_ts · source</span><span>meta</span></div>
+      </div>
+      <div class="card reveal"><div class="tname">rewards</div>
+        <div class="col"><span>prediction_id</span><span>fk</span></div>
+        <div class="col"><span>agent</span><span>news/…</span></div>
+        <div class="col"><span>reward</span><span>+1 / −4</span></div>
+        <div class="col"><span>source</span><span>auto/manual/corr</span></div>
+      </div>
+      <div class="card reveal"><div class="tname">sessions</div>
+        <div class="col"><span>pair · tf · prediction_id</span><span>link</span></div>
+        <div class="col"><span>active · superseded_by</span><span>lifecycle</span></div>
+        <div class="col"><span>dev/customer chat+msg id</span><span>telegram</span></div>
+        <div class="col"><span>true_outcome</span><span>human</span></div>
+      </div>
+      <div class="card reveal"><div class="tname">news_items</div>
+        <div class="col"><span>id · source · url</span><span>identity</span></div>
+        <div class="col"><span>title · body</span><span>text</span></div>
+        <div class="col"><span>assets</span><span>json tickers</span></div>
+        <div class="col"><span>embedding</span><span>float32 blob</span></div>
+        <div class="col"><span>sentiment_cached</span><span>quiet-coin skip</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COST -->
+  <section id="cost">
+    <div class="eyebrow">06 — efficiency</div>
+    <h2>The same market work, <em>computed once</em>.</h2>
+    <div class="cost">
+      <div class="reveal">
+        <div class="bignum"><s>488</s><span class="grad">85</span></div>
+        <p class="lead" style="margin-top:10px">LLM calls per cycle at 48 pairs — <b style="color:var(--text)">≈6× fewer, 83% less spend</b>. Per-pair marginal cost dropped to exactly <b style="color:var(--mint)">one</b> call.</p>
+      </div>
+      <div class="reveal">
+        <div class="bar old">old · per-coin · ~488</div>
+        <div class="bar new">new · ~85</div>
+        <p style="color:var(--muted);font-size:14px;margin-top:16px">Every pair used to re-run the identical market-wide work — the overall news scan, SPX, DXY, BTC dominance, money-flow phase, and per-ecosystem driver sentiment. Now it's built <b style="color:var(--text)">once per cycle</b> into a shared context and read by all 48 analyses. The news overall scan is computed once and reused across every pair scan.</p>
+        <p style="color:var(--faint);font-size:13px;margin-top:6px;font-family:var(--mono)">≈ $140/mo → ≈ $18/mo · gpt-4o-mini</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUGS -->
+  <section id="bugs">
+    <div class="eyebrow">07 — root causes</div>
+    <h2>Three bugs, <em>found by reading the source</em>.</h2>
+    <div class="grid g3" style="margin-top:30px">
+      <div class="card bug reveal"><h3>Rewards not passing</h3>
+        <div class="step sym">Telegram clicks loaded for seconds, then nothing — rewards never applied.</div>
+        <div class="step cau">Not the app lifecycle. News/Research stored RL features on a shared singleton; the concurrent batch clobbered them, so feedback trained on whatever ran last.</div>
+        <div class="step fix">Stateless apply_reward replays the exact prediction from its SQLite record.</div>
+      </div>
+      <div class="card bug reveal"><h3>pandas_ta is gone</h3>
+        <div class="step sym">Indicator agent crashed on import; fresh installs failed.</div>
+        <div class="step cau">pandas_ta 0.3.14b0 was pulled from PyPI and its GitHub repo deleted — and it breaks on numpy ≥ 2 and pandas 3.</div>
+        <div class="step fix">Vendored into the repo (numpy.NaN patched), pinned numpy&lt;2 / pandas&lt;3, reproducible venv.</div>
+      </div>
+      <div class="card bug reveal"><h3>1h never scheduled</h3>
+        <div class="step sym">The described "hourly → 1h" path never actually ran.</div>
+        <div class="step cau">timeframes_due appended 4h/1d/1w but never 1h.</div>
+        <div class="step fix">Cascade rebuilt: hourly→[1h], 4h→[4h,1h], daily→[1d,4h,1h], Mon→+[1w].</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHASES -->
+  <section id="phases">
+    <div class="eyebrow">08 — the build</div>
+    <h2>Shipped in <em>six verifiable phases</em>.</h2>
+    <div class="tl" style="margin-top:30px">
+      <div class="tli reveal"><div class="ph">Phase 1 · <span class="done">done</span></div><h4>Shared market-context</h4><p>Build market-wide signals once per cycle. 488→85 LLM calls, behaviour bit-for-bit identical to baseline.</p></div>
+      <div class="tli reveal"><div class="ph">Fix · <span class="done">done</span></div><h4>Vendor pandas_ta</h4><p>Reproducible venv at the project's pins; the real indicator agent runs end-to-end again.</p></div>
+      <div class="tli reveal"><div class="ph">Phase 2 · <span class="done">done</span></div><h4>Stateless RL + SQLite</h4><p>apply_reward fixes the feature-race; one durable DB for predictions, outcomes, rewards, sessions.</p></div>
+      <div class="tli reveal"><div class="ph">Phase 3 · <span class="done">done</span></div><h4>Auto-labeling grader</h4><p>Self-training from realized price; manual Telegram feedback overrides with a netting correction.</p></div>
+      <div class="tli reveal"><div class="ph">Phase 4 · <span class="done">done</span></div><h4>Telegram runtime</h4><p>One long-lived app, scheduler + grader background tasks, durable sessions, the 1h cascade fix, control bot.</p></div>
+      <div class="tli reveal"><div class="ph">Phase 5 · <span class="done">done</span></div><h4>News ingestion + RAG</h4><p>Grounded prompts, near-duplicate dedup, pluggable embedder (MiniLM or a dependency-light fallback).</p></div>
+      <div class="tli reveal"><div class="ph">Phase 6 · <span class="done">done</span></div><h4>Deploy hardening</h4><p>systemd, WAL backups, a clean requirements.txt, and a preflight check — ready for the Oracle ARM box.</p></div>
+    </div>
+  </section>
+
+  <!-- SIGNALS -->
+  <section id="signals">
+    <div class="eyebrow">09 — output</div>
+    <h2>What lands in <em>your channel</em>.</h2>
+    <div class="grid g2" style="margin-top:30px;align-items:start">
+      <div class="reveal">
+        <p class="lead" style="margin-bottom:20px">A signal emits when confidence ≥ 80% <b style="color:var(--text)">or</b> the Nadaraya-Watson Envelope fires a direct buy/sell. The 1h timeframe emits <b style="color:var(--text)">only</b> on a direct NWE signal. When confidence and NWE disagree, NWE wins.</p>
+        <div class="grid" style="gap:12px">
+          <div class="card reveal" style="padding:18px"><h3 style="font-size:15px;margin:0 0 4px">Customer channel</h3><p style="margin:0;font-size:13.5px">Signal only. No buttons. The product.</p></div>
+          <div class="card reveal" style="padding:18px"><h3 style="font-size:15px;margin:0 0 4px">Dev channel</h3><p style="margin:0;font-size:13.5px">Signal + full brain dump + the 3-row feedback keyboard. Where the system learns from you.</p></div>
+        </div>
+      </div>
+      <div class="tg reveal">
+        <div class="bar2"><span style="color:var(--cyan)">●</span> BitReinforceX · dev</div>
+        <div class="bubble">
+          <div class="h">🚨 SIGNAL ALERT 🚨</div>
+          <div class="row"><span class="k">OVERALL TRADE SIGNAL</span><span class="val buy">BUY</span></div>
+          <div class="row"><span class="k">NWE SIGNAL</span><span class="val buy">BUY</span></div>
+          <div class="row"><span class="k">💱 PAIR</span><span class="val">SOLUSDT</span></div>
+          <div class="row"><span class="k">⏰ TIMEFRAME</span><span class="val">4h</span></div>
+          <div class="row"><span class="k">📊 CONFIDENCE</span><span class="val">86.40%</span></div>
+          <div class="row"><span class="k">🧠 REASON</span><span class="val">NWE</span></div>
+          <span class="dis">⚠️ Not financial advice. Trading involves risk — do your own research.</span>
+        </div>
+        <div class="kb">
+          <button>BUY</button><button>SELL</button><button>SKIP</button>
+          <button>1.0</button><button>−4.0</button><button>Auto</button>
+          <button class="full">CLOSE SESSION</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEPLOY -->
+  <section id="deploy">
+    <div class="eyebrow">10 — run it</div>
+    <h2>Stack &amp; <em>deployment</em>.</h2>
+    <div class="grid g2" style="margin-top:30px;align-items:start">
+      <div>
+        <div class="grid" style="gap:12px">
+          <div class="card reveal" style="padding:18px 22px"><div class="tags">
+            <span class="tag">gpt-4o-mini</span><span class="tag">LangGraph</span><span class="tag v">ccxt / Binance</span>
+            <span class="tag v">python-telegram-bot 22</span><span class="tag m">SQLite · WAL</span><span class="tag m">vendored pandas_ta</span>
+            <span class="tag">numpy&lt;2 · pandas&lt;3</span><span class="tag v">sentence-transformers (opt)</span>
+          </div></div>
+          <div class="card reveal" style="padding:20px 22px">
+            <h3 style="font-size:15px;margin:0 0 6px">Host · Oracle Cloud ARM</h3>
+            <p style="margin:0;font-size:13.5px">Free Ampere A1 (up to 4 OCPU / 24 GB). One systemd service, Restart=always, EnvironmentFile for secrets. State is one SQLite file; back it up nightly or stream with Litestream.</p>
+          </div>
+        </div>
+      </div>
+      <div class="deploycode reveal">
+<span class="c"># reproducible setup</span>
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt   <span class="c"># vendored pandas_ta included</span>
+cp .env.example .env              <span class="c"># add keys + tokens</span>
+python <span class="p">scripts/preflight.py</span>      <span class="c"># → READY</span>
+
+<span class="c"># run (signals bot + scheduler + grader)</span>
+python <span class="p">telegram_app.py</span>
+
+<span class="c"># deploy 24/7</span>
+sudo cp deploy/bitreinforcex.service /etc/systemd/system/
+sudo systemctl enable --now bitreinforcex
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <b>BitReinforceX</b> — three RL agents, one self-grading brain, one SQLite file.<br>
+  Built across 8 commits on <code style="font-family:var(--mono);color:var(--cyan)">feature/bitreinforcex-rebuild</code> · 22 tests green.
+  <div class="warn">⚠ Advisory signals only — this is not financial advice and the system places no orders.</div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  /* ---- scroll reveal ---- */
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target);} });
+  }, {threshold:.12});
+  document.querySelectorAll(".reveal").forEach(function(el,i){
+    el.style.transitionDelay = Math.min(i%4*0.06,0.24)+"s";
+    io.observe(el);
+  });
+
+  /* ---- scroll-spy nav ---- */
+  var links = [].slice.call(document.querySelectorAll("#nav a"));
+  var spy = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(l){ l.classList.toggle("active", l.getAttribute("href")==="#"+e.target.id); });
+      }
+    });
+  }, {rootMargin:"-45% 0px -50% 0px"});
+  document.querySelectorAll("section[id]").forEach(function(s){ spy.observe(s); });
+
+  /* ---- 3D card tilt ---- */
+  if(!reduce && window.matchMedia("(pointer:fine)").matches){
+    document.querySelectorAll(".card").forEach(function(c){
+      c.addEventListener("mousemove", function(ev){
+        var r=c.getBoundingClientRect(), px=(ev.clientX-r.left)/r.width-.5, py=(ev.clientY-r.top)/r.height-.5;
+        c.style.transform="perspective(900px) rotateY("+(px*6)+"deg) rotateX("+(-py*6)+"deg) translateZ(6px)";
+      });
+      c.addEventListener("mouseleave", function(){ c.style.transform=""; });
+    });
+  }
+
+  /* ---- hero 3D constellation (the agent network) ---- */
+  var cv = document.getElementById("constellation"), ctx = cv.getContext("2d");
+  var W,H,DPR=Math.min(window.devicePixelRatio||1,2), pts=[], cx, cy, mx=0, my=0, t=0;
+  var PAL=["#22d3ee","#7c5cff","#ff4d8d","#34f5c5"];
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    var N = W<700?42:78, R=Math.min(W,H)*0.42;
+    pts=[];
+    for(var i=0;i<N;i++){
+      // fibonacci sphere for an even 3D shell
+      var phi=Math.acos(1-2*(i+.5)/N), th=Math.PI*(1+Math.sqrt(5))*i;
+      pts.push({
+        x:Math.cos(th)*Math.sin(phi)*R, y:Math.sin(th)*Math.sin(phi)*R, z:Math.cos(phi)*R,
+        c:PAL[i%4], core:i<5
+      });
+    }
+  }
+  function frame(){
+    t+=0.0016;
+    ctx.clearRect(0,0,W,H);
+    var ay=t + mx*0.5, ax=my*0.35, f=560;
+    var sy=Math.sin(ay),cyy=Math.cos(ay), sx=Math.sin(ax),cxx=Math.cos(ax);
+    var proj=[];
+    for(var i=0;i<pts.length;i++){
+      var p=pts[i];
+      var x1=p.x*cyy - p.z*sy, z1=p.x*sy + p.z*cyy;       // rotate Y
+      var y2=p.y*cxx - z1*sx,  z2=p.y*sx + z1*cxx;        // rotate X
+      var s=f/(f+z2+R0());
+      proj.push({x:cx+x1*s, y:cy+y2*s, s:s, z:z2, c:p.c, core:p.core});
+    }
+    // edges by proximity (the "network")
+    for(var a=0;a<proj.length;a++){
+      for(var b=a+1;b<proj.length;b++){
+        var dx=proj[a].x-proj[b].x, dy=proj[a].y-proj[b].y, d=dx*dx+dy*dy;
+        if(d<13000){
+          var al=(1-d/13000)*0.22*Math.min(proj[a].s,proj[b].s);
+          ctx.strokeStyle="rgba(124,140,230,"+al+")"; ctx.lineWidth=0.6;
+          ctx.beginPath(); ctx.moveTo(proj[a].x,proj[a].y); ctx.lineTo(proj[b].x,proj[b].y); ctx.stroke();
+        }
+      }
+    }
+    // nodes
+    for(var i=0;i<proj.length;i++){
+      var q=proj[i], rad=(q.core?3.4:1.7)*q.s, op=Math.max(0.12,Math.min(1,q.s*0.9));
+      ctx.beginPath(); ctx.arc(q.x,q.y,rad,0,6.2832);
+      ctx.fillStyle=q.c; ctx.globalAlpha=op;
+      if(q.core){ ctx.shadowColor=q.c; ctx.shadowBlur=16; } else { ctx.shadowBlur=0; }
+      ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1;
+    }
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  var _R=0; function R0(){ return _R || (_R=Math.min(W,H)*0.42); }
+  window.addEventListener("resize", function(){ _R=0; resize(); });
+  window.addEventListener("mousemove", function(e){ mx=(e.clientX/window.innerWidth-.5); my=(e.clientY/window.innerHeight-.5); });
+  resize();
+  if(reduce){ frame(); } else { requestAnimationFrame(frame); }
+})();
+</script>
+</body>
+</html>
