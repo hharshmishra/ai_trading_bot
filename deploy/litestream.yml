@@ -1,0 +1,19 @@
+# Optional: continuous streaming backup of the SQLite DB with Litestream (free).
+# Install Litestream (arm64 build), point it at object storage (or a local dir),
+# then run as its own systemd service:
+#   litestream replicate -config deploy/litestream.yml
+# Restore:
+#   litestream restore -config deploy/litestream.yml logs/bitreinforcex.db
+dbs:
+  - path: logs/bitreinforcex.db
+    replicas:
+      # local replica (cheapest — a second disk / mounted volume):
+      - type: file
+        path: /home/ubuntu/backups/bitreinforcex
+      # or an S3-compatible bucket (Oracle Object Storage works via S3 API):
+      # - type: s3
+      #   bucket: bitreinforcex-backups
+      #   path: db
+      #   endpoint: https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+      #   access-key-id: ${OCI_ACCESS_KEY}
+      #   secret-access-key: ${OCI_SECRET_KEY}

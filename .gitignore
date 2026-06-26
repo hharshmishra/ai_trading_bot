@@ -41,3 +41,6 @@ python-3.11.3/
 __pycache__/
 agents/__pycache__
 brain/__pycache__
+
+# backups
+backups/

@@ -1,66 +1,38 @@
-# Python 3.11.3
-# Binance & Crypto APIs
-ccxt==4.5.2
-python-binance==1.0.29
+# BitReinforceX — Python 3.11
+# Install from the repo root:  pip install -r requirements.txt
+#
+# numpy<2 and pandas<3 are REQUIRED by the vendored pandas_ta (see vendor/).
 
-# Technical indicators
-# pandas_ta 0.3.14b0 was REMOVED from PyPI and its upstream GitHub repo is gone,
-# so the pinned version is no longer installable. It is vendored under
-# vendor/pandas-ta/ (the `from numpy import NaN` refs patched for numpy>=2).
-# Installs as the importable `pandas_ta` package. Requires numpy<2 + pandas<3
-# (pinned below) for full compatibility.
-./vendor/pandas-ta
-ta-lib==0.6.6
-
-# Web app / API (optional for orchestration)
-fastapi==0.116.1
-uvicorn==0.35.0
-
-# Date & time utilities
-python-dateutil==2.8.2
-
-# Logging & config
-python-dotenv==1.0.0
-
-# Backtesting (optional but useful for validation)
-backtrader==1.9.78.123
-
-# Core data handling
-# pandas==2.2.2
-# numpy==1.26.4 #python 3.12.3
-
-pandas==2.0.3
+# --- core runtime (Phases 1-5) ---
 numpy==1.25.0
-requests==2.31.0
-beautifulsoup4==4.12.2
-newspaper3k==0.2.8
-python-dateutil==2.8.2
+pandas==2.0.3
+./vendor/pandas-ta            # vendored: pandas_ta 0.3.14b0 (gone from PyPI/GitHub)
 
-# Chart pattern recognition
-# candle-analyzer
-# streaming-indicators
-
-
-# AI & NLP
-openai==1.102.0
-transformers==4.55.4
-sentence-transformers==5.1.0
-
-# Vector database
-pinecone-client==6.0.0
-
-# Reinforcement Learning
-stable-baselines3==2.7.0
-gymnasium==1.1.1
-ray[rllib]==2.49.0
-
-# Visualization (optional but helpful)
-matplotlib==3.8.2
-plotly==6.3.0
-
+ccxt==4.5.2                   # Binance OHLCV
+openai==1.102.0               # LLM client (news / research agents)
 langchain==0.3.27
 langgraph==0.4.3
 pydantic==2.11.7
+python-telegram-bot==22.3     # signals bot + control bot
+python-dotenv==1.0.0
+requests==2.31.0              # CryptoPanic API
+feedparser==6.0.11            # RSS ingestion (Phase 5)
 
-telegram==0.0.1
-python-telegram-bot==22.3
+# --- dev ---
+pytest==9.1.1
+
+# --- optional: RAG semantic embeddings (MiniLM) ------------------------------
+# Phase 5 RAG works out of the box with the built-in HashingEmbedder (no extra
+# deps). For real semantic similarity install sentence-transformers + sqlite-vec.
+# NOTE: modern sentence-transformers wants numpy>=1.26 / torch, which conflicts
+# with the numpy<2 pin above. Two ways to enable MiniLM:
+#   (a) keep the pin and use a compatible older release:
+#         pip install "sentence-transformers==2.2.2" sqlite-vec
+#   (b) migrate the 5 type-2 indicators off pandas_ta to TA-Lib (frees numpy),
+#         drop the numpy pin, then: pip install sentence-transformers sqlite-vec
+# Then set RAG_EMBEDDER=minilm.
+
+# --- removed: unused by the current system (were breaking fresh installs) ----
+# ta-lib, python-binance, beautifulsoup4, newspaper3k, fastapi, uvicorn,
+# transformers, pinecone-client, stable-baselines3, gymnasium, ray[rllib],
+# backtrader, matplotlib, plotly, telegram(==0.0.1 — wrong package), sentence-transformers

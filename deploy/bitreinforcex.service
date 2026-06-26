@@ -1,0 +1,28 @@
+# systemd unit for the BitReinforceX runtime (Oracle Cloud ARM / Ubuntu).
+# Install:
+#   sudo cp deploy/bitreinforcex.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now bitreinforcex
+#   journalctl -u bitreinforcex -f          # follow logs
+# Adjust User= and the paths below to match your box (these assume the repo at
+# /home/ubuntu/ai_trading_bot and a venv created there).
+
+[Unit]
+Description=BitReinforceX AI trading-signal bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ai_trading_bot
+EnvironmentFile=/home/ubuntu/ai_trading_bot/.env
+ExecStart=/home/ubuntu/ai_trading_bot/venv/bin/python -u telegram_app.py
+Restart=always
+RestartSec=10
+# crash-safe: always come back up on failure or reboot
+StandardOutput=append:/home/ubuntu/ai_trading_bot/logs/runtime.log
+StandardError=append:/home/ubuntu/ai_trading_bot/logs/runtime.log
+
+[Install]
+WantedBy=multi-user.target
