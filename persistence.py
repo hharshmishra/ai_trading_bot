@@ -51,10 +51,13 @@ CREATE TABLE IF NOT EXISTS predictions (
     news_action         TEXT,
     news_action_idx     INTEGER,
     news_feats          TEXT,      -- JSON list
+    news_conf           REAL,
     research_action     TEXT,
     research_action_idx INTEGER,
     research_feats      TEXT,      -- JSON list
+    research_conf       REAL,
     indicator_action    TEXT,
+    indicator_conf      REAL,
     indicator_blend     TEXT,      -- JSON object
     brain_weights       TEXT,      -- JSON object
     label_source        TEXT DEFAULT 'pending',   -- pending | auto | manual
@@ -193,10 +196,13 @@ class Store:
             "news_action": news_raw.get("action"),
             "news_action_idx": news_rl.get("action_idx"),
             "news_feats": _dumps(news_rl.get("features")),
+            "news_conf": (agents.get("news") or {}).get("confidence"),
             "research_action": research_raw.get("action"),
             "research_action_idx": research_rl.get("action_idx"),
             "research_feats": _dumps(research_rl.get("feats")),
+            "research_conf": (agents.get("research") or {}).get("confidence"),
             "indicator_action": ind_raw.get("action"),
+            "indicator_conf": (agents.get("indicator") or {}).get("confidence"),
             "indicator_blend": _dumps(indicator_blend),
             "brain_weights": _dumps((decision.get("policy") or {}).get("weights")),
             "label_source": "pending",

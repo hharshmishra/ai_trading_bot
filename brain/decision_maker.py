@@ -279,6 +279,13 @@ class DecisionMaker:
 
         self._normalize_weights()
 
+    def apply_brain_feedback(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str, news_reward: float):
+        """Public entry for the grader / Telegram handler to update the brain's
+        agent-priority weights from a (auto- or human-derived) ground truth.
+        ``agent_results`` = {agent: {"action": str, "confidence": float}}.
+        """
+        self._apply_feedback_to_brain(agent_results, true_outcome, news_reward)
+
 
     def feedback(self, decision_out: Dict[str, Any]):
         """Interactive prompt: ask user for true outcome and numeric news reward and forward to child agents."""
