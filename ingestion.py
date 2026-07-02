@@ -1,8 +1,9 @@
-"""News ingestion (Phase 5): pull free headlines, normalize, tag assets, feed RAG.
+"""News ingestion: pull free headlines, normalize, tag assets, feed RAG.
 
-Network fetchers are injectable so the pipeline is unit-testable offline. Free
-sources: RSS (CoinDesk / Cointelegraph / The Block) via feedparser, plus the
-CryptoPanic free API if a token is provided.
+Network fetchers are injectable so the pipeline is unit-testable offline. All
+default sources are RSS via feedparser — CryptoPanic's free API tier was
+discontinued in April 2026, so it is no longer part of the default path (the
+fetcher remains for anyone with a paid token).
 """
 from __future__ import annotations
 
@@ -16,6 +17,11 @@ DEFAULT_RSS = [
     ("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("cointelegraph", "https://cointelegraph.com/rss"),
     ("theblock", "https://www.theblock.co/rss.xml"),
+    ("decrypt", "https://decrypt.co/feed"),
+    ("bitcoinmagazine", "https://bitcoinmagazine.com/feed"),
+    ("cryptoslate", "https://cryptoslate.com/feed/"),
+    ("blockworks", "https://blockworks.co/feed"),
+    ("newsbtc", "https://www.newsbtc.com/feed/"),
 ]
 
 # Base tickers we track (trading universe + macro proxies).

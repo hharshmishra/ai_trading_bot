@@ -192,12 +192,23 @@ class Grader:
             self.store.record_reward(p["id"], "indicator", p["indicator_action"], ri, source)
             rewards["indicator"] = ri
 
+        deriv_agent = getattr(self.dm, "derivatives", None)
+        if (deriv_agent is not None and p.get("deriv_feats") is not None
+                and p.get("deriv_action_idx") is not None):
+            rd = reward_fn(p["deriv_action"], label)
+            deriv_agent.apply_reward(p["deriv_feats"], p["deriv_action_idx"], rd)
+            self.store.record_reward(p["id"], "derivatives", p["deriv_action"], rd, source)
+            rewards["derivatives"] = rd
+
         # Brain priority weights learn from the same ground truth.
         agent_results = {
             "news": {"action": _norm_action(p.get("news_action")), "confidence": p.get("news_conf") or 0.0},
             "research": {"action": _norm_action(p.get("research_action")), "confidence": p.get("research_conf") or 0.0},
             "indicator": {"action": _norm_action(p.get("indicator_action")), "confidence": p.get("indicator_conf") or 0.0},
         }
+        if p.get("deriv_action") is not None:
+            agent_results["derivatives"] = {"action": _norm_action(p.get("deriv_action")),
+                                            "confidence": p.get("deriv_conf") or 0.0}
         news_reward = rewards.get("news", reward_for(p.get("news_action"), label))
         try:
             self.dm.apply_brain_feedback(agent_results, label, news_reward)
@@ -264,6 +275,16 @@ class Grader:
                 self.dm.indicator.apply_reward(p["indicator_blend"], corr)
             self.store.record_reward(p["id"], "indicator", p["indicator_action"], corr, "correction")
             corrections["indicator"] = corr
+
+        deriv_agent = getattr(self.dm, "derivatives", None)
+        if (deriv_agent is not None and p.get("deriv_feats") is not None
+                and p.get("deriv_action_idx") is not None):
+            manual = reward_for(p["deriv_action"], label)
+            corr = manual - prior_auto.get("derivatives", 0.0)
+            if corr:
+                deriv_agent.apply_reward(p["deriv_feats"], p["deriv_action_idx"], corr)
+            self.store.record_reward(p["id"], "derivatives", p["deriv_action"], corr, "correction")
+            corrections["derivatives"] = corr
 
         if p.get("session_id"):
             self.store.set_session_true_outcome(p["session_id"], label)

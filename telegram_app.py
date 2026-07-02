@@ -25,6 +25,7 @@ from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
 from grader import Grader
+from ingestion import ingest_all
 from persistence import Store, get_store
 from signals import (TF_SECONDS, fmt_brain_dump, fmt_signal_message,
                      is_candle_close_minute, timeframes_due)
@@ -70,7 +71,20 @@ class Broadcaster:
         """Send to customer + dev channels, create a durable session, supersede
         the previous one for this (pair, tf). Returns the new session id."""
         from telegram.constants import ParseMode
-        text = fmt_signal_message(pair, tf, overall, nwe, conf, reason)
+        ind_details = (((decision.get("agents") or {}).get("indicator") or {})
+                       .get("raw") or {}).get("details") or {}
+        deriv_raw = ((decision.get("agents") or {}).get("derivatives") or {}).get("raw") or {}
+        note = None
+        try:
+            from agents.derivatives_agent import deriv_note as _dn
+            note = _dn(deriv_raw.get("details")) if deriv_raw.get("available") else None
+        except Exception:
+            note = None
+        text = fmt_signal_message(
+            pair, tf, overall, nwe, conf, reason,
+            regime=ind_details.get("regime"),
+            trigger=reason if reason.startswith("trend_") else None,
+            deriv_note=note)
 
         cust_msg_id = None
         if self.customer_chat_id is not None:
@@ -198,6 +212,19 @@ async def cmd_research(update, context):
     await _reply(update, f"<b>research {pair} {tf}</b>\naction={out.get('action')} conf={out.get('confidence')}")
 
 
+async def cmd_derivs(update, context):
+    dm = context.application.bot_data["dm"]
+    pair = (context.args[0] if context.args else "BTCUSDT").upper()
+    out = await asyncio.to_thread(dm.derivatives.decide, pair, "1h")
+    if not out.get("available"):
+        await _reply(update, f"<b>derivs {pair}</b>\nno USDM future / fetch failed")
+        return
+    d = out.get("details") or {}
+    await _reply(update, f"<b>derivs {pair}</b>\naction={out.get('action')} conf={_r3(out.get('confidence'))}\n"
+                         f"funding={d.get('funding_rate')} oiΔ={_r3(d.get('oi_change_pct'))}\n"
+                         f"top L/S={_r3(d.get('top_position_ratio'))} acct L/S={_r3(d.get('global_account_ratio'))}")
+
+
 async def cmd_regime(update, context):
     pair = (context.args[0] if context.args else "BTCUSDT").upper()
     tf = context.args[1] if len(context.args) > 1 else "4h"
@@ -237,6 +264,15 @@ async def scheduler_loop(application) -> None:
                 last_run = dt
                 tfs = timeframes_due(dt)
                 logger.info("cycle at %s for %s", dt.strftime("%Y-%m-%d %H:%M"), tfs)
+                # Hourly ingestion BEFORE the cycle so the news agent's RAG
+                # grounding includes this hour's headlines.
+                try:
+                    rag_index = bd.get("rag_index")
+                    if rag_index is not None:
+                        stats = await asyncio.to_thread(ingest_all, rag_index)
+                        logger.info("news ingest: %s", stats)
+                except Exception as e:
+                    logger.error("ingest failed: %s", e)
                 await run_cycle(tfs, dm=bd["dm"], data_fetcher=bd["dm"].indicator.data,
                                 broadcast=bd["broadcaster"].broadcast, store=bd["store"],
                                 concurrency=MAX_CONCURRENCY)
@@ -310,6 +346,12 @@ def main() -> None:
     async def post_init(app):
         broadcaster = Broadcaster(app.bot, store, customer, dev)
         app.bot_data.update({"dm": dm, "store": store, "grader": grader, "broadcaster": broadcaster})
+        try:
+            from rag import RagIndex
+            app.bot_data["rag_index"] = RagIndex(store=store)
+        except Exception as e:
+            logger.error("rag index unavailable: %s", e)
+            app.bot_data["rag_index"] = None
         app.bot_data["_tasks"] = [asyncio.create_task(scheduler_loop(app)),
                                   asyncio.create_task(grader_loop(app))]
         if control_app is not None:
@@ -337,6 +379,7 @@ def main() -> None:
         control_app.add_handler(CommandHandler("research", cmd_research))
         control_app.add_handler(CommandHandler("context", cmd_context))
         control_app.add_handler(CommandHandler("regime", cmd_regime))
+        control_app.add_handler(CommandHandler("derivs", cmd_derivs))
 
     logger.info("starting BitReinforceX runtime")
     app.run_polling(poll_interval=1.0, allowed_updates=Update.ALL_TYPES)

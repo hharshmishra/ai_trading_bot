@@ -37,6 +37,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # import the child agents from your project
+import config
 from agents.indicator_agent import IndicatorAgent
 from agents.research_agent import ResearchAgent
 from agents.news_agent import NewsAgent
@@ -44,8 +45,14 @@ from agents.news_agent import NewsAgent
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 POLICY_PATH = os.path.join(LOG_DIR, "brain_policy.json")
 
-# initial (relative) scores - indicator > research > news as you asked
-DEFAULT_SCORES = {"indicator": 3.0, "research": 2.0, "news": 1.0}
+# Voter roster. Every aggregation / feedback loop iterates this tuple, so adding
+# a voter is one entry here + a DEFAULT_SCORES prior.
+AGENT_NAMES = ("indicator", "research", "news", "derivatives")
+
+# initial (relative) scores - indicator > research > news as you asked;
+# derivatives starts between research and news (informative but unproven).
+DEFAULT_SCORES = {"indicator": 3.0, "research": 2.0, "news": 1.0,
+                  "derivatives": config.DERIV_BRAIN_SCORE}
 
 
 def _ensure_logs_dir():
@@ -77,13 +84,19 @@ class DecisionMaker:
         self.indicator = IndicatorAgent(prefer_csv=prefer_csv)
         self.research = ResearchAgent(prefer_csv=prefer_csv)
         self.news = NewsAgent()
+        # 4th voter (Phase 4): no-LLM positioning agent; brain calls it only
+        # when DERIVATIVES_ENABLED, but the attribute always exists so the
+        # grader can replay rewards on rows that carry deriv snapshots.
+        from agents.derivatives_agent import DerivativesAgent
+        self.derivatives = DerivativesAgent(data_fetcher=self.indicator.data)
         self.policy = _load_policy()
         self._normalize_weights()
 
     def _normalize_weights(self):
         # Convert raw scores -> normalized positive weights that sum to 1
         scores = self.policy.get("scores", DEFAULT_SCORES.copy())
-        # ensure all keys exist
+        # ensure all keys exist (setdefault absorbs newly added voters like
+        # "derivatives" into a pre-existing policy file — no migration needed)
         for k in DEFAULT_SCORES.keys():
             scores.setdefault(k, DEFAULT_SCORES[k])
         # shift to positive
@@ -154,17 +167,29 @@ class DecisionMaker:
             confidence = float(dd.get("confidence", 0.0) or 0.0)
             return {"action": action, "confidence": confidence, "raw": dd}
 
+        # DerivativesAgent returns a dict (Phase 4); unavailable -> conf 0.0
+        if agent_name == "derivatives":
+            dd = raw_out if isinstance(raw_out, dict) else getattr(raw_out, "__dict__", {"action": None, "confidence": 0.0})
+            action = self._normalize_action(dd.get("action"))
+            confidence = float(dd.get("confidence", 0.0) or 0.0)
+            return {"action": action, "confidence": confidence, "raw": dd}
+
         # fallback
         return {"action": "skip", "confidence": 0.0, "raw": raw_out}
 
-    def decide(self, symbol: str, timeframe: str, use_agents: Optional[Tuple[str, ...]] = ("indicator", "research", "news"), market_context: Optional[Any] = None) -> Dict[str, Any]:
+    def decide(self, symbol: str, timeframe: str, use_agents: Optional[Tuple[str, ...]] = None, market_context: Optional[Any] = None) -> Dict[str, Any]:
         """Call child agents according to use_agents and aggregate a final decision.
 
         ``market_context`` (a shared MarketContext built once per cycle) is passed
         to the research agent and reused for the news overall scan, so a full
         cycle costs ~73 LLM calls instead of ~576. Without it, the original
         per-coin path runs unchanged.
+
+        ``use_agents`` defaults to the full roster; the derivatives voter also
+        requires DERIVATIVES_ENABLED (flag off => identical 3-voter behaviour).
         """
+        if use_agents is None:
+            use_agents = AGENT_NAMES
         agent_results: Dict[str, Dict[str, Any]] = {}
 
         # call indicator agent
@@ -195,6 +220,15 @@ class DecisionMaker:
                 news_out = None
         agent_results["news"] = self._coerce_agent_out(news_out, "news")
 
+        # call derivatives agent (Phase 4; flag-gated, keyless public data)
+        deriv_out = None
+        if "derivatives" in use_agents and config.DERIVATIVES_ENABLED:
+            try:
+                deriv_out = self.derivatives.decide(symbol, timeframe)
+            except Exception:
+                deriv_out = None
+        agent_results["derivatives"] = self._coerce_agent_out(deriv_out, "derivatives")
+
         # Weighted aggregation
         weights = self.policy.get("weights", {"indicator": 0.6, "research": 0.3, "news": 0.1})
         action_map = {"sell": -1.0, "skip": 0.0, "buy": 1.0}
@@ -202,7 +236,7 @@ class DecisionMaker:
         # compute score = sum(weight * action_value * confidence)
         total_score = 0.0
         total_weighted_conf = 0.0
-        for ag in ("indicator", "research", "news"):
+        for ag in AGENT_NAMES:
             ag_res = agent_results.get(ag, {"action": "skip", "confidence": 0.0})
             val = action_map.get(ag_res["action"], 0.0)
             w = float(weights.get(ag, 0.0))
@@ -259,8 +293,10 @@ class DecisionMaker:
         # learning rate controls how fast priorities can change
         LEARNING_RATE = 0.05  # 5% adjustment per feedback
 
-        for ag in ("indicator", "research", "news"):
-            res = agent_results.get(ag) or {"action": "skip", "confidence": 0.0}
+        for ag in AGENT_NAMES:
+            res = agent_results.get(ag)
+            if res is None:
+                continue  # e.g. pre-Phase-4 rows without a derivatives snapshot
             pred = res.get("action", "skip")
             conf = float(res.get("confidence", 0.0) or 0.0)
 

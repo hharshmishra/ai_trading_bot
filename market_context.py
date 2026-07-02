@@ -93,6 +93,9 @@ class MarketContext:
     driver_ind_score: Dict[str, float] = field(default_factory=dict)   # base -> [-1,1]
     driver_news_score: Dict[str, float] = field(default_factory=dict)  # base -> [-1,1]
     details: Dict[str, Any] = field(default_factory=dict)
+    # Free macro context (Phase 4); None when the feeds are unreachable.
+    fear_greed: Optional[float] = None      # 0..100
+    btc_dominance: Optional[float] = None   # percent
 
     def eco_scores(self, base: str, eco: str) -> tuple[List[float], List[float]]:
         """Return (indicator_scores, news_scores) for an ecosystem's drivers,
@@ -152,6 +155,14 @@ def build_market_context(
         except Exception as e:
             driver_raw.setdefault(base, {})["news_error"] = str(e)
 
+    # 5) Free macro context (Phase 4) — best-effort, never sinks a cycle.
+    try:
+        from utils.macro_fetcher import fetch_btc_dominance, fetch_fear_greed
+        fear_greed = fetch_fear_greed()
+        btc_dominance = fetch_btc_dominance()
+    except Exception:
+        fear_greed = btc_dominance = None
+
     return MarketContext(
         timeframe=timeframe,
         overall_json=overall_json,
@@ -166,4 +177,6 @@ def build_market_context(
             "money_flow": mf_details, "btcdominance": btd_details,
             "drivers": driver_raw,
         },
+        fear_greed=fear_greed,
+        btc_dominance=btc_dominance,
     )
