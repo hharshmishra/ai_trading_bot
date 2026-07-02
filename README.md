@@ -2,36 +2,38 @@
 
 > *"Reinforcing your trades with AI power"*
 
-An AI crypto **signal** system (advisory only — it never places orders). Three
-reinforcement-learning agents feed a decision-making brain; signals go to
-Telegram; and the system **trains itself** by grading its own past predictions
-against realized price.
+An AI crypto **signal** system (advisory only — it never places orders). Four
+reinforcement-learning agents feed a decision-making brain; a regime classifier
+gates which triggers may fire; signals go to Telegram; and the system **trains
+itself** by grading its own past predictions against realized price with
+triple-barrier labels — then trains a nightly meta-model on its own track
+record.
 
 ## Architecture
 
 ```
- RSS / CryptoPanic ─▶ ingestion ─▶ RAG (rag.py: embed + dedup + retrieve)
+ RSS (8 feeds) ─▶ ingestion (hourly) ─▶ RAG (rag.py: embed + dedup + retrieve)
                                         │ headlines
- scheduler (IST :30) ─▶ market context (build once/cycle, Phase 1 cost fix)
+ scheduler (IST :30) ─▶ market context (once/cycle: LLM + F&G + BTC dominance)
                                         │
-       per pair ─▶ brain (decision_maker) ─▶ News · Indicator · Research agents
-                                        │ decision
-                          signal gate (signals.py) ─▶ Telegram (telegram_app.py)
+   per pair ─▶ brain ─▶ News · Indicator(+Regime) · Research · Derivatives
+                                        │ decision (4-voter weighted sum)
+              regime-gated signal gate (signals.py v2) ─▶ Telegram
                                         │ record (persistence.py: SQLite)
-                          grader (grader.py, every 60s) ─▶ realized price ─▶ reward
+   grader (60s) ─▶ triple-barrier labels ─▶ rewards ─▶ all 4 agent policies
+   nightly (02:00 IST) ─▶ meta-label model + confidence calibration
 ```
 
 | Module | Role |
 |--------|------|
-| `agents/` | News (OpenAI + RAG), Indicator (NWE/Chandelier/AlphaTrend + 6 type-2), Research (5 macro logics) — each a contextual-bandit RL learner |
-| `brain/decision_maker.py` | Weighted aggregation + learned agent priorities |
-| `market_context.py` | Builds market-wide signals **once per cycle** (≈6× fewer LLM calls) |
-| `cycle.py` | One analysis cycle: context → 48 pairs → gate → broadcast → record |
-| `persistence.py` | One SQLite DB: predictions, outcomes, rewards, sessions, news corpus |
-| `grader.py` | Auto-labels predictions from realized price; manual Telegram feedback overrides |
-| `signals.py` | Signal gate + scheduler cascade + message formatting |
-| `telegram_app.py` | Long-lived bot(s): signals + dev feedback buttons + control commands |
-| `rag.py` / `ingestion.py` | Headline embedding/dedup/retrieval to ground the LLM |
+| `agents/` | News (OpenAI + RAG), Indicator (NWE/Chandelier/AlphaTrend + type-2 + trend triggers), Research (5 macro logics), **Derivatives** (funding/OI/long-short positioning, no LLM), **Regime** (ADX/CHOP classifier — gates, doesn't vote) |
+| `brain/decision_maker.py` | Weighted 4-voter aggregation + learned agent priorities |
+| `signals.py` | Gate v1 + regime-gated gate v2 (truth table), cascade, formatting |
+| `grading/barriers.py` | Triple-barrier labeler (shared by grader AND backtest) |
+| `grader.py` | Auto-labels predictions; TB reward map v2; manual override wins |
+| `backtest/` | Replays the production decide()+gate per-bar over history |
+| `jobs/` | Nightly meta-label training + per-TF isotonic confidence calibration |
+| `market_context.py` / `cycle.py` / `persistence.py` / `telegram_app.py` / `rag.py` / `ingestion.py` | Shared context, cycle orchestration, SQLite state, Telegram runtime, headline RAG |
 
 ## Quickstart
 
@@ -41,30 +43,60 @@ source venv/bin/activate
 pip install -r requirements.txt            # installs the vendored pandas_ta too
 cp .env.example .env                        # then fill in keys/tokens
 python scripts/preflight.py                 # verify everything is wired
-python telegram_app.py                      # run (signals bot + scheduler + grader)
+python telegram_app.py                      # run (signals bot + scheduler + grader + nightly)
 ```
 
-Tests: `pytest -q` (22 tests, no network/keys needed — uses mocks + the
-HashingEmbedder).
+Tests: `pytest -q` (107 tests, no network/keys needed — mocks + HashingEmbedder).
+
+## Accuracy upgrade (v2) — evidence-first rollout
+
+The 1h baseline backtest measured **33% TB precision** for counter-trend NWE
+signals ("band walk"). v2 fixes this with a regime classifier and ships every
+change **behind a flag, off by default**:
+
+| Flag | What it enables | Enable when |
+|------|-----------------|-------------|
+| `GATE_V2_ENABLED` | Regime-gated gate: NWE only in ranging regimes; Supertrend-flip / Donchian / squeeze triggers own trending regimes; volume confirmation | backtest A/B beats baseline per-TF with CI separation |
+| `TB_GRADING_ENABLED` | Triple-barrier rewards (ATR-scaled TP/SL/time; labels always recorded) | after TB label distribution sanity-checks vs backtest |
+| `DERIVATIVES_ENABLED` | 4th voter from Binance USDM positioning ($0, keyless) | immediately safe; bandit learns from graded rows |
+| `META_GATE_ENABLED` | Gate on nightly meta-model p(correct) | holdout AUC ≥ 0.60 AND +5pts precision over 4-week shadow |
+
+Backtest (exact mode — replays the real `IndicatorAgent.decide` + gate):
+
+```bash
+python scripts/run_backtest.py --pairs BTCUSDT,ETHUSDT,SOLUSDT --tfs 1h,4h --start 2024-07-01
+python scripts/run_backtest.py --pairs all --tfs 1h --start 2024-07-01 --gate v2 \
+       --baseline logs/backtest/baseline/report.json --workers 6
+python scripts/run_training.py             # manual nightly-training run
+```
+
+Caveat printed in every report: news/research aren't backtestable (no
+historical LLM) — the confidence-gate path uses indicator-only confidence as a
+proxy; NWE/trend trigger paths are exact.
 
 ## How the learning loop works
 
-Every prediction is stored with each agent's RL replay payload and a
-**grade-due time** (`candle_close + k` candles). The grader fetches the realized
-candle, computes the forward return vs a per-timeframe threshold, and rewards
-each agent (+1 correct / −4 wrong) against *its own* recorded prediction — no
-human needed. In the dev Telegram channel you can override any signal; manual
-feedback takes precedence (a correction nets out a prior auto-grade).
+Every prediction is stored with each agent's RL replay payload, barrier prices
+(`entry ± mult × ATR`), and a grade-due time. The grader walks the realized
+OHLC path: first barrier touched decides the label (TP / SL / timeout) — a
+TP-then-crash sequence grades by what happened first. Rewards (map v2):
+correct +1, wrong direction −4, directional-but-flat −1.5, missed move −1.0.
+Manual feedback from the dev channel still overrides (corrections net out).
 
-Grading defaults (tunable in `grader.py`): horizon `k` = 3/2/1/1 and threshold
-= 0.4%/1.0%/2.5%/5% for 1h/4h/1d/1w.
+Nightly at 02:00 IST the system trains on its own graded history: a
+meta-label model p(correct | regime, agreement, positioning, confidence…) and
+per-TF isotonic calibration (runtime applies JSON knots via `np.interp` — no
+sklearn on the hot path). Both run in shadow (stamped on rows, shown in dev
+dumps) until their enable criteria are met.
 
 ## Signals
 
-Sent to a customer channel (signal only) and a dev channel (signal + brain dump
-+ feedback buttons). Gating: 1h emits only on a direct NWE signal; other
-timeframes emit on confidence ≥ 80% OR a direct NWE signal (NWE wins on
-conflict).
+Customer channel gets the signal; dev channel gets signal + brain dump +
+feedback buttons + regime/trigger/derivatives context lines. Gate v1 (default):
+1h emits only on a direct NWE signal; other TFs emit on confidence ≥ 80% OR
+NWE (NWE wins conflicts). Gate v2 (flag): the truth table in
+`signals.should_emit_signal_v2` — NWE owns ranging, trend triggers own
+trending, 1h stays NWE-only-in-ranging (confidence alone never emits on 1h).
 
 ## Deploy (Oracle Cloud ARM / any VPS)
 
@@ -79,8 +111,12 @@ or continuously with Litestream (`deploy/litestream.yml`).
 
 ## Notes
 
-- **pandas_ta is vendored** (`vendor/`) because upstream was removed from PyPI
-  and GitHub. It pins `numpy<2` / `pandas<3`.
-- **RAG embeddings**: the default `HashingEmbedder` needs no extra deps. For real
-  semantic similarity (MiniLM), see the optional section in `requirements.txt`.
-- **Cost**: ~85 LLM calls/cycle at 48 pairs (down from ~488) on `gpt-4o-mini`.
+- **pandas_ta is vendored** (`vendor/`) because upstream vanished from PyPI and
+  GitHub. It pins `numpy<2` / `pandas<3`.
+- **sklearn is pinned** (`scikit-learn==1.3.2`, `scipy==1.11.4`): newer versions
+  drag in numpy 2.x and break the pandas 2.0.3 ABI. `preflight.py` asserts this.
+- **CryptoPanic free API tier ended April 2026** — ingestion is RSS-only (8 feeds).
+- **RAG embeddings**: default `HashingEmbedder` needs no extra deps; MiniLM
+  option documented in `requirements.txt`.
+- **Cost**: still ~85 LLM calls/cycle at 48 pairs on `gpt-4o-mini` — the regime,
+  derivatives, meta and calibration layers add **zero** LLM calls.
