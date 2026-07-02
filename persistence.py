@@ -376,6 +376,28 @@ class Store:
             r = cur.fetchone()
         return dict(r) if r else None
 
+    def training_rows(self, min_graded_ts: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Graded predictions joined with their outcomes, oldest first — the
+        nightly meta-label/calibration training set. JSON columns parsed."""
+        q = ("SELECT p.*, o.realized_return, o.realized_label, o.label_tb, "
+             "o.barrier_hit_idx, o.exit_price, o.graded_ts, o.source AS outcome_source "
+             "FROM predictions p JOIN outcomes o ON o.prediction_id = p.id "
+             "WHERE p.graded = 1")
+        args: tuple = ()
+        if min_graded_ts is not None:
+            q += " AND o.graded_ts >= ?"
+            args = (min_graded_ts,)
+        q += " ORDER BY p.created_ts ASC"
+        with self._lock:
+            rows = self.conn.execute(q, args).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            for c in _PRED_JSON_COLS:
+                d[c] = _loads(d.get(c))
+            out.append(d)
+        return out
+
     # ------------------------------------------------------------------ #
     # Sessions (Telegram feedback lifecycle)
     # ------------------------------------------------------------------ #

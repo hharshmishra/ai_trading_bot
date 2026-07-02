@@ -16,6 +16,7 @@ import pandas as pd
 import config
 from grader import HORIZON_K
 from grading.barriers import barrier_prices
+from jobs.nightly import apply_calibration, meta_probability
 from market_context import build_market_context
 from persistence import get_store
 from signals import TF_SECONDS, should_emit_signal, should_emit_signal_v2
@@ -86,16 +87,12 @@ async def run_cycle(
 
                 gate = should_emit_signal_v2 if config.GATE_V2_ENABLED else should_emit_signal
                 emit, overall, nwe, conf, reason = gate(res)
-                session_id = None
-                if emit and broadcast is not None:
-                    session_id = await broadcast(pair=sym, tf=tf, overall=overall, nwe=nwe,
-                                                 conf=conf, reason=reason, decision=res)
-                    summary["emitted"] += 1
 
                 # Barrier prices for the triple-barrier grader (Phase 3): every
                 # directional prediction gets them, emitted or not — the RL loop
                 # grades them all.
-                ind_details = (((res.get("agents") or {}).get("indicator") or {})
+                agents_blk = res.get("agents") or {}
+                ind_details = ((agents_blk.get("indicator") or {})
                                .get("raw") or {}).get("details") or {}
                 regime_feats = ind_details.get("regime_feats") or {}
                 atr = regime_feats.get("atr")
@@ -106,11 +103,52 @@ async def run_cycle(
                     tp_price, sl_price = barrier_prices(entry, atr, final_action,
                                                         tp_mult, sl_mult)
 
+                # Meta shadow stamps (Phase 5): calibrated confidence + p(correct)
+                # from the nightly artifacts. Identity/None until they exist.
+                meta_p = calibrated = None
+                if config.META_SHADOW:
+                    deriv_raw = (agents_blk.get("derivatives") or {}).get("raw") or {}
+                    row_like = {
+                        "regime": ind_details.get("regime"), "regime_feats": regime_feats,
+                        "atr": atr, "entry_price": entry, "tf": tf,
+                        "candle_close_ts": close_ts, "emitted": emit,
+                        "trigger_source": reason if emit else None,
+                        "final_action": final_action,
+                        "final_confidence": (res.get("final") or {}).get("confidence"),
+                        "indicator_action": (agents_blk.get("indicator") or {}).get("action"),
+                        "indicator_conf": (agents_blk.get("indicator") or {}).get("confidence"),
+                        "research_action": (agents_blk.get("research") or {}).get("action"),
+                        "research_conf": (agents_blk.get("research") or {}).get("confidence"),
+                        "news_action": (agents_blk.get("news") or {}).get("action"),
+                        "news_conf": (agents_blk.get("news") or {}).get("confidence"),
+                        "deriv_action": deriv_raw.get("action"),
+                        "deriv_conf": (agents_blk.get("derivatives") or {}).get("confidence"),
+                        "deriv_feats": (deriv_raw.get("rl") or {}).get("feats"),
+                    }
+                    try:
+                        meta_p = meta_probability(row_like)
+                        calibrated = apply_calibration(tf, float(conf))
+                    except Exception:
+                        meta_p = calibrated = None
+
+                # Meta gate (only when explicitly enabled after shadow evidence).
+                if (emit and config.META_GATE_ENABLED and meta_p is not None
+                        and meta_p < config.META_GATE_THRESHOLD):
+                    emit, reason = False, "meta_gate"
+
+                session_id = None
+                if emit and broadcast is not None:
+                    res["meta"] = {"meta_p": meta_p, "calibrated_conf": calibrated}
+                    session_id = await broadcast(pair=sym, tf=tf, overall=overall, nwe=nwe,
+                                                 conf=conf, reason=reason, decision=res)
+                    summary["emitted"] += 1
+
                 store.record_prediction(
                     res, cycle_id=cycle_id, candle_close_ts=close_ts, entry_price=entry,
                     horizon_k=k, grade_due_ts=grade_due, emitted=emit, session_id=session_id,
                     atr=atr, tp_price=tp_price, sl_price=sl_price,
-                    trigger_source=reason if emit else None)
+                    trigger_source=reason if emit else None,
+                    meta_p=meta_p, calibrated_conf=calibrated)
 
         await asyncio.gather(*(analyze(s) for s in symbols))
 

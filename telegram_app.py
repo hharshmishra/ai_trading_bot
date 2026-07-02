@@ -80,10 +80,12 @@ class Broadcaster:
             note = _dn(deriv_raw.get("details")) if deriv_raw.get("available") else None
         except Exception:
             note = None
+        meta = decision.get("meta") or {}
         text = fmt_signal_message(
             pair, tf, overall, nwe, conf, reason,
             regime=ind_details.get("regime"),
             trigger=reason if reason.startswith("trend_") else None,
+            calibrated_conf=meta.get("calibrated_conf"),
             deriv_note=note)
 
         cust_msg_id = None
@@ -352,8 +354,10 @@ def main() -> None:
         except Exception as e:
             logger.error("rag index unavailable: %s", e)
             app.bot_data["rag_index"] = None
+        from jobs.nightly import nightly_loop
         app.bot_data["_tasks"] = [asyncio.create_task(scheduler_loop(app)),
-                                  asyncio.create_task(grader_loop(app))]
+                                  asyncio.create_task(grader_loop(app)),
+                                  asyncio.create_task(nightly_loop(app))]
         if control_app is not None:
             control_app.bot_data["dm"] = dm
             await control_app.initialize()

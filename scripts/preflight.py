@@ -36,7 +36,18 @@ print("BitReinforceX preflight\n")
 def _imports():
     import ccxt, openai, telegram, langgraph, pandas, numpy, pandas_ta, feedparser, pydantic  # noqa
     import brain.decision_maker, cycle, signals, grader, persistence, rag, ingestion, telegram_app  # noqa
-    return "core + app modules import"
+    import config, backtest.engine, grading.barriers, jobs.nightly, agents.regime_agent, agents.derivatives_agent  # noqa
+    return "core + app + accuracy-v2 modules import"
+
+
+def _sklearn():
+    import numpy, sklearn, joblib  # noqa
+    if not numpy.__version__.startswith("1."):
+        raise RuntimeError(f"numpy {numpy.__version__} breaks the pandas 2.0.3 / "
+                           f"vendored pandas_ta ABI — pin numpy==1.25.0")
+    from sklearn.linear_model import LogisticRegression  # noqa
+    from sklearn.isotonic import IsotonicRegression  # noqa
+    return f"sklearn {sklearn.__version__} on numpy {numpy.__version__} (train-side)"
 
 
 def _db():
@@ -66,6 +77,7 @@ def _env():
 
 
 check("imports", _imports)
+check("sklearn", _sklearn)
 check("database", _db)
 check("rag embedder", _embedder)
 check("env vars", _env)
