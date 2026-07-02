@@ -19,7 +19,8 @@ from typing import Any, Dict, List, Optional
 
 import config
 
-_LOCK = threading.Lock()
+_LOCK = threading.Lock()        # client creation
+_FETCH_LOCK = threading.Lock()  # serializes ccxt calls (sync client is not thread-safe)
 _EX: Optional[Any] = None
 _MARKETS: set = set()
 _MARKETS_TS: float = 0.0
@@ -44,18 +45,22 @@ def _unified(symbol: str) -> str:
 
 
 def _load_markets() -> set:
+    """Double-checked locking: the cycle fans decide() across threads, and two
+    concurrent first-call load_markets() on the shared ccxt client race inside
+    ccxt — one thread loads while the rest wait."""
     global _MARKETS, _MARKETS_TS
     now = time.time()
     if _MARKETS and (now - _MARKETS_TS) < _MARKETS_TTL:
         return _MARKETS
-    try:
-        ex = _client()
-        markets = ex.load_markets()
-        with _LOCK:
-            _MARKETS = {m for m in markets}
-            _MARKETS_TS = now
-    except Exception:
-        pass  # keep the stale (possibly empty) set; callers degrade to skip
+    with _FETCH_LOCK:
+        if _MARKETS and (time.time() - _MARKETS_TS) < _MARKETS_TTL:
+            return _MARKETS
+        try:
+            markets = _client().load_markets()
+            _MARKETS = set(markets)
+            _MARKETS_TS = time.time()
+        except Exception:
+            pass  # keep the stale (possibly empty) set; callers degrade to skip
     return _MARKETS
 
 
@@ -90,22 +95,23 @@ def fetch_derivatives(symbol: str) -> Optional[Dict[str, Any]]:
     uni = _unified(symbol)
     raw = symbol.upper()
     try:
-        fr = ex.fetch_funding_rate_history(uni, limit=30)
-        funding_hist = [float(x.get("fundingRate") or 0.0) for x in fr] or [0.0]
+        with _FETCH_LOCK:  # ccxt sync client: one caller at a time
+            fr = ex.fetch_funding_rate_history(uni, limit=30)
+            funding_hist = [float(x.get("fundingRate") or 0.0) for x in fr] or [0.0]
 
-        hours = max(2, config.DERIV_OI_WINDOW_H)
-        oi = ex.fetch_open_interest_history(uni, timeframe="1h", limit=hours + 1)
-        oi_vals = [float(x.get("openInterestAmount") or x.get("openInterestValue") or 0.0)
-                   for x in oi]
-        oi_vals = [v for v in oi_vals if v > 0]
-        oi_change = ((oi_vals[-1] - oi_vals[0]) / oi_vals[0]) if len(oi_vals) >= 2 else 0.0
+            hours = max(2, config.DERIV_OI_WINDOW_H)
+            oi = ex.fetch_open_interest_history(uni, timeframe="1h", limit=hours + 1)
+            oi_vals = [float(x.get("openInterestAmount") or x.get("openInterestValue") or 0.0)
+                       for x in oi]
+            oi_vals = [v for v in oi_vals if v > 0]
+            oi_change = ((oi_vals[-1] - oi_vals[0]) / oi_vals[0]) if len(oi_vals) >= 2 else 0.0
 
-        top = ex.fapiDataGetTopLongShortPositionRatio(
-            {"symbol": raw, "period": "1h", "limit": 1})
-        top_ratio = float(top[-1]["longShortRatio"]) if top else 1.0
-        acct = ex.fapiDataGetGlobalLongShortAccountRatio(
-            {"symbol": raw, "period": "1h", "limit": 1})
-        acct_ratio = float(acct[-1]["longShortRatio"]) if acct else 1.0
+            top = ex.fapiDataGetTopLongShortPositionRatio(
+                {"symbol": raw, "period": "1h", "limit": 1})
+            top_ratio = float(top[-1]["longShortRatio"]) if top else 1.0
+            acct = ex.fapiDataGetGlobalLongShortAccountRatio(
+                {"symbol": raw, "period": "1h", "limit": 1})
+            acct_ratio = float(acct[-1]["longShortRatio"]) if acct else 1.0
     except Exception:
         return None
 

@@ -70,8 +70,9 @@ async def run_cycle(
         async def analyze(sym: str, tf=tf, ctx=ctx):
             async with sem:
                 try:
-                    res = await asyncio.to_thread(
-                        dm.decide, sym, tf, ("indicator", "research", "news"), ctx)
+                    # use_agents=None -> brain's full roster (derivatives voter
+                    # included when DERIVATIVES_ENABLED)
+                    res = await asyncio.to_thread(dm.decide, sym, tf, None, ctx)
                 except Exception:
                     summary["errors"] += 1
                     return
