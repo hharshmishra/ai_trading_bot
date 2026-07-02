@@ -45,6 +45,19 @@ class TestNweVectorizationParity:
         assert "nwe_out" in out.columns  # endpoint branch still works
 
 
+class TestSupertrendFastParity:
+    def test_matches_vendored_pandas_ta(self):
+        import pandas_ta as ta
+        for seed in (1, 7, 42):
+            df = _synthetic_ohlcv(n=300, seed=seed)
+            ref = ta.supertrend(df["high"], df["low"], df["close"], length=10, multiplier=3)
+            fast = ci.supertrend_fast(df["high"], df["low"], df["close"], length=10, multiplier=3.0)
+            for col in ref.columns:
+                assert np.allclose(ref[col].to_numpy(dtype=float),
+                                   fast[col].to_numpy(dtype=float),
+                                   equal_nan=True), (seed, col)
+
+
 class TestEngineParity:
     """The engine's per-bar decision must equal calling the production agent
     directly on the same trailing window (parity by construction — this test

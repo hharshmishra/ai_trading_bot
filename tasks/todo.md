@@ -2,6 +2,12 @@
 
 Branch: `feature/accuracy-upgrade-v2`. Rule: 22 existing tests stay green before every commit.
 
+STATUS 2026-07-03: Phases 1-5 code committed (25aebba, 6e2bde6, 690e6b9, 6b99a4b), 107 tests green.
+Baseline 48-pair backtest RUNNING in background (logs/backtest/baseline-run.log).
+Remaining: baseline archive -> gate v2 A/B -> deck -> merge.
+Smoke evidence: 1h NWE TB-precision 33% (62tp/125sl) on 3 majors = the band-walk failure, quantified.
+Caveat noted: backtest conf_over_80 path overfires on 4h/1d (indicator-only conf proxy vs live brain conf) — ship decisions use NWE/trend trigger groups.
+
 ## Phase 1 — Backtest harness + baseline
 - [ ] `config.py` (flags + thresholds, env-driven)
 - [ ] `grading/barriers.py` (barrier_prices, triple_barrier) — TDD

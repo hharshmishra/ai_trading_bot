@@ -28,6 +28,27 @@ Direct signal:
 - Otherwise SKIP
 """
 
+_NWE_W_CACHE: dict = {}
+
+
+def _nwe_weight_cache(n: int, h: float):
+    """(W, row_sums) for the two-sided gaussian kernel — pure function of
+    (n, h); cached because the backtest calls it thousands of times."""
+    key = (n, round(h, 9))
+    hit = _NWE_W_CACHE.get(key)
+    if hit is not None:
+        return hit
+    idx = np.arange(n, dtype=float)
+    d = np.subtract.outer(idx, idx)
+    denom = 2.0 * (h ** 2) if h > 0 else 1e-12
+    W = np.exp(-(d * d) / denom)
+    sw = W.sum(axis=1)
+    if len(_NWE_W_CACHE) > 8:   # a few (n, h) shapes at most; guard leaks
+        _NWE_W_CACHE.clear()
+    _NWE_W_CACHE[key] = (W, sw)
+    return W, sw
+
+
 def _gauss_kernel(h: float, window: int) -> np.ndarray:
     # weights for lags 0..window-1  (lag 0 == current bar, causal)
     idx = np.arange(window, dtype=float)
@@ -97,14 +118,11 @@ def apply_nadaraya_watson_envelope(
         # far too slow for per-bar backtest replay. Same math — the weight
         # matrix W[i,j] = gauss(i-j, h) reproduces the loop exactly (parity
         # test against _nwe_repaint_reference in tests/test_backtest_harness.py).
+        # W depends only on (n, h), so it is cached: per call only the matmul runs.
         x = df["close"].values.astype(float)
         n = len(x)
 
-        idx = np.arange(n, dtype=float)
-        d = np.subtract.outer(idx, idx)
-        denom = 2.0 * (float(h) ** 2) if h > 0 else 1e-12
-        W = np.exp(-(d * d) / denom)
-        sw = W.sum(axis=1)
+        W, sw = _nwe_weight_cache(n, float(h))
         nwe_out = (W @ x) / np.where(sw == 0, 1.0, sw)
         nwe_out = np.where(sw == 0, x, nwe_out)
 
@@ -253,6 +271,50 @@ def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]: #Old 
         return {"signal": "skip", "confidence": 0.5}
 
     return {"signal": signal, "confidence": conf}
+
+def supertrend_fast(high: pd.Series, low: pd.Series, close: pd.Series,
+                    length: int = 10, multiplier: float = 3.0) -> pd.DataFrame:
+    """Drop-in replacement for the vendored ``pandas_ta.supertrend``.
+
+    Identical algorithm (same RMA ATR via pandas_ta, same band-ratchet
+    recursion, same column names) but the recursion runs on numpy arrays —
+    the vendored version's per-row ``.iloc`` get/set loop was ~60% of the
+    whole decide() call. Parity-locked by tests/test_backtest_harness.py.
+    """
+    import pandas_ta as ta
+    m = close.size
+    hl2_ = (high + low) / 2.0
+    matr = multiplier * ta.atr(high, low, close, length)
+    ub = (hl2_ + matr).to_numpy(dtype=float)
+    lb = (hl2_ - matr).to_numpy(dtype=float)
+    c = close.to_numpy(dtype=float)
+
+    dir_ = np.ones(m, dtype=int)
+    trend = np.zeros(m)
+    long_ = np.full(m, np.nan)
+    short = np.full(m, np.nan)
+
+    for i in range(1, m):
+        if c[i] > ub[i - 1]:
+            dir_[i] = 1
+        elif c[i] < lb[i - 1]:
+            dir_[i] = -1
+        else:
+            dir_[i] = dir_[i - 1]
+            if dir_[i] > 0 and lb[i] < lb[i - 1]:
+                lb[i] = lb[i - 1]
+            if dir_[i] < 0 and ub[i] > ub[i - 1]:
+                ub[i] = ub[i - 1]
+        if dir_[i] > 0:
+            trend[i] = long_[i] = lb[i]
+        else:
+            trend[i] = short[i] = ub[i]
+
+    p = f"_{length}_{float(multiplier)}"
+    return pd.DataFrame({f"SUPERT{p}": trend, f"SUPERTd{p}": dir_,
+                         f"SUPERTl{p}": long_, f"SUPERTs{p}": short},
+                        index=close.index)
+
 
 def donchian_breakout_signal(df: pd.DataFrame, fast: int = 20, slow: int = 55,
                              atr_period: int = 14) -> Optional[Dict[str, Any]]:
@@ -458,15 +520,23 @@ def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volu
     upT = df['low'] - df['atr'] * coeff
     downT = df['high'] + df['atr'] * coeff
 
-    alpha = np.zeros(len(df))
-    for i in range(len(df)):
-        if i == 0:
-            alpha[i] = df['close'].iloc[0]  # init
-        else:
-            if df['osc'].iloc[i] >= 50:
-                alpha[i] = upT.iloc[i] if upT.iloc[i] > alpha[i-1] else alpha[i-1]
+    # Recursive ratchet — numpy arrays instead of per-row .iloc (same math,
+    # ~10x faster; the loop itself is unavoidable due to the alpha[i-1]
+    # dependency). NaN osc rows compare False on >=50, matching the original.
+    n_rows = len(df)
+    osc_a = df['osc'].to_numpy(dtype=float)
+    upT_a = upT.to_numpy(dtype=float)
+    downT_a = downT.to_numpy(dtype=float)
+    alpha = np.zeros(n_rows)
+    if n_rows:
+        alpha[0] = float(df['close'].iloc[0])  # init
+        prev = alpha[0]
+        for i in range(1, n_rows):
+            if osc_a[i] >= 50:
+                prev = upT_a[i] if upT_a[i] > prev else prev
             else:
-                alpha[i] = downT.iloc[i] if downT.iloc[i] < alpha[i-1] else alpha[i-1]
+                prev = downT_a[i] if downT_a[i] < prev else prev
+            alpha[i] = prev
 
     df['alpha_trend'] = alpha
     df['alpha_trend_prev'] = df['alpha_trend'].shift(2)

@@ -279,8 +279,9 @@ class IndicatorAgent:
         out["stochrsi_k"] = stochrsi["STOCHRSIk_14_14_3_3"]
         out["stochrsi_d"] = stochrsi["STOCHRSId_14_14_3_3"]
         
-        # ✅ SuperTrend (length=10, multiplier=3 is common)
-        st = ta.supertrend(out["high"], out["low"], out["close"], length=10, multiplier=3)
+        # ✅ SuperTrend (length=10, multiplier=3 is common) — fast parity port
+        # of pandas_ta.supertrend (the vendored per-row loop dominated decide())
+        st = ci.supertrend_fast(out["high"], out["low"], out["close"], length=10, multiplier=3)
         out["supertrend"] = st["SUPERT_10_3.0"]
         out["supertrend_dir"] = st["SUPERTd_10_3.0"]   # 1 = bullish, -1 = bearish
 
