@@ -198,6 +198,20 @@ async def cmd_research(update, context):
     await _reply(update, f"<b>research {pair} {tf}</b>\naction={out.get('action')} conf={out.get('confidence')}")
 
 
+async def cmd_regime(update, context):
+    pair = (context.args[0] if context.args else "BTCUSDT").upper()
+    tf = context.args[1] if len(context.args) > 1 else "4h"
+    from agents.regime_agent import RegimeAgent
+    out = await asyncio.to_thread(RegimeAgent().decide, pair, tf)
+    await _reply(update, f"<b>regime {pair} {tf}</b>\nregime={out.get('regime')}\n"
+                         f"adx={_r3(out.get('adx'))} chop={_r3(out.get('chop'))} "
+                         f"vol_pct={_r3(out.get('vol_pct'))} atr={_r3(out.get('atr'))}")
+
+
+def _r3(v):
+    return round(v, 3) if isinstance(v, (int, float)) else v
+
+
 async def cmd_context(update, context):
     dm = context.application.bot_data["dm"]
     tf = context.args[0] if context.args else "4h"
@@ -322,6 +336,7 @@ def main() -> None:
         control_app.add_handler(CommandHandler("indicator", cmd_indicator))
         control_app.add_handler(CommandHandler("research", cmd_research))
         control_app.add_handler(CommandHandler("context", cmd_context))
+        control_app.add_handler(CommandHandler("regime", cmd_regime))
 
     logger.info("starting BitReinforceX runtime")
     app.run_polling(poll_interval=1.0, allowed_updates=Update.ALL_TYPES)

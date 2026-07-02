@@ -9,11 +9,42 @@ import numpy as np
 import pandas as pd
 import pandas_ta as ta
 
+import config
 from utils.data_fetcher import DataFetcher
 from agents import custom_indicators as ci
+from agents.regime_agent import classify_regime
 
 POLICY_PATH = "logs/indicator_agent_policy.json"
 PRED_LOG = "logs/indicator_predictions.jsonl"
+
+
+def supertrend_flip_from_raw(raw: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    """Trend trigger: SuperTrend direction flip on the last closed bar.
+
+    Reuses the SUPERT columns already computed for the type-2 rules — same
+    parameters, zero drift between the trigger and the vote. Confidence scales
+    with the close's distance from the flipped supertrend line in ATR units.
+    """
+    if raw is None or "supertrend_dir" not in raw.columns or len(raw) < 2:
+        return None
+    d = raw.dropna(subset=["supertrend_dir"])
+    if len(d) < 2:
+        return None
+    cur = int(d["supertrend_dir"].iloc[-1])
+    prev = int(d["supertrend_dir"].iloc[-2])
+    if cur == prev or cur not in (1, -1):
+        return None
+    close = float(d["close"].iloc[-1])
+    line = float(d["supertrend"].iloc[-1]) if "supertrend" in d.columns else close
+    atr = None
+    if "atr" in d.columns and pd.notna(d["atr"].iloc[-1]):
+        atr = float(d["atr"].iloc[-1])
+    conf = 0.65
+    if atr and atr > 0:
+        conf += 0.25 * min(abs(close - line) / atr, 1.0)
+    return {"signal": "buy" if cur == 1 else "sell",
+            "confidence": float(np.clip(conf, 0.5, 0.95)),
+            "name": "supertrend_flip"}
 
 # ---------- Small utilities ----------
 
@@ -88,30 +119,47 @@ class IndicatorAgent:
     to learn credibility for each direct-signal plugin.
     """
 
-    def __init__(self, prefer_csv: bool = False):
+    def __init__(self, prefer_csv: bool = False,
+                 nwe_h: float = 8.0, nwe_mult: float = 3.0):
         _ensure_logs()
         self.data = DataFetcher(prefer_csv=prefer_csv)
         self.policy = _load_policy()
+        # NWE kernel params — production defaults; the backtest sweep
+        # constructs agents with candidate values.
+        self.nwe_h = float(nwe_h)
+        self.nwe_mult = float(nwe_mult)
 
     # ----------------- PUBLIC API -----------------
 
     def decide(self, symbol: str, timeframe: str, ohlcv: Optional[pd.DataFrame] = None,
-               limit: int = 500) -> IndicatorDecision:
-        """Main entrypoint. Returns a decision and logs it."""
+               limit: int = 500, log: bool = True) -> IndicatorDecision:
+        """Main entrypoint. Returns a decision and logs it.
+
+        ``log=False`` suppresses the JSONL append — used by the backtest
+        engine, which replays this exact function thousands of times per pair.
+        """
         df = ohlcv if ohlcv is not None else self.data.get_ohlcv(symbol, timeframe, limit=limit)
         df = self._standardize(df)
+
+        # Regime (Phase 2): computed on every decide for shadow logging +
+        # meta-label features; only *gates the trigger set* when GATE_V2_ENABLED.
+        regime_snap = classify_regime(df)
+        vol_ok = self._vol_ok(df)
 
         # Compute raw indicators needed for Type2
         raw = self._compute_raw_indicators(df)
         type2 = self._type2_rules(raw)
 
         # Collect Type1 direct signals from custom indicator plugins
-        direct_signals = self._collect_direct_signals(df)
+        direct_signals = self._collect_direct_signals(df, raw=raw,
+                                                      regime=regime_snap.regime)
         type1 = self._merge_direct_signals(direct_signals)
 
         # Combine heads using learned weights
         final_action, final_conf, blend_details = self._blend(type1, type2)
 
+        regime_feats = regime_snap.feats()
+        regime_feats["vol_ok"] = vol_ok
         out = IndicatorDecision(
             agent="indicator_agent",
             chartName=symbol, timeframe=timeframe,
@@ -121,10 +169,13 @@ class IndicatorAgent:
                 "type1": type1,
                 "type2": type2,
                 "blend": blend_details,
-                "direct_signals": direct_signals
+                "direct_signals": direct_signals,
+                "regime": regime_snap.regime,
+                "regime_feats": regime_feats,
             }
         )
-        _append_jsonl(PRED_LOG, asdict(out))
+        if log:
+            _append_jsonl(PRED_LOG, asdict(out))
         return out
 
     def learn(self, predicted_action: str, true_outcome: str,
@@ -304,19 +355,36 @@ class IndicatorAgent:
             }
         }
 
-    def _collect_direct_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        signals = []
-            # Ensure indicator columns exist
-        df = ci.apply_nadaraya_watson_envelope(df)
-        
-        # Example: Nadaraya-Watson envelope direct signal (if you implement it)
-        sig = ci.direct_signal_from_nwe(df)
-        if sig:
-            sig["name"] = "nwe"
-            signals.append(sig)
+    def _vol_ok(self, df: pd.DataFrame) -> bool:
+        """Last closed volume above its SMA — the gate's volume confirmation."""
+        try:
+            vol = df["volume"].astype(float)
+            sma = vol.rolling(config.VOLUME_SMA_LEN).mean().iloc[-1]
+            if pd.isna(sma):
+                return True  # not enough history to judge -> don't block
+            return bool(vol.iloc[-1] > float(sma))
+        except Exception:
+            return True
 
-        # You can add more custom direct-signal producers here (AlphaTrend, etc.)
-        # --- Chandelier Exit Example ---
+    def _collect_direct_signals(self, df: pd.DataFrame, raw: Optional[pd.DataFrame] = None,
+                                regime: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Type-1 direct signals. With GATE_V2_ENABLED and a trending regime the
+        mean-reversion NWE is excluded and the trend triggers (supertrend flip,
+        Donchian breakout, squeeze release) take its place; otherwise the legacy
+        set runs unchanged (flag off => byte-identical to pre-Phase-2)."""
+        signals = []
+        trending = (config.GATE_V2_ENABLED
+                    and regime in ("trend_up", "trend_down"))
+
+        if not trending:
+            # Ensure indicator columns exist
+            df = ci.apply_nadaraya_watson_envelope(df, h=self.nwe_h, mult=self.nwe_mult)
+            sig = ci.direct_signal_from_nwe(df)
+            if sig:
+                sig["name"] = "nwe"
+                signals.append(sig)
+
+        # --- Chandelier Exit ---
         df = ci.chandelier_exit(df)   # adds long_stop, short_stop, ce_signal columns
         latest = df.iloc[-1]
         if latest['ce_signal'] in ["buy", "sell"]:
@@ -325,7 +393,7 @@ class IndicatorAgent:
                 "confidence": 0.9,  # you can adjust logic to give partial confidence
                 "name": "chandelier_exit"
             })
-            
+
         df = ci.alpha_trend(df)
         latest = df.iloc[-1]
         if latest['alpha_signal'] in ["buy", "sell"]:
@@ -334,9 +402,20 @@ class IndicatorAgent:
                 "confidence": 0.9,
                 "name": "alpha_trend"
             })
-        
-        # Each should return: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": "alpha_trend"}
-        
+
+        if trending:
+            # Trend-regime triggers (Phase 2)
+            st = supertrend_flip_from_raw(raw) if raw is not None else None
+            if st:
+                signals.append(st)
+            dc = ci.donchian_breakout_signal(df)
+            if dc and dc["signal"] in ("buy", "sell"):
+                signals.append(dc)
+            sq = ci.squeeze_release_signal(df)
+            if sq and sq["signal"] in ("buy", "sell"):
+                signals.append(sq)
+
+        # Each entry: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": ...}
         return signals
 
     def _merge_direct_signals(self, signals: List[Dict[str, Any]]) -> Dict[str, Any]:

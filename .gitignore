@@ -30,6 +30,11 @@ logs/*.db-shm
 # Input docs / scratch
 *.docx
 
+# Backtest: OHLCV history cache is regenerable; per-emission dumps are large.
+# Reports (report.json / report.md) ARE tracked as evidence.
+data/history/
+logs/backtest/*/emissions.json
+
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 

@@ -121,7 +121,32 @@ CREATE INDEX IF NOT EXISTS idx_news_pub ON news_items(published_ts);
 """
 
 # Columns on `predictions` that hold JSON and must be (de)serialised.
-_PRED_JSON_COLS = ("news_feats", "research_feats", "indicator_blend", "brain_weights")
+_PRED_JSON_COLS = ("news_feats", "research_feats", "indicator_blend", "brain_weights",
+                   "regime_feats", "deriv_feats")
+
+# Accuracy-upgrade columns, added by the idempotent migration below. Additive
+# ALTER TABLE only — legacy rows keep NULLs and grade via the legacy path.
+_MIGRATION_COLS = {
+    "predictions": [
+        ("regime", "TEXT"),
+        ("regime_feats", "TEXT"),          # JSON: adx/chop/vol_pct/atr/vol_ok/...
+        ("atr", "REAL"),
+        ("tp_price", "REAL"),
+        ("sl_price", "REAL"),
+        ("trigger_source", "TEXT"),        # gate reason at emit time
+        ("deriv_action", "TEXT"),
+        ("deriv_action_idx", "INTEGER"),
+        ("deriv_feats", "TEXT"),           # JSON list
+        ("deriv_conf", "REAL"),
+        ("meta_p", "REAL"),                # meta-label p(correct), shadow
+        ("calibrated_conf", "REAL"),
+    ],
+    "outcomes": [
+        ("label_tb", "TEXT"),              # tp | sl | timeout
+        ("barrier_hit_idx", "INTEGER"),
+        ("exit_price", "REAL"),
+    ],
+}
 
 
 def _dumps(v: Any) -> Optional[str]:
@@ -152,7 +177,19 @@ class Store:
             self.conn.execute("PRAGMA synchronous=NORMAL;")
             self.conn.execute("PRAGMA foreign_keys=ON;")
             self.conn.executescript(_SCHEMA)
+            self._migrate()
             self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Idempotent additive migration: diff PRAGMA table_info against
+        _MIGRATION_COLS and ALTER TABLE ADD COLUMN whatever is missing.
+        Caller holds the lock (init path)."""
+        for table, cols in _MIGRATION_COLS.items():
+            existing = {r["name"] for r in
+                        self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            for name, ctype in cols:
+                if name not in existing:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ctype}")
 
     def close(self) -> None:
         with self._lock:
@@ -174,6 +211,14 @@ class Store:
         session_id: Optional[str] = None,
         created_ts: Optional[float] = None,
         prediction_id: Optional[str] = None,
+        regime: Optional[str] = None,
+        regime_feats: Optional[Dict[str, Any]] = None,
+        atr: Optional[float] = None,
+        tp_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        trigger_source: Optional[str] = None,
+        meta_p: Optional[float] = None,
+        calibrated_conf: Optional[float] = None,
     ) -> str:
         """Insert one prediction, snapshotting each child agent's RL replay data.
 
@@ -192,6 +237,17 @@ class Store:
         research_rl = research_raw.get("rl") or {}
         indicator_blend = ((ind_raw.get("details") or {}).get("blend"))
         final = decision.get("final") or {}
+
+        # Regime rides inside the indicator details unless passed explicitly.
+        ind_details = ind_raw.get("details") or {}
+        regime = regime or ind_details.get("regime")
+        regime_feats = regime_feats or ind_details.get("regime_feats")
+        if atr is None and isinstance(regime_feats, dict):
+            atr = regime_feats.get("atr")
+
+        # Derivatives voter snapshot (Phase 4; harmless NULLs before that).
+        deriv_raw = _raw("derivatives")
+        deriv_rl = deriv_raw.get("rl") or {}
 
         row = {
             "id": pid,
@@ -222,6 +278,18 @@ class Store:
             "label_source": "pending",
             "graded": 0,
             "session_id": session_id,
+            "regime": regime,
+            "regime_feats": _dumps(regime_feats),
+            "atr": atr,
+            "tp_price": tp_price,
+            "sl_price": sl_price,
+            "trigger_source": trigger_source,
+            "deriv_action": deriv_raw.get("action"),
+            "deriv_action_idx": deriv_rl.get("action_idx"),
+            "deriv_feats": _dumps(deriv_rl.get("feats")),
+            "deriv_conf": (agents.get("derivatives") or {}).get("confidence"),
+            "meta_p": meta_p,
+            "calibrated_conf": calibrated_conf,
         }
         cols = ", ".join(row.keys())
         ph = ", ".join(["?"] * len(row))
@@ -270,14 +338,19 @@ class Store:
     # ------------------------------------------------------------------ #
     def record_outcome(self, prediction_id: str, realized_return: Optional[float],
                        realized_label: str, threshold: float, horizon_k: int,
-                       source: str = "auto", graded_ts: Optional[float] = None) -> None:
+                       source: str = "auto", graded_ts: Optional[float] = None,
+                       label_tb: Optional[str] = None,
+                       barrier_hit_idx: Optional[int] = None,
+                       exit_price: Optional[float] = None) -> None:
         with self._lock:
             self.conn.execute(
                 "INSERT OR REPLACE INTO outcomes "
-                "(prediction_id, realized_return, realized_label, threshold, horizon_k, graded_ts, source) "
-                "VALUES (?,?,?,?,?,?,?)",
+                "(prediction_id, realized_return, realized_label, threshold, horizon_k, graded_ts, source, "
+                "label_tb, barrier_hit_idx, exit_price) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (prediction_id, realized_return, realized_label, threshold, horizon_k,
-                 graded_ts if graded_ts is not None else time.time(), source),
+                 graded_ts if graded_ts is not None else time.time(), source,
+                 label_tb, barrier_hit_idx, exit_price),
             )
             self.conn.commit()
 

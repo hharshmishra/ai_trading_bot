@@ -92,41 +92,61 @@ def apply_nadaraya_watson_envelope(
         return out
     
     else:
-        src = df["close"].values.astype(float)
-        n = len(src)
+        # Two-sided kernel over the passed window (LuxAlgo repaint behaviour).
+        # Vectorized: the old per-element double loop was O(n^2) *Python* ops,
+        # far too slow for per-bar backtest replay. Same math — the weight
+        # matrix W[i,j] = gauss(i-j, h) reproduces the loop exactly (parity
+        # test against _nwe_repaint_reference in tests/test_backtest_harness.py).
+        x = df["close"].values.astype(float)
+        n = len(x)
 
-        nwe_out = np.zeros(n)
-        nwe_mae = np.zeros(n)
-        nwe_upper = np.zeros(n)
-        nwe_lower = np.zeros(n)
-        
-        def gauss(x, h):
-            return np.exp(-(x**2) / (2 * h**2))
-        
-        for i in range(n):
-                sum_w = 0.0
-                sum_x = 0.0
-                for j in range(n):
-                    w = gauss(i - j, h)
-                    sum_x += src[j] * w
-                    sum_w += w
-                out = sum_x / sum_w if sum_w != 0 else src[i]
-                nwe_out[i] = out
+        idx = np.arange(n, dtype=float)
+        d = np.subtract.outer(idx, idx)
+        denom = 2.0 * (float(h) ** 2) if h > 0 else 1e-12
+        W = np.exp(-(d * d) / denom)
+        sw = W.sum(axis=1)
+        nwe_out = (W @ x) / np.where(sw == 0, 1.0, sw)
+        nwe_out = np.where(sw == 0, x, nwe_out)
 
-        # Compute mean absolute error for the window
-        sae = np.mean(np.abs(src - nwe_out))
-        sae *= mult
+        # Envelope: flat band from the mean absolute error over the window
+        sae = float(np.mean(np.abs(x - nwe_out))) * float(mult)
 
-        nwe_mae[:] = sae
-        nwe_upper = nwe_out + sae
-        nwe_lower = nwe_out - sae
-        # Attach results to DataFrame
         df["nwe_out"] = nwe_out
-        df["nwe_mae"] = nwe_mae
-        df["nwe_upper"] = nwe_upper
-        df["nwe_lower"] = nwe_lower
-        
+        df["nwe_mae"] = np.full(n, sae)
+        df["nwe_upper"] = nwe_out + sae
+        df["nwe_lower"] = nwe_out - sae
+
         return df
+
+
+def _nwe_repaint_reference(df: pd.DataFrame, h: float = 8.0, mult: float = 3.0) -> pd.DataFrame:
+    """Original O(n^2) Python-loop repaint implementation, kept ONLY as the
+    ground truth for the vectorization parity test. Do not call in production."""
+    src = df["close"].values.astype(float)
+    n = len(src)
+
+    nwe_out = np.zeros(n)
+    nwe_mae = np.zeros(n)
+
+    def gauss(x, h):
+        return np.exp(-(x**2) / (2 * h**2))
+
+    for i in range(n):
+        sum_w = 0.0
+        sum_x = 0.0
+        for j in range(n):
+            w = gauss(i - j, h)
+            sum_x += src[j] * w
+            sum_w += w
+        nwe_out[i] = sum_x / sum_w if sum_w != 0 else src[i]
+
+    sae = np.mean(np.abs(src - nwe_out)) * mult
+    nwe_mae[:] = sae
+    df["nwe_out"] = nwe_out
+    df["nwe_mae"] = nwe_mae
+    df["nwe_upper"] = nwe_out + sae
+    df["nwe_lower"] = nwe_out - sae
+    return df
 
 
 def _crossunder(prev_close: float, close: float, prev_thr: float, thr: float) -> bool:
@@ -233,6 +253,101 @@ def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]: #Old 
         return {"signal": "skip", "confidence": 0.5}
 
     return {"signal": signal, "confidence": conf}
+
+def donchian_breakout_signal(df: pd.DataFrame, fast: int = 20, slow: int = 55,
+                             atr_period: int = 14) -> Optional[Dict[str, Any]]:
+    """Donchian channel breakout on the LAST CLOSED bar (trend trigger).
+
+    BUY when close breaks above the prior ``fast``-bar high, SELL below the
+    prior ``fast``-bar low (prior window excludes the current bar — no lookahead).
+    Confidence: 0.60 base, +0.15 if the ``slow`` channel broke too (major
+    breakout), plus penetration depth in ATR units (capped), max 0.95.
+    Returns None when no breakout.
+    """
+    need = max(fast, slow) + 1
+    if df is None or len(df) < need:
+        return None
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = float(df["close"].astype(float).iloc[-1])
+
+    prior_fast_high = float(high.iloc[-(fast + 1):-1].max())
+    prior_fast_low = float(low.iloc[-(fast + 1):-1].min())
+    prior_slow_high = float(high.iloc[-(slow + 1):-1].max())
+    prior_slow_low = float(low.iloc[-(slow + 1):-1].min())
+
+    tr = pd.concat([high - low,
+                    (high - df["close"].astype(float).shift(1)).abs(),
+                    (low - df["close"].astype(float).shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(atr_period).mean().iloc[-1]
+    atr = float(atr) if pd.notna(atr) and atr > 0 else None
+
+    signal, depth, major = None, 0.0, False
+    if close > prior_fast_high:
+        signal = "buy"
+        depth = close - prior_fast_high
+        major = close > prior_slow_high
+    elif close < prior_fast_low:
+        signal = "sell"
+        depth = prior_fast_low - close
+        major = close < prior_slow_low
+    if signal is None:
+        return None
+
+    conf = 0.60 + (0.15 if major else 0.0)
+    if atr:
+        conf += 0.20 * min(depth / atr, 1.0)
+    return {"signal": signal, "confidence": float(np.clip(conf, 0.5, 0.95)),
+            "name": "donchian_breakout"}
+
+
+def squeeze_release_signal(df: pd.DataFrame, bb_len: int = 20, bb_std: float = 2.0,
+                           kc_len: int = 20, kc_mult: float = 1.5,
+                           release_within: int = 3) -> Optional[Dict[str, Any]]:
+    """Squeeze-momentum release (TTM-squeeze style, trend trigger).
+
+    Squeeze ON = Bollinger bands inside Keltner channel (vol compression).
+    Fires when the squeeze released within the last ``release_within`` bars;
+    direction = sign of close minus the ``bb_len`` midline; confidence scales
+    with momentum strength vs its own recent range.
+    """
+    need = max(bb_len, kc_len) + release_within + 2
+    if df is None or len(df) < need:
+        return None
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = df["close"].astype(float)
+
+    mid = close.rolling(bb_len).mean()
+    sd = close.rolling(bb_len).std(ddof=0)
+    bb_u, bb_l = mid + bb_std * sd, mid - bb_std * sd
+
+    tr = pd.concat([high - low,
+                    (high - close.shift(1)).abs(),
+                    (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(kc_len).mean()
+    kc_mid = close.rolling(kc_len).mean()
+    kc_u, kc_l = kc_mid + kc_mult * atr, kc_mid - kc_mult * atr
+
+    on = (bb_u < kc_u) & (bb_l > kc_l)
+    on = on.fillna(False)
+    if len(on) < release_within + 1:
+        return None
+    now_off = not bool(on.iloc[-1])
+    was_on = bool(on.iloc[-(release_within + 1):-1].any())
+    if not (now_off and was_on):
+        return None
+
+    mom = close - mid  # momentum proxy around the midline
+    m = mom.iloc[-1]
+    if pd.isna(m) or m == 0:
+        return None
+    scale = mom.abs().rolling(bb_len).max().iloc[-1]
+    strength = float(min(abs(m) / scale, 1.0)) if pd.notna(scale) and scale > 0 else 0.5
+    return {"signal": "buy" if m > 0 else "sell",
+            "confidence": float(np.clip(0.55 + 0.35 * strength, 0.5, 0.9)),
+            "name": "squeeze_release"}
+
 
 def chandelier_exit(df: pd.DataFrame, atr_period: int = 22, atr_mult: float = 3.0, use_close: bool = True):
     """

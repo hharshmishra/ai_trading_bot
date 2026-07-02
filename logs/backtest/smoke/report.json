@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "label": "smoke",
+    "pairs": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "tfs": [
+      "1h"
+    ],
+    "start": "2026-05-01",
+    "end": null,
+    "gate": "v1",
+    "window": 500,
+    "bars": 3030,
+    "failures": [],
+    "elapsed_s": 128.1
+  },
+  "summary": {
+    "total_emissions": 336,
+    "groups": {
+      "1h|all|nwe_direct": {
+        "n": 336,
+        "tp": 62,
+        "sl": 125,
+        "timeout": 149,
+        "incomplete": 0,
+        "tb_precision": 0.3315508021390374,
+        "tb_precision_ci": [
+          0.2680629642261224,
+          0.4018203316590514
+        ],
+        "timeout_share": 0.44345238095238093,
+        "expectancy_r": 0.07977156178092397,
+        "fixed_hit_rate": 0.4255952380952381,
+        "ambiguous": 0
+      }
+    }
+  },
+  "funnel": {
+    "suppressed:no_trigger": 2694,
+    "nwe_direct": 336
+  }
+}

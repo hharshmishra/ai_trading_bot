@@ -13,10 +13,12 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import pandas as pd
 
+import config
 from grader import HORIZON_K
+from grading.barriers import barrier_prices
 from market_context import build_market_context
 from persistence import get_store
-from signals import TF_SECONDS, should_emit_signal
+from signals import TF_SECONDS, should_emit_signal, should_emit_signal_v2
 
 # Default pair universe (48 USDT pairs).
 SYMBOLS = [s + "USDT" for s in [
@@ -82,16 +84,33 @@ async def run_cycle(
                 k = HORIZON_K.get(tf, 1)
                 grade_due = (close_ts + k * TF_SECONDS.get(tf, 3600)) if close_ts else None
 
-                emit, overall, nwe, conf, reason = should_emit_signal(res)
+                gate = should_emit_signal_v2 if config.GATE_V2_ENABLED else should_emit_signal
+                emit, overall, nwe, conf, reason = gate(res)
                 session_id = None
                 if emit and broadcast is not None:
                     session_id = await broadcast(pair=sym, tf=tf, overall=overall, nwe=nwe,
                                                  conf=conf, reason=reason, decision=res)
                     summary["emitted"] += 1
 
+                # Barrier prices for the triple-barrier grader (Phase 3): every
+                # directional prediction gets them, emitted or not — the RL loop
+                # grades them all.
+                ind_details = (((res.get("agents") or {}).get("indicator") or {})
+                               .get("raw") or {}).get("details") or {}
+                regime_feats = ind_details.get("regime_feats") or {}
+                atr = regime_feats.get("atr")
+                final_action = (res.get("final") or {}).get("action")
+                tp_price = sl_price = None
+                if entry and atr and final_action in ("buy", "sell"):
+                    tp_mult, sl_mult = config.BARRIER_MULTS.get(tf, (1.5, 1.0))
+                    tp_price, sl_price = barrier_prices(entry, atr, final_action,
+                                                        tp_mult, sl_mult)
+
                 store.record_prediction(
                     res, cycle_id=cycle_id, candle_close_ts=close_ts, entry_price=entry,
-                    horizon_k=k, grade_due_ts=grade_due, emitted=emit, session_id=session_id)
+                    horizon_k=k, grade_due_ts=grade_due, emitted=emit, session_id=session_id,
+                    atr=atr, tp_price=tp_price, sl_price=sl_price,
+                    trigger_source=reason if emit else None)
 
         await asyncio.gather(*(analyze(s) for s in symbols))
 
