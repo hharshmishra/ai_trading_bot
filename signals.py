@@ -270,4 +270,9 @@ def fmt_brain_dump(res: Dict[str, Any], outcome: Optional[Dict[str, Any]] = None
     if outcome:
         lines.append(f"\nrealized: <b>{str(outcome.get('realized_label','?')).upper()}</b> "
                      f"(fwd {outcome.get('realized_return')})")
+        if outcome.get("label_tb"):
+            hit = outcome.get("barrier_hit_idx")
+            lines.append(f"TB: <b>{str(outcome['label_tb']).upper()}</b>"
+                         + (f"@{hit}" if hit else "")
+                         + (f" exit {outcome.get('exit_price')}" if outcome.get("exit_price") else ""))
     return "\n".join(lines)

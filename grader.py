@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+import config
+from grading.barriers import triple_barrier
 from persistence import Store, get_store
 
 # Per-timeframe grading config. Tunable — backtest against history in a later pass.
@@ -50,6 +52,29 @@ def reward_for(predicted: Optional[str], realized: str,
     return correct if _norm_action(predicted) == realized else wrong
 
 
+def _opposite(action: str) -> str:
+    return "sell" if action == "buy" else "buy"
+
+
+def reward_for_v2(predicted: Optional[str], realized: str) -> float:
+    """Reward map v2 (TB_GRADING_ENABLED): separates direction errors from
+    participation errors instead of the flat +1/-4.
+
+      correct call (incl. skip when flat)      -> +REWARD_CORRECT   (+1.0)
+      directional call, opposite realized      ->  REWARD_WRONG     (-4.0)
+      directional call, market went nowhere    ->  REWARD_TIMEOUT_FLAT (-1.5)
+      skip call, market moved decisively       ->  REWARD_MISSED_MOVE  (-1.0)
+    """
+    pred = _norm_action(predicted)
+    if pred == realized:
+        return config.REWARD_CORRECT
+    if pred in ("buy", "sell") and realized == "skip":
+        return config.REWARD_TIMEOUT_FLAT
+    if pred == "skip" and realized in ("buy", "sell"):
+        return config.REWARD_MISSED_MOVE
+    return config.REWARD_WRONG
+
+
 class Grader:
     def __init__(self, decision_maker, data_fetcher=None, store: Optional[Store] = None):
         self.dm = decision_maker
@@ -61,9 +86,11 @@ class Grader:
     # ------------------------------------------------------------------ #
     # realized price
     # ------------------------------------------------------------------ #
-    def _realized_close(self, pair: str, tf: str, candle_close_ts: Optional[float], k: int) -> Optional[float]:
-        """Close of the k-th candle strictly after candle_close_ts, or None if it
-        has not printed yet."""
+    def _path_after(self, pair: str, tf: str, candle_close_ts: Optional[float],
+                    k: int) -> Optional[pd.DataFrame]:
+        """OHLC candles STRICTLY after candle_close_ts (chronological), or None
+        until at least k of them have printed. Shared by the fixed-horizon and
+        triple-barrier graders so both see the same path."""
         if self.data is None or candle_close_ts is None:
             return None
         try:
@@ -74,8 +101,16 @@ class Grader:
             return None
         ts = pd.to_datetime(df["timestamp"])
         close_dt = pd.to_datetime(candle_close_ts, unit="s")
-        after = df[ts > close_dt]
+        after = df[ts > close_dt].reset_index(drop=True)
         if len(after) < k:
+            return None
+        return after
+
+    def _realized_close(self, pair: str, tf: str, candle_close_ts: Optional[float], k: int) -> Optional[float]:
+        """Close of the k-th candle strictly after candle_close_ts, or None if it
+        has not printed yet."""
+        after = self._path_after(pair, tf, candle_close_ts, k)
+        if after is None:
             return None
         return float(after.iloc[k - 1]["close"])
 
@@ -99,38 +134,60 @@ class Grader:
         entry = p.get("entry_price")
         if not entry:
             return None
-        realized_close = self._realized_close(p["pair"], tf, p.get("candle_close_ts"), k)
-        if realized_close is None:
+        path = self._path_after(p["pair"], tf, p.get("candle_close_ts"), k)
+        if path is None:
             return None  # horizon not reached yet; stays pending for a later pass
-        fr = (realized_close - entry) / entry
-        label = realized_label(fr, tf)
-        rewards = self._apply_rewards(p, label, source="auto")
-        self.store.record_outcome(p["id"], fr, label, th, k, source="auto")
+        fr = (float(path.iloc[k - 1]["close"]) - entry) / entry
+        label_fixed = realized_label(fr, tf)
+
+        # Triple-barrier labeling (Phase 3): rows recorded with barrier prices
+        # get a path-aware label. Always RECORDED (shadow evidence); only drives
+        # rewards when TB_GRADING_ENABLED. Legacy rows (NULL tp_price) keep the
+        # fixed-horizon path forever.
+        label_tb = hit_idx = exit_price = None
+        final_action = _norm_action(p.get("final_action"))
+        if p.get("tp_price") and p.get("sl_price") and final_action in ("buy", "sell"):
+            out = triple_barrier(path, entry, final_action,
+                                 float(p["tp_price"]), float(p["sl_price"]), k)
+            if out.label_tb != "incomplete":
+                label_tb, hit_idx, exit_price = out.label_tb, out.hit_idx, out.exit_price
+
+        if config.TB_GRADING_ENABLED and label_tb in ("tp", "sl"):
+            label = final_action if label_tb == "tp" else _opposite(final_action)
+        else:
+            label = label_fixed
+        reward_fn = reward_for_v2 if config.TB_GRADING_ENABLED else reward_for
+
+        rewards = self._apply_rewards(p, label, source="auto", reward_fn=reward_fn)
+        self.store.record_outcome(p["id"], fr, label, th, k, source="auto",
+                                  label_tb=label_tb, barrier_hit_idx=hit_idx,
+                                  exit_price=exit_price)
         self.store.mark_graded(p["id"], "auto")
         return {"id": p["id"], "pair": p["pair"], "tf": tf, "forward_return": fr,
-                "realized_label": label, "rewards": rewards}
+                "realized_label": label, "label_tb": label_tb, "rewards": rewards}
 
     def _apply_rewards(self, p: Dict[str, Any], label: str, source: str,
-                       news_reward_override: Optional[float] = None) -> Dict[str, float]:
+                       news_reward_override: Optional[float] = None,
+                       reward_fn=reward_for) -> Dict[str, float]:
         """Apply per-agent rewards from the STORED payloads. News may take an
         explicit numeric reward (the Telegram 1.0/-4.0); the others match against
-        the realized label."""
+        the realized label via ``reward_fn`` (v1 flat map or v2 TB map)."""
         rewards: Dict[str, float] = {}
 
         if p.get("news_feats") is not None and p.get("news_action_idx") is not None:
-            rn = news_reward_override if news_reward_override is not None else reward_for(p["news_action"], label)
+            rn = news_reward_override if news_reward_override is not None else reward_fn(p["news_action"], label)
             self.dm.news.apply_reward(p["news_feats"], p["news_action_idx"], rn)
             self.store.record_reward(p["id"], "news", p["news_action"], rn, source)
             rewards["news"] = rn
 
         if p.get("research_feats") is not None and p.get("research_action_idx") is not None:
-            rr = reward_for(p["research_action"], label)
+            rr = reward_fn(p["research_action"], label)
             self.dm.research.apply_reward(p["research_feats"], p["research_action_idx"], rr)
             self.store.record_reward(p["id"], "research", p["research_action"], rr, source)
             rewards["research"] = rr
 
         if p.get("indicator_blend") is not None:
-            ri = reward_for(p["indicator_action"], label)
+            ri = reward_fn(p["indicator_action"], label)
             self.dm.indicator.apply_reward(p["indicator_blend"], ri)
             self.store.record_reward(p["id"], "indicator", p["indicator_action"], ri, source)
             rewards["indicator"] = ri
