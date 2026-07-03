@@ -13,6 +13,8 @@ the net effect on the policy equals the human's verdict.
 """
 from __future__ import annotations
 
+import logging
+import threading
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -20,6 +22,8 @@ import pandas as pd
 import config
 from grading.barriers import triple_barrier
 from persistence import Store, get_store
+
+logger = logging.getLogger("grader")
 
 # Per-timeframe grading config. Tunable — backtest against history in a later pass.
 HORIZON_K = {"1h": 3, "4h": 2, "1d": 1, "1w": 1}          # candles ahead to look
@@ -48,7 +52,11 @@ def realized_label(forward_return: float, tf: str) -> str:
 
 
 def reward_for(predicted: Optional[str], realized: str,
-               correct: float = REWARD_CORRECT, wrong: float = REWARD_WRONG) -> float:
+               correct: Optional[float] = None, wrong: Optional[float] = None) -> float:
+    # defaults resolve from config at CALL time — def-time constants ignored
+    # env overrides of REWARD_CORRECT/REWARD_WRONG
+    correct = config.REWARD_CORRECT if correct is None else correct
+    wrong = config.REWARD_WRONG if wrong is None else wrong
     return correct if _norm_action(predicted) == realized else wrong
 
 
@@ -75,6 +83,17 @@ def reward_for_v2(predicted: Optional[str], realized: str) -> float:
     return config.REWARD_WRONG
 
 
+def active_reward_fn():
+    """The reward map in force RIGHT NOW (v2 when TB grading is on).
+
+    Every reward path — auto grading, first-manual grading, and corrections —
+    must use the SAME map, or a correction nets against a prior computed under
+    a different map and the delta is wrong (e.g. buy-vs-flat: v1 says -4.0,
+    v2 says -1.5 — a human confirming the auto grade would swing the policy
+    by -2.5 for a correctly-graded row)."""
+    return reward_for_v2 if config.TB_GRADING_ENABLED else reward_for
+
+
 class Grader:
     def __init__(self, decision_maker, data_fetcher=None, store: Optional[Store] = None):
         self.dm = decision_maker
@@ -82,6 +101,10 @@ class Grader:
         # Reuse the brain's data fetcher (and thus the per-cycle OHLCV cache) if
         # none is supplied.
         self.data = data_fetcher or getattr(getattr(decision_maker, "indicator", None), "data", None)
+        # Serializes ALL policy-weight mutation (auto grading runs in a worker
+        # thread, manual feedback in the event loop's to_thread). Also makes a
+        # correction's prior_auto read atomic with the auto grade that wrote it.
+        self._reward_lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
     # realized price
@@ -164,25 +187,48 @@ class Grader:
             label = final_action if label_tb == "tp" else _opposite(final_action)
         else:
             label = label_fixed
-        reward_fn = reward_for_v2 if config.TB_GRADING_ENABLED else reward_for
 
         # Claim BEFORE applying rewards (A8): a Telegram manual callback can
         # land mid-grade; exactly one grader wins the pending row.
         if not self.store.claim_grading(p["id"], "auto"):
             return None
-        rewards = self._apply_rewards(p, label, source="auto", reward_fn=reward_fn)
-        self.store.record_outcome(p["id"], fr, label, th, k, source="auto",
-                                  label_tb=label_tb, barrier_hit_idx=hit_idx,
-                                  exit_price=exit_price)
+        try:
+            rewards = self._apply_rewards(p, label, source="auto",
+                                          reward_fn=active_reward_fn())
+        except Exception:
+            # Crash mid-grade: if NO reward reached a policy yet, un-claim so
+            # the row returns to the pending pool; if some did, re-grading
+            # would double-apply them — keep the claim and log loudly.
+            applied = [r for r in self.store.rewards_for(p["id"]) if r["source"] == "auto"]
+            if not applied and self.store.revert_claim(p["id"], "auto"):
+                logger.exception("grading %s crashed before any reward; reverted to pending", p["id"])
+            else:
+                logger.exception("grading %s crashed mid-rewards (%d applied); left graded, no outcome",
+                                 p["id"], len(applied))
+            return None
+        try:
+            self.store.record_outcome(p["id"], fr, label, th, k, source="auto",
+                                      label_tb=label_tb, barrier_hit_idx=hit_idx,
+                                      exit_price=exit_price)
+        except Exception:
+            logger.exception("outcome record failed for %s (rewards already applied)", p["id"])
         return {"id": p["id"], "pair": p["pair"], "tf": tf, "forward_return": fr,
                 "realized_label": label, "label_tb": label_tb, "rewards": rewards}
 
     def _apply_rewards(self, p: Dict[str, Any], label: str, source: str,
                        news_reward_override: Optional[float] = None,
-                       reward_fn=reward_for) -> Dict[str, float]:
+                       reward_fn=None) -> Dict[str, float]:
         """Apply per-agent rewards from the STORED payloads. News may take an
         explicit numeric reward (the Telegram 1.0/-4.0); the others match against
-        the realized label via ``reward_fn`` (v1 flat map or v2 TB map)."""
+        the realized label via ``reward_fn`` (None -> the active map — v1 flat
+        or v2 TB — so every caller grades with the SAME map as auto grading)."""
+        reward_fn = reward_fn or active_reward_fn()
+        with self._reward_lock:
+            return self._apply_rewards_locked(p, label, source, news_reward_override, reward_fn)
+
+    def _apply_rewards_locked(self, p: Dict[str, Any], label: str, source: str,
+                              news_reward_override: Optional[float],
+                              reward_fn) -> Dict[str, float]:
         rewards: Dict[str, float] = {}
 
         if p.get("news_feats") is not None and p.get("news_action_idx") is not None:
@@ -253,57 +299,76 @@ class Grader:
                 return {"status": "already_manual"}
             return self._apply_correction(p, label, news_reward)
 
-        rewards = self._apply_rewards(p, label, source="manual", news_reward_override=news_reward)
+        rewards = self._apply_rewards(p, label, source="manual",
+                                      news_reward_override=news_reward,
+                                      reward_fn=active_reward_fn())
         self.store.record_outcome(p["id"], None, label, THRESHOLD.get(p["tf"], 0.01),
                                   HORIZON_K.get(p["tf"], 1), source="manual")
         if p.get("session_id"):
             self.store.set_session_true_outcome(p["session_id"], label)
-        return {"status": "manual", "rewards": rewards, "realized_label": label}
+        result = {"status": "manual", "rewards": rewards, "realized_label": label}
+        if news_reward is not None and (p.get("news_feats") is None
+                                        or p.get("news_action_idx") is None):
+            result["news_override_ignored"] = True   # agent never ran on this row
+        return result
 
     def _apply_correction(self, p: Dict[str, Any], label: str,
                           news_reward: Optional[float]) -> Dict[str, Any]:
         """Auto rewards were already applied; add (manual - auto) per child agent
         so the net policy effect equals the human verdict. (The brain's slow
-        priority drift keeps the earlier auto signal — not worth un-winding.)"""
-        prior_auto = {r["agent"]: r["reward"] for r in self.store.rewards_for(p["id"])
-                      if r["source"] == "auto"}
-        corrections: Dict[str, float] = {}
+        priority drift keeps the earlier auto signal — not worth un-winding.)
 
-        if p.get("news_feats") is not None and p.get("news_action_idx") is not None:
-            manual = news_reward if news_reward is not None else reward_for(p["news_action"], label)
-            corr = manual - prior_auto.get("news", 0.0)
-            if corr:
-                self.dm.news.apply_reward(p["news_feats"], p["news_action_idx"], corr)
-            self.store.record_reward(p["id"], "news", p["news_action"], corr, "correction")
-            corrections["news"] = corr
+        Runs under the reward lock: the auto grader may still be inside
+        _apply_rewards when the human clicks — the lock guarantees prior_auto
+        is read only after the auto rewards are fully written, and that policy
+        weights are never mutated from two threads at once. The manual side
+        MUST grade with the same reward map the auto side used
+        (active_reward_fn), or the netting math is wrong."""
+        reward_fn = active_reward_fn()
+        with self._reward_lock:
+            prior_auto = {r["agent"]: r["reward"] for r in self.store.rewards_for(p["id"])
+                          if r["source"] == "auto"}
+            corrections: Dict[str, float] = {}
 
-        if p.get("research_feats") is not None and p.get("research_action_idx") is not None:
-            manual = reward_for(p["research_action"], label)
-            corr = manual - prior_auto.get("research", 0.0)
-            if corr:
-                self.dm.research.apply_reward(p["research_feats"], p["research_action_idx"], corr)
-            self.store.record_reward(p["id"], "research", p["research_action"], corr, "correction")
-            corrections["research"] = corr
+            if p.get("news_feats") is not None and p.get("news_action_idx") is not None:
+                manual = news_reward if news_reward is not None else reward_fn(p["news_action"], label)
+                corr = manual - prior_auto.get("news", 0.0)
+                if corr:
+                    self.dm.news.apply_reward(p["news_feats"], p["news_action_idx"], corr)
+                self.store.record_reward(p["id"], "news", p["news_action"], corr, "correction")
+                corrections["news"] = corr
 
-        if p.get("indicator_blend") is not None:
-            manual = reward_for(p["indicator_action"], label)
-            corr = manual - prior_auto.get("indicator", 0.0)
-            if corr:
-                self.dm.indicator.apply_reward(p["indicator_blend"], corr)
-            self.store.record_reward(p["id"], "indicator", p["indicator_action"], corr, "correction")
-            corrections["indicator"] = corr
+            if p.get("research_feats") is not None and p.get("research_action_idx") is not None:
+                manual = reward_fn(p["research_action"], label)
+                corr = manual - prior_auto.get("research", 0.0)
+                if corr:
+                    self.dm.research.apply_reward(p["research_feats"], p["research_action_idx"], corr)
+                self.store.record_reward(p["id"], "research", p["research_action"], corr, "correction")
+                corrections["research"] = corr
 
-        deriv_agent = getattr(self.dm, "derivatives", None)
-        if (deriv_agent is not None and p.get("deriv_feats") is not None
-                and p.get("deriv_action_idx") is not None):
-            manual = reward_for(p["deriv_action"], label)
-            corr = manual - prior_auto.get("derivatives", 0.0)
-            if corr:
-                deriv_agent.apply_reward(p["deriv_feats"], p["deriv_action_idx"], corr)
-            self.store.record_reward(p["id"], "derivatives", p["deriv_action"], corr, "correction")
-            corrections["derivatives"] = corr
+            if p.get("indicator_blend") is not None:
+                manual = reward_fn(p["indicator_action"], label)
+                corr = manual - prior_auto.get("indicator", 0.0)
+                if corr:
+                    self.dm.indicator.apply_reward(p["indicator_blend"], corr)
+                self.store.record_reward(p["id"], "indicator", p["indicator_action"], corr, "correction")
+                corrections["indicator"] = corr
 
-        if p.get("session_id"):
-            self.store.set_session_true_outcome(p["session_id"], label)
-        self.store.mark_graded(p["id"], "manual")
-        return {"status": "corrected", "corrections": corrections, "realized_label": label}
+            deriv_agent = getattr(self.dm, "derivatives", None)
+            if (deriv_agent is not None and p.get("deriv_feats") is not None
+                    and p.get("deriv_action_idx") is not None):
+                manual = reward_fn(p["deriv_action"], label)
+                corr = manual - prior_auto.get("derivatives", 0.0)
+                if corr:
+                    deriv_agent.apply_reward(p["deriv_feats"], p["deriv_action_idx"], corr)
+                self.store.record_reward(p["id"], "derivatives", p["deriv_action"], corr, "correction")
+                corrections["derivatives"] = corr
+
+            if p.get("session_id"):
+                self.store.set_session_true_outcome(p["session_id"], label)
+            self.store.mark_graded(p["id"], "manual")
+        result = {"status": "corrected", "corrections": corrections, "realized_label": label}
+        if news_reward is not None and (p.get("news_feats") is None
+                                        or p.get("news_action_idx") is None):
+            result["news_override_ignored"] = True
+        return result

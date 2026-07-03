@@ -199,3 +199,150 @@ class TestRewardMapV2:
         assert reward_for_v2("buy", "skip") == config.REWARD_TIMEOUT_FLAT
         assert reward_for_v2("skip", "buy") == config.REWARD_MISSED_MOVE
         assert reward_for_v2("skip", "skip") == config.REWARD_CORRECT
+
+
+class TestManualRewardMapV31:
+    """Post-audit A: every manual path must grade with the SAME reward map as
+    auto grading (active_reward_fn), or corrections net wrong deltas."""
+
+    def _flat_path(self):
+        # buy prediction, market goes nowhere: TB timeout, fixed label 'skip'
+        return make_path_fetcher(100.0, [(100.5, 99.6, 100.2), (100.4, 99.7, 100.1)])
+
+    def test_correction_is_zero_when_human_confirms_auto(self, tmp_path, tb_on):
+        # auto: v2 timeout-flat -> -1.5 per agent. Human confirms 'skip'.
+        # v2 manual == -1.5 -> correction exactly 0.0 (v1 map wrongly gave -2.5).
+        fetcher, close_ts = self._flat_path()
+        store, dm, pid, out = _grade(tmp_path, make_decision(), fetcher, close_ts,
+                                     {"tp_price": 103.0, "sl_price": 98.0})
+        assert out[0]["rewards"]["indicator"] == config.REWARD_TIMEOUT_FLAT
+        auto_calls = len(dm.indicator.calls)
+
+        from grader import Grader
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        res = g.apply_manual_feedback(pid, "skip")
+        assert res["status"] == "corrected"
+        assert res["corrections"] == {"news": 0.0, "research": 0.0, "indicator": 0.0}
+        assert len(dm.indicator.calls) == auto_calls   # zero corr -> no policy touch
+        store.close()
+
+    def test_manual_pending_uses_v2_missed_move(self, tmp_path, tb_on):
+        # nothing auto-graded yet; pred=skip, human says the market moved (buy)
+        # -> v2 missed-move -1.0 (v1 map wrongly -4.0)
+        from persistence import Store
+        from grader import Grader
+        fetcher, close_ts = self._flat_path()
+        store = Store(str(tmp_path / "mp.db"))
+        dm = FakeDM()
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        dec = make_decision(news="skip", research="skip", indicator="skip", final="skip")
+        pid = store.record_prediction(dec, candle_close_ts=close_ts, entry_price=100.0,
+                                      horizon_k=2, grade_due_ts=1.0)
+        res = g.apply_manual_feedback(pid, "buy")
+        assert res["status"] == "manual"
+        assert res["rewards"]["research"] == config.REWARD_MISSED_MOVE
+        assert res["rewards"]["indicator"] == config.REWARD_MISSED_MOVE
+        store.close()
+
+    def test_tb_off_keeps_legacy_map(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config, "TB_GRADING_ENABLED", False)
+        from persistence import Store
+        from grader import Grader
+        fetcher, close_ts = self._flat_path()
+        store = Store(str(tmp_path / "lg.db"))
+        dm = FakeDM()
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        pid = store.record_prediction(make_decision(indicator="buy"),
+                                      candle_close_ts=close_ts, entry_price=100.0,
+                                      horizon_k=2, grade_due_ts=1.0)
+        res = g.apply_manual_feedback(pid, "sell")
+        assert res["rewards"]["indicator"] == config.REWARD_WRONG   # legacy -4.0
+        store.close()
+
+    def test_news_override_ignored_is_flagged(self, tmp_path, tb_on):
+        from persistence import Store
+        from grader import Grader
+        fetcher, close_ts = self._flat_path()
+        store = Store(str(tmp_path / "ov.db"))
+        dm = FakeDM()
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        dec = make_decision()
+        dec["agents"]["news"]["raw"].pop("rl")          # news agent never ran
+        pid = store.record_prediction(dec, candle_close_ts=close_ts, entry_price=100.0,
+                                      horizon_k=2, grade_due_ts=1.0)
+        res = g.apply_manual_feedback(pid, "buy", news_reward=-4.0)
+        assert res.get("news_override_ignored") is True
+        assert "news" not in res["rewards"]
+        store.close()
+
+
+class TestGraderDurabilityV31:
+    def test_revert_claim_when_crash_precedes_any_reward(self, tmp_path, tb_on):
+        from persistence import Store
+        from grader import Grader
+        fetcher, close_ts = make_path_fetcher(100.0, [(103.5, 99.5, 103.2), (104, 102, 103.8)])
+        store = Store(str(tmp_path / "rc.db"))
+        dm = FakeDM()
+
+        def boom(*a):
+            raise RuntimeError("policy io error")
+        dm.news.apply_reward = boom                      # first agent in the chain
+
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        pid = store.record_prediction(make_decision(), candle_close_ts=close_ts,
+                                      entry_price=100.0, horizon_k=2, grade_due_ts=1.0,
+                                      tp_price=103.0, sl_price=98.0)
+        assert g.grade_once(now_ts=close_ts + 10 ** 6) == []
+        row = store.get_prediction(pid)
+        assert row["label_source"] == "pending" and row["graded"] == 0   # back in pool
+
+        dm.news = FakeAgent()                            # "next run": agent healthy
+        out = g.grade_once(now_ts=close_ts + 10 ** 6)
+        assert out and out[0]["label_tb"] == "tp"
+        store.close()
+
+
+class TestRewardLockV31:
+    def test_manual_mid_grade_waits_for_complete_prior(self, tmp_path, tb_on):
+        """Manual callback landing while the auto grader is mid-_apply_rewards
+        must block on the reward lock and read the FULL prior_auto afterwards
+        (pre-fix it read an empty set and double-applied)."""
+        import threading
+        from persistence import Store
+        from grader import Grader
+
+        fetcher, close_ts = make_path_fetcher(
+            100.0, [(100.5, 99.6, 100.2), (100.4, 99.7, 100.1)])   # timeout path
+        store = Store(str(tmp_path / "rl.db"))
+        dm = FakeDM()
+        g = Grader(dm, data_fetcher=fetcher, store=store)
+        pid = store.record_prediction(make_decision(), candle_close_ts=close_ts,
+                                      entry_price=100.0, horizon_k=2, grade_due_ts=1.0,
+                                      tp_price=103.0, sl_price=98.0)
+
+        inside = threading.Event()
+        release = threading.Event()
+        orig = dm.research.apply_reward
+
+        def slow(*a):
+            inside.set()                 # auto grader is holding the reward lock
+            assert release.wait(5)
+            orig(*a)
+        dm.research.apply_reward = slow
+
+        auto = threading.Thread(target=g.grade_once, kwargs={"now_ts": close_ts + 10 ** 6})
+        auto.start()
+        assert inside.wait(5)
+
+        result = {}
+        manual = threading.Thread(
+            target=lambda: result.update(g.apply_manual_feedback(pid, "skip")))
+        manual.start()                   # sees label_source='auto', blocks on lock
+        release.set()
+        auto.join(5); manual.join(5)
+
+        assert result["status"] == "corrected"
+        # human CONFIRMED the auto verdict -> corrections must be exactly zero,
+        # which is only possible if prior_auto was read complete
+        assert result["corrections"] == {"news": 0.0, "research": 0.0, "indicator": 0.0}
+        store.close()

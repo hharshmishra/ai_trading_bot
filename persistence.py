@@ -197,6 +197,14 @@ class Store:
             for name, ctype in cols:
                 if name not in existing:
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ctype}")
+        # Repair sessions created before cycle back-filled prediction_id: the
+        # prediction row carries session_id, so the link is recoverable. Without
+        # it, REWARD buttons on those sessions resolve to unknown_prediction.
+        self.conn.execute(
+            "UPDATE sessions SET prediction_id = ("
+            "  SELECT p.id FROM predictions p WHERE p.session_id = sessions.id LIMIT 1) "
+            "WHERE prediction_id IS NULL "
+            "  AND EXISTS (SELECT 1 FROM predictions p WHERE p.session_id = sessions.id)")
 
     def close(self) -> None:
         with self._lock:
@@ -440,6 +448,18 @@ class Store:
             )
             self.conn.commit()
         return sid
+
+    def revert_claim(self, prediction_id: str, label_source: str) -> bool:
+        """Undo a claim_grading — ONLY safe when no rewards were applied yet
+        (grader crashed between claim and the first policy update). CAS on the
+        claimant's own label_source so a competing manual claim is never undone."""
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE predictions SET graded = 0, label_source = 'pending' "
+                "WHERE id = ? AND label_source = ?",
+                (prediction_id, label_source))
+            self.conn.commit()
+            return cur.rowcount == 1
 
     def link_session_prediction(self, session_id: str, prediction_id: str) -> None:
         """Back-fill sessions.prediction_id once the prediction row exists.

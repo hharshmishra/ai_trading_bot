@@ -180,11 +180,22 @@ async def handle_callback(update, context) -> None:
             await broadcaster.strip_keyboard(sess)
             await q.answer("Learning skipped. Session closed.")
             return
+        if not sess.get("prediction_id"):
+            # cycle back-fills the link right after record_prediction; a click
+            # inside that window (or on an unrepairable legacy session) must
+            # NOT burn the session on a no-op grade.
+            await q.answer("Prediction still recording — try again in a moment.", show_alert=True)
+            return
         news_reward = None if value == "auto" else float(value)
-        result = grader.apply_manual_feedback(sess["prediction_id"], true_outcome, news_reward=news_reward)
+        # to_thread: apply_manual_feedback takes the grader's reward lock and
+        # may briefly wait on an in-flight auto grade — never block the loop.
+        result = await asyncio.to_thread(
+            grader.apply_manual_feedback, sess["prediction_id"], true_outcome,
+            news_reward=news_reward)
         store.deactivate_session(session_id)
         await broadcaster.strip_keyboard(sess)
-        await q.answer(f"Feedback applied ({result.get('status')}). Session closed.")
+        note = " (news override ignored — agent absent)" if result.get("news_override_ignored") else ""
+        await q.answer(f"Feedback applied ({result.get('status')}){note}. Session closed.")
 
 
 # --------------------------------------------------------------------------- #

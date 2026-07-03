@@ -246,3 +246,55 @@ def test_callback_applies_feedback_via_grader(tmp_path):
         store.close()
 
     asyncio.run(body())
+
+
+def test_reward_callback_null_pid_keeps_session(tmp_path):
+    """Click inside the record window (or on an unrepairable legacy session):
+    answer 'try again', do NOT deactivate, do NOT grade."""
+    from persistence import Store
+    from grader import Grader
+    from telegram_app import Broadcaster, handle_callback
+
+    async def body():
+        store = Store(str(tmp_path / "np.db"))
+        grader = Grader(FakeDM(), data_fetcher=None, store=store)
+        bc = Broadcaster(FakeBot(), store, 111, 222)
+        sid = store.create_session(pair="BTCUSDT", tf="4h", dev_chat_id=222, dev_msg_id=9)
+
+        class CQ:
+            def __init__(self, data):
+                self.data = data; self.answers = []
+
+            async def answer(self, text="", show_alert=False):
+                self.answers.append(text)
+
+        ctx = SimpleNamespace(application=SimpleNamespace(
+            bot_data={"store": store, "grader": grader, "broadcaster": bc}))
+        await handle_callback(SimpleNamespace(callback_query=CQ(f"{sid}|OUTCOME|buy")), ctx)
+        cq = CQ(f"{sid}|REWARD|auto")
+        await handle_callback(SimpleNamespace(callback_query=cq), ctx)
+
+        assert "try again" in cq.answers[-1]
+        assert store.get_session(sid)["active"] == 1        # NOT burned
+        store.close()
+
+    asyncio.run(body())
+
+
+def test_migration_backfills_legacy_session_links(tmp_path):
+    """Sessions created before the link fix have prediction_id NULL but the
+    prediction row carries session_id — reopening the store repairs them."""
+    from persistence import Store
+
+    db = str(tmp_path / "mig.db")
+    store = Store(db)
+    sid = store.create_session(pair="BTCUSDT", tf="4h")     # legacy: no pid
+    pid = store.record_prediction(make_decision(), candle_close_ts=100.0,
+                                  entry_price=100.0, horizon_k=2, grade_due_ts=1.0,
+                                  session_id=sid)
+    assert store.get_session(sid)["prediction_id"] is None
+    store.close()
+
+    reopened = Store(db)                                    # _migrate runs
+    assert reopened.get_session(sid)["prediction_id"] == pid
+    reopened.close()
