@@ -48,6 +48,37 @@ python telegram_app.py                      # run (signals bot + scheduler + gra
 
 Tests: `pytest -q` (107 tests, no network/keys needed — mocks + HashingEmbedder).
 
+## Correctness v3 — signal timing + grounding fixes
+
+A line-level audit found and fixed five defects that corrupted live predictions:
+
+1. **UTC-aligned schedule.** Binance candles close on UTC boundaries; the old
+   cascade fired off IST hours, so every 4h/1d/1w analysis ran hours from a
+   real close. New signal times (IST): 1h every hour at :30 (unchanged) ·
+   **4h at 1:30 / 5:30 / 9:30 / 13:30 / 17:30 / 21:30** · **1d at 5:30 AM** ·
+   **1w Monday 5:30 AM**.
+2. **Closed candles only** (`CLOSED_CANDLES_ONLY`, default on): live analysis
+   no longer reads the in-progress candle — entries reference true closes,
+   matching what the backtest replays.
+3. **News RAG actually wired**: prompts now carry stored headlines with
+   `[age] [tier]` prefixes; an empty corpus adds a no-hallucination guard
+   (confidence capped at 0.4).
+4. **Dominance logic revived**: the old BTCDOMUSDT spot fetch never existed —
+   BTC-dominance now scores from CoinGecko level + 24h rate-of-change.
+5. **NWE event mode** (`NWE_EVENT_MODE`, backtest-gated): fires once per band
+   crossing instead of every bar outside the band.
+
+Plus: a grading claim-CAS (auto grader vs manual Telegram callback race),
+brain deadzone-v2 shadow column, per-cycle OHLCV snapshot, universe freshness
+preflight (LUNA→SUI swap), 7-day ingest dedup window.
+
+Agent enhancements (all flag-gated, evidence-first): real SPX/DXY price
+trends (FRED key optional + keyless stooq fallback), quantitative money-flow
+phases, nightly CoinGecko ecosystem refresh, typed news-event extraction
+(news RL migrated 5→10 features via logit-preserving zero-pad), RSI/OBV
+divergence votes (4h/1d), empirical-Bayes direct-signal confidences,
+optional `RAG_EMBEDDER=model2vec` semantic embeddings (numpy<2-safe).
+
 ## Accuracy upgrade (v2) — evidence-first rollout
 
 The 1h baseline backtest measured **33% TB precision** for counter-trend NWE
