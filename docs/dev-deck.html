@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitReinforceX — Developer Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#06070f; --void2:#0a0c1a; --ink:#0e1124; --ink2:#141833;
+    --line:rgba(140,150,210,.14); --line2:rgba(140,150,210,.28);
+    --cyan:#22d3ee; --violet:#7c5cff; --magenta:#ff4d8d; --mint:#34f5c5; --amber:#ffcf5c;
+    --text:#e8eaf6; --muted:#9499c4; --faint:#646a96;
+    --g1:linear-gradient(120deg,var(--cyan),var(--violet) 55%,var(--magenta));
+    --g2:linear-gradient(135deg,var(--violet),var(--magenta));
+    --glass:rgba(20,24,52,.55); --glass2:rgba(16,19,42,.72);
+    --shadow:0 30px 80px -30px rgba(0,0,0,.85);
+    --radius:18px;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:"Space Grotesk","Inter",system-ui,sans-serif;
+    --body:"Inter",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--void); color:var(--text); font-family:var(--body);
+    line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:-20%; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(40% 50% at 78% 8%, rgba(124,92,255,.20), transparent 60%),
+      radial-gradient(45% 55% at 12% 22%, rgba(34,211,238,.14), transparent 60%),
+      radial-gradient(50% 60% at 60% 100%, rgba(255,77,141,.13), transparent 60%);
+    filter:saturate(1.1);
+  }
+  a{color:inherit}
+  ::selection{background:rgba(124,92,255,.4)}
+  code{font-family:var(--mono);font-size:.92em;color:var(--cyan);background:rgba(34,211,238,.07);
+    border:1px solid rgba(34,211,238,.14);border-radius:6px;padding:1px 6px;white-space:nowrap}
+  code.p{color:var(--mint);background:rgba(52,245,197,.06);border-color:rgba(52,245,197,.16)}
+
+  /* ---------- rail (sticky + scrollable — 15 sections) ---------- */
+  .rail{
+    position:fixed; left:0; top:0; height:100vh; width:240px; z-index:40;
+    padding:22px 18px 16px; display:flex; flex-direction:column; gap:6px;
+    border-right:1px solid var(--line); background:linear-gradient(180deg,rgba(8,9,18,.78),rgba(8,9,18,.42));
+    backdrop-filter:blur(10px); overflow:hidden;
+  }
+  .brand{display:flex; align-items:center; gap:11px; margin-bottom:12px; flex:0 0 auto}
+  .mark{width:34px;height:34px;border-radius:10px;background:var(--g1);position:relative;flex:0 0 auto;
+    box-shadow:0 0 22px rgba(124,92,255,.55), inset 0 0 12px rgba(255,255,255,.25)}
+  .mark::after{content:"";position:absolute;inset:6px;border-radius:6px;border:1.5px solid rgba(7,8,15,.85)}
+  .brand b{font-family:var(--disp);font-weight:700;letter-spacing:-.02em;font-size:16px}
+  .brand span{display:block;font-size:10px;color:var(--faint);letter-spacing:.18em;text-transform:uppercase}
+  .nav{display:flex;flex-direction:column;gap:1px;margin-top:2px;overflow-y:auto;flex:1 1 auto;
+    scrollbar-width:thin;scrollbar-color:rgba(124,92,255,.35) transparent;padding-right:4px;min-height:0}
+  .nav::-webkit-scrollbar{width:5px}
+  .nav::-webkit-scrollbar-thumb{background:rgba(124,92,255,.3);border-radius:4px}
+  .nav a{
+    font-size:12px;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:9px;
+    display:flex;align-items:center;gap:9px;transition:.25s;letter-spacing:.01em;flex:0 0 auto;
+  }
+  .nav a .dot{width:6px;height:6px;border-radius:50%;background:var(--line2);transition:.25s;flex:0 0 auto}
+  .nav a .n{font-family:var(--mono);font-size:9.5px;color:var(--faint);width:16px;flex:0 0 auto}
+  .nav a:hover{color:var(--text);background:rgba(124,92,255,.08)}
+  .nav a.active{color:var(--text);background:rgba(124,92,255,.12)}
+  .nav a.active .dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .rail .pulse{margin-top:8px;font-size:10.5px;color:var(--faint);display:flex;align-items:center;gap:8px;font-family:var(--mono);flex:0 0 auto}
+  .pulse i{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 12px var(--mint);animation:beat 1.8s infinite;flex:0 0 auto}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+
+  .wrap{margin-left:240px;position:relative;z-index:1}
+  section{padding:84px 6vw;max-width:1220px;margin:0 auto;scroll-margin-top:16px}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan);
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:18px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:linear-gradient(90deg,var(--cyan),transparent)}
+  h2{font-family:var(--disp);font-weight:600;font-size:clamp(25px,3.2vw,38px);letter-spacing:-.025em;margin:0 0 14px;line-height:1.08}
+  h2 em{font-style:normal;background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h3.sub{font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:-.01em;margin:44px 0 10px}
+  h3.sub small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--faint);margin-left:10px;letter-spacing:.04em}
+  .lead{color:var(--muted);font-size:16px;max-width:74ch}
+  .lead b, p b{color:var(--text);font-weight:600}
+  .grad{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .src{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.03em}
+  .src b{color:var(--muted);font-weight:500}
+
+  /* ---------- hero ---------- */
+  .hero{min-height:96vh;display:flex;flex-direction:column;justify-content:center;position:relative;
+    padding-top:60px;padding-bottom:60px;max-width:none}
+  #constellation{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  .hero-inner{position:relative;z-index:2;max-width:1220px;margin:0 auto;width:100%;padding:0 6vw}
+  .hero h1{font-family:var(--disp);font-weight:700;letter-spacing:-.04em;line-height:.96;
+    font-size:clamp(42px,6.6vw,96px);margin:14px 0 10px}
+  .hero h1 .x{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 40px rgba(124,92,255,.35))}
+  .tagline{font-family:var(--disp);font-size:clamp(17px,2.2vw,24px);color:var(--text);font-weight:500;margin:0 0 14px;letter-spacing:-.01em}
+  .hero p.sub{color:var(--muted);max-width:68ch;font-size:16px}
+  .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+  .chip{display:flex;flex-direction:column;gap:2px;padding:14px 20px;border-radius:14px;
+    background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(8px);min-width:140px}
+  .chip b{font-family:var(--disp);font-size:22px;font-weight:600;letter-spacing:-.02em}
+  .chip span{font-size:10.5px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+  .scrollcue{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-family:var(--mono);
+    font-size:11px;color:var(--faint);letter-spacing:.2em;z-index:2}
+
+  /* ---------- cards ---------- */
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+  .card{position:relative;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px;backdrop-filter:blur(9px);box-shadow:var(--shadow);transition:border-color .3s}
+  .card:hover{border-color:var(--line2)}
+  .card h3{font-family:var(--disp);font-size:17.5px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+  .card h3 small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.05em;font-weight:400;margin-top:3px}
+  .card p{color:var(--muted);font-size:14px;margin:0 0 10px}
+  .card p:last-child{margin-bottom:0}
+  .tags{display:flex;flex-wrap:wrap;gap:7px}
+  .tag{font-family:var(--mono);font-size:10.5px;color:var(--text);padding:3px 8px;border-radius:7px;
+    background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2)}
+  .tag.v{background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.26)}
+  .tag.m{background:rgba(255,77,141,.1);border-color:rgba(255,77,141,.26)}
+  .tag.a{background:rgba(255,207,92,.07);border-color:rgba(255,207,92,.24)}
+  .tag.g{background:rgba(52,245,197,.07);border-color:rgba(52,245,197,.22)}
+  .archnote{margin-top:20px;font-family:var(--mono);font-size:12.5px;color:var(--faint);
+    border-left:2px solid var(--violet);padding-left:14px;max-width:88ch}
+  .warncave{margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--amber);
+    border-left:2px solid var(--amber);padding-left:14px;max-width:88ch;line-height:1.7}
+  .mintnote{margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--mint);
+    border-left:2px solid var(--mint);padding-left:14px;max-width:88ch;line-height:1.7}
+  .philo{margin-top:26px;font-family:var(--disp);font-size:clamp(19px,2.4vw,28px);font-weight:600;letter-spacing:-.02em}
+
+  /* ---------- generic tables ---------- */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--glass2);
+    backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+  table.t{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+  .t th,.t td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left;line-height:1.55}
+  .t tbody tr:last-child td{border-bottom:none}
+  .t thead th{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:500;
+    position:sticky;top:0;background:rgba(13,16,36,.97);z-index:2}
+  .t tbody tr:hover{background:rgba(124,92,255,.045)}
+  .t td.mono{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+  .t td .mut{color:var(--muted)} .t td .fnt{color:var(--faint)}
+  .t td.file{font-family:var(--mono);font-size:11.5px;color:var(--cyan);white-space:nowrap}
+  .t tr.grp td{background:rgba(124,92,255,.08);font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--violet);border-bottom:1px solid var(--line2);padding:8px 14px}
+  .t td.num{font-family:var(--mono);font-size:11.5px;text-align:right;white-space:nowrap}
+  .pos{color:var(--mint)} .neg{color:var(--magenta)} .amb{color:var(--amber)} .dim{color:var(--faint)}
+  .pill{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;letter-spacing:.08em;white-space:nowrap;display:inline-block}
+  .pill.on{color:var(--mint);border:1px solid rgba(52,245,197,.4);background:rgba(52,245,197,.07)}
+  .pill.off{color:var(--faint);border:1px solid var(--line2);background:rgba(140,150,210,.06)}
+  .pill.shadow{color:var(--amber);border:1px solid rgba(255,207,92,.35);background:rgba(255,207,92,.06)}
+  .pill.never{color:var(--magenta);border:1px solid rgba(255,77,141,.35);background:rgba(255,77,141,.07)}
+  .pill.req{color:var(--cyan);border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.07)}
+
+  /* ---------- truth table ---------- */
+  table.truth{width:100%;border-collapse:collapse;font-size:13px;min-width:960px}
+  .truth th,.truth td{padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left;line-height:1.6}
+  .truth tbody tr:last-child td{border-bottom:none}
+  .truth thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .truth thead th.rg-r{color:var(--cyan)} .truth thead th.rg-m{color:var(--violet)} .truth thead th.rg-t{color:var(--magenta)}
+  .truth td.tf{font-family:var(--mono);color:var(--cyan);white-space:nowrap;font-weight:700;font-size:13px}
+  .truth td b{color:var(--text)} .truth td .mut{color:var(--muted)}
+  .rsn{font-family:var(--mono);font-size:10px;color:var(--mint);border:1px solid rgba(52,245,197,.35);
+    background:rgba(52,245,197,.06);padding:1px 7px;border-radius:6px;white-space:nowrap}
+  .sup{font-family:var(--mono);font-size:10px;color:var(--magenta);border:1px solid rgba(255,77,141,.3);
+    background:rgba(255,77,141,.06);padding:1px 7px;border-radius:6px;white-space:nowrap}
+  .offd{font-family:var(--mono);font-size:10px;color:var(--amber);border:1px solid rgba(255,207,92,.3);
+    background:rgba(255,207,92,.06);padding:1px 7px;border-radius:6px;white-space:nowrap}
+
+  /* ---------- flow diagram ---------- */
+  .flowwrap{overflow-x:auto;margin-top:28px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--glass2);backdrop-filter:blur(8px);box-shadow:var(--shadow);padding:26px}
+  .flow{min-width:1020px}
+  .lane{display:flex;align-items:center;gap:0;margin:0 0 6px;flex-wrap:nowrap}
+  .lane-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
+    width:86px;flex:0 0 auto;text-align:right;padding-right:14px}
+  .fnode{position:relative;padding:10px 14px;border-radius:12px;background:var(--glass);border:1px solid var(--line);
+    font-size:12.5px;font-weight:500;flex:0 0 auto;line-height:1.45;box-shadow:0 6px 24px -12px rgba(0,0,0,.7)}
+  .fnode small{display:block;font-family:var(--mono);font-size:9.5px;color:var(--faint);font-weight:400;margin-top:2px}
+  .fnode.cy{border-color:rgba(34,211,238,.35);box-shadow:0 0 22px -10px var(--cyan)}
+  .fnode.vi{border-color:rgba(124,92,255,.4);box-shadow:0 0 22px -10px var(--violet)}
+  .fnode.ma{border-color:rgba(255,77,141,.36);box-shadow:0 0 22px -10px var(--magenta)}
+  .fnode.mi{border-color:rgba(52,245,197,.34);box-shadow:0 0 22px -10px var(--mint)}
+  .fnode.am{border-color:rgba(255,207,92,.34);box-shadow:0 0 22px -10px var(--amber)}
+  .fedge{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding:0 2px;min-width:74px}
+  .fedge .lbl{font-family:var(--mono);font-size:8.5px;color:var(--faint);white-space:nowrap;margin-bottom:1px}
+  .fedge .ln{width:100%;height:1px;background:linear-gradient(90deg,var(--line2),rgba(124,92,255,.55));position:relative}
+  .fedge .ln::after{content:"";position:absolute;right:-1px;top:-3px;border:3.5px solid transparent;border-left-color:rgba(124,92,255,.75)}
+  .fdown{display:flex;margin:2px 0 8px}
+  .fdown .stem{width:1px;background:linear-gradient(180deg,rgba(124,92,255,.55),var(--line2));height:26px;position:relative;margin-left:260px}
+  .fdown .stem::after{content:"";position:absolute;bottom:-1px;left:-3px;border:3.5px solid transparent;border-top-color:rgba(124,92,255,.75)}
+  .fdown .dlbl{font-family:var(--mono);font-size:8.5px;color:var(--faint);margin-left:8px;align-self:center}
+
+  /* ---------- numbered steps ---------- */
+  .steps{counter-reset:step;margin-top:26px;display:flex;flex-direction:column;gap:14px}
+  .step{position:relative;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 24px 20px 74px;backdrop-filter:blur(8px)}
+  .step::before{counter-increment:step;content:counter(step,decimal-leading-zero);position:absolute;left:22px;top:20px;
+    font-family:var(--mono);font-weight:700;font-size:15px;color:var(--violet);
+    background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:10px;width:38px;height:38px;
+    display:grid;place-items:center}
+  .step h4{font-family:var(--disp);font-size:16px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+  .step h4 .src{margin-left:10px}
+  .step p{color:var(--muted);font-size:13.5px;margin:0 0 8px}
+  .step p:last-child{margin-bottom:0}
+  .step ul{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:13.5px}
+  .step ul li{margin:4px 0}
+
+  /* ---------- kv chips ---------- */
+  .kv{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+  .k2{font-family:var(--mono);font-size:11.5px;padding:7px 11px;border-radius:9px;
+    background:rgba(52,245,197,.05);border:1px solid rgba(52,245,197,.2);color:var(--muted)}
+  .k2 b{color:var(--mint);font-weight:700}
+  .k2.vio{background:rgba(124,92,255,.06);border-color:rgba(124,92,255,.22)} .k2.vio b{color:var(--violet)}
+  .k2.mag{background:rgba(255,77,141,.05);border-color:rgba(255,77,141,.2)} .k2.mag b{color:var(--magenta)}
+  .k2.amb{background:rgba(255,207,92,.05);border-color:rgba(255,207,92,.2)} .k2.amb b{color:var(--amber)}
+
+  /* ---------- code blocks ---------- */
+  .codeblock{font-family:var(--mono);font-size:12.5px;background:var(--void2);border:1px solid var(--line);
+    border-radius:12px;padding:18px 20px;color:var(--muted);overflow-x:auto;line-height:1.85;white-space:pre;margin-top:14px}
+  .codeblock .c{color:var(--faint)} .codeblock .p{color:var(--mint)} .codeblock .k{color:var(--cyan)}
+  .codeblock .s{color:var(--amber)}
+
+  /* ---------- tb svg ---------- */
+  .tbfig{margin-top:24px;padding:20px;border-radius:var(--radius);background:var(--glass);
+    border:1px solid var(--line);backdrop-filter:blur(9px);box-shadow:var(--shadow);overflow-x:auto}
+  .tbfig svg{display:block;min-width:760px;width:100%;height:auto}
+
+  .criteria{margin-top:20px;padding:18px 22px;border-radius:14px;border:1px solid rgba(52,245,197,.28);
+    background:rgba(52,245,197,.05);font-family:var(--mono);font-size:13px;color:var(--muted);line-height:1.8}
+  .criteria b{color:var(--mint)}
+  .criteria.warn{border-color:rgba(255,207,92,.3);background:rgba(255,207,92,.05)}
+  .criteria.warn b{color:var(--amber)}
+
+  footer{margin-left:240px;padding:50px 6vw 70px;border-top:1px solid var(--line);position:relative;z-index:1;color:var(--faint);font-size:13px}
+  footer b{font-family:var(--disp);color:var(--text)}
+  footer .paths{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:14px;line-height:2}
+  footer .paths span{color:var(--muted)}
+  footer a{color:var(--cyan);text-decoration:none} footer a:hover{text-decoration:underline}
+  .warn{font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:14px;letter-spacing:.03em}
+
+  @media (max-width:960px){
+    .rail{transform:translateX(-100%)} .wrap,footer{margin-left:0}
+    .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:1fr} .g2{grid-template-columns:1fr}
+    section{padding:64px 5vw}
+    .step{padding-left:24px} .step::before{position:static;display:inline-grid;margin-bottom:8px}
+  }
+  .nav a:focus-visible,.card:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+</style>
+</head>
+<body>
+
+<aside class="rail">
+  <div class="brand"><div class="mark"></div><div><b>BitReinforceX</b><span>developer deck</span></div></div>
+  <nav class="nav" id="nav">
+    <a href="#what"><span class="dot"></span><span class="n">02</span>What this system is</a>
+    <a href="#bigpicture"><span class="dot"></span><span class="n">03</span>Big picture</a>
+    <a href="#repomap"><span class="dot"></span><span class="n">04</span>Repo map</a>
+    <a href="#cycle"><span class="dot"></span><span class="n">05</span>The hourly cycle</a>
+    <a href="#grading"><span class="dot"></span><span class="n">06</span>Grading &amp; learning</a>
+    <a href="#nightly"><span class="dot"></span><span class="n">07</span>Nightly training</a>
+    <a href="#env"><span class="dot"></span><span class="n">08</span>Env vars — all of them</a>
+    <a href="#start"><span class="dot"></span><span class="n">09</span>How to start</a>
+    <a href="#backtest"><span class="dot"></span><span class="n">10</span>Backtest harness</a>
+    <a href="#evidence"><span class="dot"></span><span class="n">11</span>Evidence ledger</a>
+    <a href="#datamodel"><span class="dot"></span><span class="n">12</span>Data model</a>
+    <a href="#history"><span class="dot"></span><span class="n">13</span>History: v1→v3</a>
+    <a href="#runbook"><span class="dot"></span><span class="n">14</span>Runbook / gotchas</a>
+    <a href="#pending"><span class="dot"></span><span class="n">15</span>What's pending</a>
+  </nav>
+  <div class="pulse"><i></i><span>main @ f0d9822 · 167 tests</span></div>
+</aside>
+
+<div class="wrap">
+
+  <!-- 01 HERO -->
+  <header class="hero" id="top">
+    <canvas id="constellation" aria-hidden="true"></canvas>
+    <div class="hero-inner">
+      <div class="eyebrow">BitReinforceX · the developer deck</div>
+      <h1>Developer <span class="x">Deck</span></h1>
+      <p class="tagline">The complete 0→100: how the system thinks, learns, and ships evidence.</p>
+      <p class="sub">One long-lived Python process analyses 48 Binance pairs every hour with four reinforcement-learning voters, gates what is worth sending by market regime, grades every prediction against the realized price path, and re-trains itself nightly on its own track record. This page is the whole machine — every module, every flow, every env var, and the honest numbers behind every enabled flag.</p>
+      <div class="chips">
+        <div class="chip"><b class="grad">main @ f0d9822</b><span>this snapshot</span></div>
+        <div class="chip"><b>167</b><span>tests green</span></div>
+        <div class="chip"><b>48</b><span>USDT pairs</span></div>
+        <div class="chip"><b>$0<span style="font-size:14px;color:var(--faint)">/mo</span></b><span>data cost</span></div>
+        <div class="chip"><b style="color:var(--magenta)">advisory</b><span>only — no orders</span></div>
+      </div>
+    </div>
+    <div class="scrollcue">scroll ↓</div>
+  </header>
+
+  <!-- 02 WHAT THIS SYSTEM IS -->
+  <section id="what">
+    <div class="eyebrow">02 — what this system is</div>
+    <h2>An advisory signal system that <em>grades itself</em>.</h2>
+    <p class="lead" style="margin-bottom:16px"><b>BitReinforceX emits trading signals to Telegram; it never places orders.</b> Every hour it analyses 48 Binance USDT pairs (<code>cycle.SYMBOLS</code>) across the timeframes due at that candle boundary, and sends whatever passes the gate to a customer channel (clean signal) and a dev channel (signal + brain dump + feedback buttons). The whole runtime is one process — <code>python telegram_app.py</code> — running the scheduler, the grader, and the nightly trainer as three asyncio tasks in the same loop, backed by one SQLite file.</p>
+    <p class="lead" style="margin-bottom:16px">Decisions come from <b>four RL voters and one gate</b>. The Indicator agent (no LLM) blends direct signals — Nadaraya-Watson Envelope, Chandelier Exit, AlphaTrend, plus trend triggers — with eight rule-based votes. The News agent scans RAG-grounded headlines with gpt-4o-mini. The Research agent scores five market logics (ecosystem drivers, SPX, money-flow, BTC dominance, DXY). The Derivatives agent reads keyless Binance USDM positioning. The brain (<code>brain/decision_maker.py</code>) aggregates them as a weighted vote Σ&nbsp;w·action·conf with learned priorities — and a <b>regime classifier that deliberately does not vote</b>: it gates which trigger family may emit at all, because a linear vote can't express "NWE is good in ranges and poison in trends".</p>
+    <p class="lead">The loop that makes it self-training: every decision — emitted or not — is recorded with each agent's <b>replayable feature snapshot</b> and ATR-scaled barrier prices; the grader walks the realized path 60&nbsp;s at a time and labels each prediction by the <b>first barrier touched</b> (triple-barrier), rewards each agent for what <i>it</i> said (+1 / −4 / −1.5 / −1.0), and nightly the system fits a meta-label model, per-timeframe confidence calibration, and empirical-Bayes indicator confidences from its own graded history. Humans can override any grade from the dev-channel buttons — a compare-and-swap makes sure auto and manual never double-apply.</p>
+
+    <div class="card" style="margin-top:34px;border-color:rgba(52,245,197,.25)">
+      <h3 style="color:var(--mint)">The one philosophy that explains every flag<small>config.py · README.md — "ship dark → measure → enable on evidence"</small></h3>
+      <p>Every risky behavior ships behind an env flag <b>defaulted OFF</b>. It turns on only when evidence flips it — an archived backtest A/B (<code class="p">logs/backtest/*/report.md</code>) or a live shadow period. That is why the codebase is full of always-computed-but-not-always-acted-on values: regime stamps, triple-barrier labels, <code>meta_p</code>, <code>calibrated_conf</code>, <code>final_action_v2</code> all get recorded on every prediction so the evidence exists <i>before</i> the flag is flipped. Two gate rules were even amended back OFF after the backtest measured them (trend-reversal 0/6, higher-TF NWE 12.5%).</p>
+      <div class="tags"><span class="tag g">flag-gated</span><span class="tag g">shadow-first</span><span class="tag g">backtest = production code path</span><span class="tag g">amendments allowed</span></div>
+    </div>
+  </section>
+
+  <!-- 03 BIG PICTURE -->
+  <section id="bigpicture">
+    <div class="eyebrow">03 — big picture</div>
+    <h2>One process, <em>four flows</em>.</h2>
+    <p class="lead">Ingest news hourly, decide per pair, grade on a 60-second poll, learn nightly. Every edge below names the module that owns it. The scheduler ticks at IST :30 — which <b>is</b> the UTC :00 candle boundary (IST = UTC+5:30), so every analysis sits on a real Binance candle close.</p>
+
+    <div class="flowwrap">
+      <div class="flow">
+        <div class="lane">
+          <div class="lane-label">news</div>
+          <div class="fnode am">RSS · 8 feeds<small>coindesk · theblock · blockworks · cointelegraph · decrypt · cryptoslate · newsbtc · bitcoinmagazine</small></div>
+          <div class="fedge"><span class="lbl">ingestion.py ingest_all()</span><span class="ln"></span></div>
+          <div class="fnode">normalize + tag assets<small>ingestion.py · tag_assets() · [age][tier] format_headline()</small></div>
+          <div class="fedge"><span class="lbl">rag.py RagIndex.ingest()</span><span class="ln"></span></div>
+          <div class="fnode cy">RAG corpus<small>embed · cosine-dedup ≥0.9 · 7d window · news_items (SQLite)</small></div>
+        </div>
+        <div class="fdown"><span class="stem"></span><span class="dlbl">headlines ground every news prompt · persistence.recent_news[_for_asset]()</span></div>
+
+        <div class="lane">
+          <div class="lane-label">decide</div>
+          <div class="fnode vi">scheduler tick<small>telegram_app.scheduler_loop · IST :30 == UTC :00</small></div>
+          <div class="fedge"><span class="lbl">signals.timeframes_due(UTC)</span><span class="ln"></span></div>
+          <div class="fnode">market context ×1 per TF<small>market_context.build_market_context() · overall news · SPX/DXY · dominance ROC · F&amp;G · money-flow · 36 driver scans</small></div>
+          <div class="fedge"><span class="lbl">cycle.run_cycle() fan-out ×48</span><span class="ln"></span></div>
+          <div class="fnode vi">brain decide()<small>brain/decision_maker.py · Σ w·a·conf over 4 voters</small></div>
+          <div class="fedge"><span class="lbl">signals.should_emit_signal_v2()</span><span class="ln"></span></div>
+          <div class="fnode ma">gate v2<small>regime × trigger truth table</small></div>
+          <div class="fedge"><span class="lbl">telegram_app.Broadcaster</span><span class="ln"></span></div>
+          <div class="fnode cy">Telegram<small>customer text · dev text+buttons · session supersede</small></div>
+        </div>
+        <div class="fdown"><span class="stem"></span><span class="dlbl">every decision recorded, emitted or not · persistence.record_prediction()</span></div>
+
+        <div class="lane">
+          <div class="lane-label">grade</div>
+          <div class="fnode">SQLite store<small>persistence.py · predictions + barriers + per-agent snapshots</small></div>
+          <div class="fedge"><span class="lbl">grader.grade_once() every 60s</span><span class="ln"></span></div>
+          <div class="fnode mi">triple-barrier grader<small>grader.py + grading/barriers.py · first-touch tp/sl/timeout</small></div>
+          <div class="fedge"><span class="lbl">reward_for_v2() · claim CAS</span><span class="ln"></span></div>
+          <div class="fnode">rewards → policies<small>apply_reward() from stored snapshots · logs/*_policy.json + brain_policy.json</small></div>
+        </div>
+        <div class="fdown"><span class="stem"></span><span class="dlbl">graded rows become the training set · persistence.training_rows()</span></div>
+
+        <div class="lane">
+          <div class="lane-label">learn</div>
+          <div class="fnode am">nightly 02:00 IST<small>jobs/nightly.nightly_loop()</small></div>
+          <div class="fedge"><span class="lbl">jobs/features.py · one builder</span><span class="ln"></span></div>
+          <div class="fnode mi">meta model + calibration<small>meta_model.pkl · calibration.json (isotonic knots) · indicator_conf.json (EB)</small></div>
+          <div class="fedge"><span class="lbl">ECOSYSTEMS_AUTO (off)</span><span class="ln"></span></div>
+          <div class="fnode">ecosystem refresh<small>scripts/refresh_ecosystems.py · CoinGecko categories · 7d freshness</small></div>
+          <div class="fedge"><span class="lbl">stamps next cycle</span><span class="ln"></span></div>
+          <div class="fnode vi">meta_p · calibrated_conf<small>cycle.py · shadow columns on every prediction</small></div>
+        </div>
+      </div>
+    </div>
+    <p class="archnote">Key invariant: the backtest harness (<b>backtest/engine.py</b>) replays the same <b>IndicatorAgent.decide()</b> and the same gate functions from <b>signals.py</b>, and labels with the same <b>grading/barriers.triple_barrier()</b> the live grader uses. Live and simulation share one code path — closed candles only, UTC-aligned.</p>
+  </section>
+
+  <!-- 04 REPO MAP -->
+  <section id="repomap">
+    <div class="eyebrow">04 — repo map</div>
+    <h2>Every module, <em>one line each</em>.</h2>
+    <p class="lead">The full tree with each file's role and the functions you will actually call or grep for. The pinned scientific stack and the vendored <code>pandas_ta</code> are covered in the <a href="#runbook" style="color:var(--cyan)">runbook</a>.</p>
+
+    <div class="tablewrap" style="margin-top:28px">
+      <table class="t">
+        <thead><tr><th style="width:250px">module</th><th>role</th><th style="width:34%">key functions / entry points</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="3">root — runtime</td></tr>
+          <tr><td class="file">config.py</td><td>Every v2/v3 tunable, read from env with safe defaults. Rollout flags default OFF.</td><td class="mono">_env_bool/float/int/json · GATE_V2_ENABLED … CALIBRATION_PATH</td></tr>
+          <tr><td class="file">telegram_app.py</td><td>The single entry point: python-telegram-bot Application + scheduler/grader/nightly tasks in one loop; Broadcaster; button callbacks; optional control bot.</td><td class="mono">main() · scheduler_loop() · grader_loop() · Broadcaster.broadcast() · handle_callback() · build_dev_keyboard()</td></tr>
+          <tr><td class="file">cycle.py</td><td>One analysis cycle: context once per TF, per-pair fan-out under a semaphore, barriers + meta stamps, record every prediction. Owns the 48-pair universe.</td><td class="mono">run_cycle() · SYMBOLS · _entry_from_df()</td></tr>
+          <tr><td class="file">signals.py</td><td>Pure gating + scheduling + message formatting (no telegram, no asyncio — unit-testable).</td><td class="mono">timeframes_due() · is_candle_close_minute() · should_emit_signal[_v2]() · fmt_signal_message() · fmt_brain_dump()</td></tr>
+          <tr><td class="file">grader.py</td><td>Auto-labeling RL grader: fixed-horizon + triple-barrier labels, reward maps v1/v2, manual override with correction math.</td><td class="mono">Grader.grade_once() · _grade_prediction() · apply_manual_feedback() · reward_for_v2() · HORIZON_K · THRESHOLD</td></tr>
+          <tr><td class="file">persistence.py</td><td>One WAL SQLite DB behind one lock: predictions, outcomes, rewards, sessions, macro snapshots, news corpus. Additive-only migrations.</td><td class="mono">Store.record_prediction() · claim_grading() · training_rows() · supersede_active() · get_store()</td></tr>
+          <tr><td class="file">market_context.py</td><td>Market-wide work computed ONCE per (cycle, TF) — the ~576→~87-LLM-call fix. Reuses Research's own logic methods for bit-identical values.</td><td class="mono">build_market_context() · MarketContext.eco_scores() · _SharedOverallNews · _drivers_for_symbols()</td></tr>
+          <tr><td class="file">ingestion.py</td><td>RSS → normalized items → asset tagging → RAG. Source credibility tiers; CryptoPanic fetcher kept for paid tokens only.</td><td class="mono">ingest_all() · tag_assets() · format_headline() · DEFAULT_RSS · SOURCE_TIERS</td></tr>
+          <tr><td class="file">rag.py</td><td>Pluggable embedder (MiniLM / model2vec / hashing) + cosine dedup + retrieval over the SQLite corpus.</td><td class="mono">RagIndex.ingest()/query()/headlines_for() · get_embedder()</td></tr>
+          <tr class="grp"><td colspan="3">agents/</td></tr>
+          <tr><td class="file">agents/indicator_agent.py</td><td>No-LLM technical voter: type-1 direct signals + type-2 rules, learned blend; regime stamped on every decide.</td><td class="mono">IndicatorAgent.decide(ohlcv=, log=) · apply_reward(blend) · supertrend_flip_from_raw() · _direct_conf()</td></tr>
+          <tr><td class="file">agents/news_agent.py</td><td>Two-stage LLM scans (overall + pair) with RAG grounding and hallucination guard; typed events (flag); 3×F linear softmax bandit.</td><td class="mono">NewsAgent.run()/scan_overall()/scan_pair() · apply_reward() · features_from_jsons() · NewsRL</td></tr>
+          <tr><td class="file">agents/research_agent.py</td><td>5 market logics → 10 features → softmax bandit; ecosystem map + drivers; reads shared MarketContext when given.</td><td class="mono">ResearchAgent.decide(market_context=) · _logic1..5 · _logic3_money_flow_v2() · load_ecosystems_cache() · ECOSYSTEMS/ECOSYSTEM_DRIVERS</td></tr>
+          <tr><td class="file">agents/derivatives_agent.py</td><td>4th voter (no LLM): funding/OI/long-short positioning → 8 features → bandit. No future ⇒ conf 0 no-op.</td><td class="mono">DerivativesAgent.decide() · build_features() · deriv_note() · DerivativesRL</td></tr>
+          <tr><td class="file">agents/regime_agent.py</td><td>Deterministic trending/ranging/mixed classifier with hysteresis — gates, never votes.</td><td class="mono">classify_regime() · RegimeSnapshot.feats() · RegimeAgent.decide()</td></tr>
+          <tr><td class="file">agents/custom_indicators.py</td><td>NWE (state + event modes, cached repaint kernel), Chandelier, AlphaTrend, supertrend_fast (numpy parity port), Donchian, squeeze release, pivot divergence.</td><td class="mono">apply_nadaraya_watson_envelope() · direct_signal_from_nwe[e]() · chandelier_exit() · alpha_trend() · donchian_breakout_signal() · squeeze_release_signal() · pivot_divergence()</td></tr>
+          <tr><td class="file">agents/llm_client.py</td><td>Provider-agnostic, lazily-built, call-counted LLM client — one place for model/provider; tests inject a mock.</td><td class="mono">chat_json() · call_count() · set_client() · LLM_MODEL env</td></tr>
+          <tr class="grp"><td colspan="3">brain/ · grading/ · jobs/</td></tr>
+          <tr><td class="file">brain/decision_maker.py</td><td>The brain: calls the roster, weighted vote, deadzone(+v2 shadow), slow-drift priority learning, persisted policy.</td><td class="mono">DecisionMaker.decide() · apply_brain_feedback() · AGENT_NAMES · DEFAULT_SCORES · logs/brain_policy.json</td></tr>
+          <tr><td class="file">grading/barriers.py</td><td>Triple-barrier labeling shared by grader AND backtest — zero sim/live labeling drift. Pessimistic SL-first on ambiguous candles.</td><td class="mono">barrier_prices() · triple_barrier() · atr_from_ohlcv() · BarrierOutcome</td></tr>
+          <tr><td class="file">jobs/nightly.py</td><td>02:00 IST self-training: meta LogReg, per-TF isotonic knots, EB direct confidences, ecosystem refresh, dev summary; hot-path inference helpers.</td><td class="mono">nightly_loop() · run_nightly_training() · train_meta_model() · fit_calibration() · fit_direct_conf() · meta_probability() · apply_calibration()</td></tr>
+          <tr><td class="file">jobs/features.py</td><td>THE meta-feature builder — one function for train time and decide time (train/serve-skew guard). 29 features.</td><td class="mono">meta_features_from_prediction_row() · FEATURE_NAMES</td></tr>
+          <tr class="grp"><td colspan="3">utils/</td></tr>
+          <tr><td class="file">utils/data_fetcher.py</td><td>OHLCV via ccxt with module-level TTL cache (one snapshot per cycle) + closed-candle discipline (drops the in-progress bar).</td><td class="mono">DataFetcher.get_ohlcv(drop_partial=) · clear_ohlcv_cache() · _drop_partial_candle() · _get_exchange()</td></tr>
+          <tr><td class="file">utils/derivatives_fetcher.py</td><td>Keyless Binance USDM snapshots (funding hist, OI, top/global L-S), 55-min TTL, fetch lock (sync ccxt isn't thread-safe). ~144 req/h.</td><td class="mono">fetch_derivatives() · has_futures() · funding_z()</td></tr>
+          <tr><td class="file">utils/macro_fetcher.py</td><td>Free macro feeds: alternative.me Fear&amp;Greed + CoinGecko BTC dominance, 30-min TTL, never fatal.</td><td class="mono">fetch_fear_greed() · fetch_btc_dominance()</td></tr>
+          <tr><td class="file">utils/macro_prices.py</td><td>Real SPX/DXY 5-day trends: FRED (key) or stooq ^spx (keyless); DXY is FRED-or-nothing. 12h TTL.</td><td class="mono">spx_score() · dxy_score() · _trend_score()</td></tr>
+          <tr class="grp"><td colspan="3">backtest/</td></tr>
+          <tr><td class="file">backtest/data.py</td><td>Paginated ccxt history → <code class="p">data/history/*.csv</code> cache; tops up forward AND backfills earlier --start; drops the open candle.</td><td class="mono">load_or_fetch() · fetch_history()</td></tr>
+          <tr><td class="file">backtest/engine.py</td><td>Per-bar replay of production decide()+gate over a sliding 500-candle window; labels every emission TB + fixed-horizon.</td><td class="mono">replay_pair() · res_from_indicator() · ReplayResult</td></tr>
+          <tr><td class="file">backtest/metrics.py</td><td>Per-group (tf|regime|trigger) TB precision with Wilson CI, expectancy R, timeout share; A/B compare with two-proportion z.</td><td class="mono">summarize() · compare() · _wilson_ci()</td></tr>
+          <tr><td class="file">backtest/sweep.py</td><td>Walk-forward grid sweep (select on first 70%, confirm once on the 30% tail) for NWE kernel + barrier widths.</td><td class="mono">sweep() · run_combo() · grid_from_spec()</td></tr>
+          <tr><td class="file">backtest/report.py</td><td>Writes report.json (machine, feeds decks) + report.md (human tables) with the honest conf-proxy caveat in every file.</td><td class="mono">write_report()</td></tr>
+          <tr class="grp"><td colspan="3">scripts/ · deploy/ · vendor/ · tests/</td></tr>
+          <tr><td class="file">scripts/preflight.py</td><td>Deploy gate: imports, numpy-pin ABI, SQLite CRUD, embedder, env vars, universe freshness. Exit 0 = READY.</td><td class="mono">check() · PREFLIGHT_SKIP_NETWORK=1 skips the network check</td></tr>
+          <tr><td class="file">scripts/run_backtest.py</td><td>Backtest CLI: pairs/tfs/start/end/window/gate/label/baseline/workers; serial download, parallel replay.</td><td class="mono">--pairs all · --gate v2 · --baseline report.json · --workers N</td></tr>
+          <tr><td class="file">scripts/run_training.py</td><td>Manual nightly-training trigger against any DB.</td><td class="mono">python scripts/run_training.py [--db path]</td></tr>
+          <tr><td class="file">scripts/analyze_indicators.py</td><td>Report-only (D3): Spearman redundancy matrix + standalone TB win rates → logs/backtest/indicator-corr.md.</td><td class="mono">signal_series() · standalone_winrates()</td></tr>
+          <tr><td class="file">scripts/build_deck_data.py</td><td>Injects archived report JSONs + DB shadow stats into docs/accuracy-upgrade.html between deck-data markers.</td><td class="mono">--baseline · --candidate · --deck</td></tr>
+          <tr><td class="file">scripts/refresh_ecosystems.py</td><td>CoinGecko category → ecosystem membership cache (drivers never auto-change). ~10 categories, free-tier paced.</td><td class="mono">refresh() · CATEGORY_MAP · logs/ecosystems_cache.json</td></tr>
+          <tr><td class="file">scripts/experiments/lorentzian_knn.py</td><td>Experiment only (D5): Lorentzian-distance kNN, walk-forward 70/30. Adopt only if holdout precision &gt; 40% with n ≥ 100 — else documented and dropped.</td><td class="mono">run_pair() · lorentzian_dist()</td></tr>
+          <tr><td class="file">deploy/</td><td>bitreinforcex.service (systemd), backup.sh (WAL-safe sqlite3 .backup, keeps 14), litestream.yml (continuous replication).</td><td class="mono">systemctl enable --now bitreinforcex · journalctl -u bitreinforcex -f</td></tr>
+          <tr><td class="file">vendor/pandas-ta</td><td>Vendored pandas_ta 0.3.14b0 — upstream deleted from PyPI/GitHub; the reason for the numpy&lt;2 pin.</td><td class="mono">installed by requirements.txt (./vendor/pandas-ta)</td></tr>
+          <tr><td class="file">tests/ · 16 files</td><td>167 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="mono">pytest -q → 167 passed</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 05 THE HOURLY CYCLE -->
+  <section id="cycle">
+    <div class="eyebrow">05 — the hourly cycle</div>
+    <h2>One tick, <em>step by step</em>.</h2>
+    <p class="lead">What actually happens when the clock hits :30 IST. Steps 1–4 run once per cycle; steps 5–10 run for each of the 48 pairs (concurrency-capped at <code>MAX_CONCURRENCY=5</code>).</p>
+
+    <div class="steps">
+      <div class="step">
+        <h4>Scheduler tick — IST :30 is the UTC :00 candle close <span class="src"><b>telegram_app.scheduler_loop()</b> · signals.is_candle_close_minute()</span></h4>
+        <p>A 30-second poll fires when the IST minute equals 30. The datetime is converted to UTC before the cascade — Binance candles close on UTC boundaries, and the pre-v3 code cascaded off IST hours, running every 4h/1d/1w analysis hours away from a real close (defect A1). <code>signals.timeframes_due(dt_utc)</code>: every UTC hour → <code>[1h]</code>; hour % 4 == 0 → +<code>4h</code>; UTC 00:00 → +<code>1d</code>; Monday UTC 00:00 → +<code>1w</code>.</p>
+        <div class="tablewrap" style="margin-top:12px"><table class="t" style="min-width:620px">
+          <thead><tr><th>timeframe</th><th>candle closes (UTC)</th><th>signal lands (IST)</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1h</td><td class="mut">every hour :00</td><td><b>every hour at :30</b></td></tr>
+            <tr><td class="mono">4h</td><td class="mut">00 / 04 / 08 / 12 / 16 / 20</td><td><b>1:30 · 5:30 · 9:30 · 13:30 · 17:30 · 21:30</b></td></tr>
+            <tr><td class="mono">1d</td><td class="mut">00:00</td><td><b>5:30</b></td></tr>
+            <tr><td class="mono">1w</td><td class="mut">Monday 00:00</td><td><b>Monday 5:30</b></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="step">
+        <h4>Hourly RSS ingest — before the cycle, 7-day dedup window <span class="src"><b>ingestion.ingest_all()</b> · rag.RagIndex.ingest()</span></h4>
+        <p>All 8 RSS feeds are pulled, normalized, and asset-tagged (<code>tag_assets</code>: short tickers like OP/AR only match as <code>$OP</code>/<code>OPUSDT</code> to avoid English-word false hits). Each new item is embedded and cosine-checked (≥ 0.9 ⇒ duplicate) against the corpus of the last 7 days — <code>dedup_window_ts = now − 7·86400</code> — so a story that resurfaces after a week is legitimately new again. Running ingest <i>before</i> the cycle means this hour's headlines ground this hour's prompts.</p>
+      </div>
+
+      <div class="step">
+        <h4>Clear the OHLCV cache — one market snapshot per cycle <span class="src"><b>utils/data_fetcher.clear_ohlcv_cache()</b> · called by cycle.run_cycle()</span></h4>
+        <p>The module-level TTL cache (<code>OHLCV_TTL=300</code>s) means BTCUSDT is fetched once per cycle no matter how many agents ask. Clearing it at cycle start (defect fix A8) guarantees all agents in one cycle see the <b>same</b> frames — without it a mid-cycle TTL expiry could hand different agents different candles for the same pair. Every fetch also drops the in-progress candle (<code>CLOSED_CANDLES_ONLY=true</code>, defect A2): live analysis only ever sees closed bars, exactly like the backtest.</p>
+      </div>
+
+      <div class="step">
+        <h4>Build the market context — ONCE per timeframe <span class="src"><b>market_context.build_market_context()</b></span></h4>
+        <p>The single biggest v1 cost defect: all ~48 pairs re-ran identical market-wide work (~576 LLM calls/cycle). Now computed once per (cycle, TF) into a <code>MarketContext</code> dataclass, using Research's <i>own</i> pure logic methods so values are bit-for-bit what the per-coin path produced:</p>
+        <ul>
+          <li><b>Overall news scan</b> (1 LLM call) grounded in the 8 freshest stored headlines (48 h window), each formatted <code>[3h ago] [tier-1] Title</code> so the model can weight recency and credibility. Wrapped in <code>_SharedOverallNews</code> so every downstream news call reuses it.</li>
+          <li><b>SPX / DXY scores</b> — Research logic 2/5: with <code>MACRO_PRICES_ENABLED</code>, real 5-day trends (FRED <code>SP500</code>/<code>DTWEXBGS</code>, stooq <code>^spx</code> fallback) carry 60% and news sentiment 40%; DXY is negated (strong dollar = crypto headwind).</li>
+          <li><b>BTC dominance level + ROC</b> — CoinGecko level, rate-of-change vs the stored <code>macro_snapshots</code> row ≥ 20 h old, then a new snapshot is written (defect fix A5 — the old BTCDOMUSDT spot fetch never existed and always scored 0.0).</li>
+          <li><b>Fear &amp; Greed</b> (alternative.me) and the <b>money-flow phase</b> (v1 heuristic or quantitative v2 behind <code>MONEY_FLOW_V2</code>).</li>
+          <li><b>Ecosystem driver scans</b> — every distinct driver ticker needed by the universe gets 1 indicator decide (cached OHLCV, no LLM) + 1 grounded pair news scan (1 LLM call). With today's 48-pair universe that is <b>36 distinct drivers</b>, so a full cycle costs ≈ <b>87 LLM calls</b> (3 market-wide + 36 drivers + 48 pair scans) vs ~576 before. (The docstring's "~73" was computed before the v3 universe swap grew the driver set.)</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h4>Per-pair decide() — four voters, one brain <span class="src"><b>brain/decision_maker.DecisionMaker.decide()</b> · cycle.run_cycle() fan-out</span></h4>
+        <p>Each pair runs the full roster in a worker thread. What each voter actually does:</p>
+
+        <div class="grid" style="margin-top:16px">
+          <div class="card" style="border-color:rgba(34,211,238,.25)">
+            <h3>Indicator agent<small>agents/indicator_agent.py + custom_indicators.py + regime_agent.py · no LLM</small></h3>
+            <p><b>1 · Closed-candle frame</b> — 500 candles from the per-cycle cache, standardized.</p>
+            <p><b>2 · Regime classify</b> (every decide, gates only when <code>GATE_V2_ENABLED</code>) — ADX(14) + CHOP(14) + realized-vol percentile (rolling std-20 of log returns ranked over 100 bars). Hysteresis walked over the last 50 bars: <b>enter</b> trending at ADX ≥ 25 <b>OR</b> CHOP ≤ 38.2; <b>exit</b> at ADX ≤ 20 <b>AND</b> CHOP ≥ 45; minimum dwell 2 bars between flips. Direction from +DI vs −DI. Not trending ⇒ "ranging" if the exit condition holds cleanly, else "mixed".</p>
+            <p><b>3 · Type-1 direct signals</b> — regime picks the set. Ranging/mixed: <b>NWE</b> (event mode: fires only on the bar that <i>crosses</i> out of the band — re-firing requires re-entry, an inherent cooldown; state mode re-fires every bar outside) + <b>Chandelier Exit</b> (ATR-22 × 3.0 stop flip) + <b>AlphaTrend</b> (ATR-14 + MFI ratchet, signal vs 2-bars-ago). Trending: Chandelier + AlphaTrend + <b>supertrend_flip</b> (10, 3 — reuses the type-2 columns, conf 0.65 + distance/ATR) + <b>Donchian 20/55 breakout</b> (prior-window, no lookahead) + <b>squeeze release</b> (BB 20/2 inside KC 20/1.5, released within 3 bars). Merged by learned per-indicator credibility weights (default 0.7; +0.05 on reward, −0.07 on punish, clipped [0.1, 0.95]).</p>
+            <p><b>4 · Type-2 rule votes</b> — MA ribbon 20/50 (±2), RSI-14 &lt;30/&gt;70 (±1), MACD histogram sign (±1), Bollinger touch (±1), StochRSI 20/80 (±1), SuperTrend direction (±2), and — behind <code>DIVERGENCE_VOTES</code> on 4h/1d — RSI/OBV pivot divergences (±1 each, MAD-prominence filtered).</p>
+            <p><b>5 · Blend</b> — learned type1/type2 weights (default <b>0.65 / 0.35</b>) combine the two heads; the winning action's share of the score mass is the confidence. The blend snapshot (shares + <code>fired_direct</code>) is what the grader later replays.</p>
+            <div class="tags"><span class="tag">NWE h=8 mult=3</span><span class="tag">chandelier 22×3</span><span class="tag">alpha_trend 14</span><span class="tag v">supertrend 10,3</span><span class="tag v">donchian 20/55</span><span class="tag v">squeeze 20/2 · 20/1.5</span><span class="tag a">blend .65/.35</span></div>
+          </div>
+
+          <div class="grid g2">
+            <div class="card">
+              <h3>News agent<small>agents/news_agent.py · gpt-4o-mini · softmax bandit</small></h3>
+              <p>Reuses the shared overall scan; runs one pair scan grounded in up to 5 stored headlines for the base asset (48 h, <code>[age][tier]</code>-prefixed). <b>Empty corpus ⇒ hallucination guard</b>: the prompt orders "output Neutral with confidence ≤ 0.4 and do not invent headlines" (defect fix A4). Features: <b>10-dim</b> — 5 sentiment (overall score, pair score, panic flag, overall bias, pair bias) + 5 typed-event features (strongest bull/bear surprise·tier, hack/regulatory flag, signed ETF/listing, unlock flag — all 0.0 unless <code>NEWS_EVENTS_ENABLED</code>). Action from a 3×F linear softmax bandit (ε = 0.1, lr = 0.1, REINFORCE-style update); confidence = max(overall, pair) LLM confidence. Legacy 5-dim policy files zero-pad-migrate with logits preserved exactly (<code class="p">.bak-5dim</code> backup).</p>
+            </div>
+            <div class="card">
+              <h3>Research agent<small>agents/research_agent.py · 5 logics → 10 features → bandit</small></h3>
+              <p><b>L1 ecosystem</b> — primary ecosystem's drivers from the shared context; eco_score = clip(0.6·indicator + 0.4·news). <b>L2 SPX</b> — 0.6·price-trend + 0.4·news (news-only when no price source). <b>L3 money-flow</b> — v1 BTC→ETH→alt heuristic, or v2 quantitative phases (risk_off −1.0 · btc_led −0.8 · eth_rotation −0.2 · alt_breadth +0.7 · else soft blend) using dominance ROC. <b>L4 dominance</b> — ROC/0.02 clipped, level tilt (≥60 ⇒ +0.3, ≤40 ⇒ −0.3) or news fallback; converted to alt-favorability. <b>L5 DXY</b> — like L2 but <b>negated</b>. Plus child trend (MA50/200 ±0.5 each), parent trend (leader or BTC), bias 0.2. Bandit: 3×10 softmax, ε = 0.08, lr = 0.05; confidence = σ(2.5·|winning logit|).</p>
+            </div>
+            <div class="card">
+              <h3>Derivatives agent<small>agents/derivatives_agent.py + utils/derivatives_fetcher.py · keyless</small></h3>
+              <p>Gated by <code>has_futures()</code> (USDM market list, 24 h TTL). Snapshot per pair — funding history (30), OI change over 6 h, top-trader position L/S, global account L/S — cached <b>55 min</b> (<code>DERIV_TTL_SECONDS=3300</code>) so the 4h/1d cascade reuses the hourly fetch: 48 × 3 ≈ <b>144 req/h</b> vs Binance's ~500/5min budget. 8 features in [−1,1]: funding_now (±0.1%/8h saturates), funding z-score, <b>funding-extreme signed against the crowded side</b> (|f| ≥ 0.05%/8h), tanh OI change, OI-price divergence (new longs +0.5 · new shorts −0.5 · short-covering −0.25 · long flush +0.25), tanh-log position/account skews, bias 0.2. Same bandit as Research; conf clamped [0.5, 0.9]. No future / fetch error ⇒ <code>available: false</code>, conf 0.0 — a mathematical no-op in the vote, and NULL feats mean the grader applies no reward.</p>
+            </div>
+            <div class="card">
+              <h3>Brain aggregation<small>brain/decision_maker.py · Σ w·a·conf</small></h3>
+              <p>score = Σ weight·action·confidence with action ∈ {buy +1, skip 0, sell −1}. Weights are the normalized learned scores — defaults <b>indicator 3.0 · research 2.0 · derivatives 1.5 · news 1.0</b> (⇒ 0.40/0.27/0.20/0.13), shifted positive and normalized to 1; <code>setdefault</code> absorbs new voters into old policy files with no migration. Final action: <b>deadzone ±0.05</b> on the score. final confidence = |score| / Σ(w·conf). <b>Deadzone v2 (A7)</b>: a directional call additionally needs conf ≥ <code>BRAIN_MIN_CONF=0.25</code> — always computed and stored as <code>final_action_v2</code> (shadow), only <i>drives</i> the action when <code>BRAIN_DEADZONE_V2=true</code>. The derivatives voter is only called when <code>DERIVATIVES_ENABLED</code>; off ⇒ byte-identical 3-voter behavior.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <h4>Gate v2 — the regime × trigger truth table <span class="src"><b>signals.should_emit_signal_v2()</b> · behind GATE_V2_ENABLED · no regime stamp ⇒ v1 gate fallback</span></h4>
+        <p>The whole emission policy. Volume confirmation = last closed volume &gt; SMA-20(volume) (<code>vol_ok</code>, computed in the indicator agent; missing data never blocks). The trend-trigger direction is the majority among fired trend triggers; regime direction from the classifier.</p>
+        <div class="tablewrap" style="margin-top:14px">
+          <table class="truth">
+            <thead><tr>
+              <th style="width:96px">timeframe</th>
+              <th class="rg-r">● ranging</th>
+              <th class="rg-m">● mixed</th>
+              <th class="rg-t">● trending (up / down)</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td class="tf">1h</td>
+                <td>NWE crossing + <b>vol_ok</b> ⇒ emit <span class="rsn">nwe_ranging</span><br><span class="mut">NWE without volume ⇒</span> <span class="sup">low_volume</span><br><span class="mut">Confidence alone <b>never</b> emits on 1h.</span></td>
+                <td>NWE crossing + vol_ok + <b>brain agreement</b> (final == NWE) ⇒ <span class="rsn">nwe_mixed</span><br><span class="mut">disagreement ⇒</span> <span class="sup">no_brain_agreement</span></td>
+                <td>NWE suppressed ⇒ <span class="sup">nwe_trend_suppressed</span><br><span class="mut">aligned trend trigger + vol_ok ⇒</span> <span class="rsn">trend_1h</span> <span class="offd">GATE_1H_TREND off</span> <span class="mut">— needs a dedicated 1h backtest first</span></td>
+              </tr>
+              <tr>
+                <td class="tf">4h / 1d / 1w</td>
+                <td colspan="2">conf ≥ 0.80 ⇒ <span class="rsn">conf_over_80</span> <span class="mut">(mixed included)</span><br>NWE would need <span class="offd">GATE_NWE_HIGHER_TF off</span> — measured <b>12.5%</b> TB precision (4h ranging), amended off ⇒ <span class="sup">nwe_higher_tf_disabled</span><br><span class="mut">NWE + no volume ⇒</span> <span class="sup">low_volume</span> · <span class="mut">NWE in mixed vs brain ⇒</span> <span class="sup">no_brain_agreement</span></td>
+                <td>aligned trigger majority + vol_ok ⇒ <span class="rsn">trend_continuation</span> <span class="mut">(41.9/39.7% at 4h)</span><br>counter-trend supertrend flip ⇒ <span class="rsn">trend_reversal</span> <span class="offd">GATE_TREND_REVERSAL off</span> <span class="mut">— graded <b>0/6</b> decided, amended off ⇒</span> <span class="sup">reversal_disabled</span><br><span class="mut">counter-trend without a flip ⇒</span> <span class="sup">counter_trend_no_flip</span> · <span class="mut">no volume ⇒</span> <span class="sup">low_volume</span><br>no trigger: trend-aligned conf ≥ 0.80 ⇒ <span class="rsn">conf_over_80</span> · <span class="mut">counter-trend conf ⇒</span> <span class="sup">counter_trend_conf</span> · <span class="mut">NWE-only ⇒</span> <span class="sup">nwe_trend_suppressed</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="color:var(--muted);font-size:13px;margin-top:12px">Every suppression returns its reason string — that's the gate-funnel telemetry in the backtest reports (<span class="sup">no_trigger</span> is the silent default). One more veto lives outside this table: with <code>META_GATE_ENABLED</code> (off), an emission with <code>meta_p</code> &lt; <code>META_GATE_THRESHOLD=0.55</code> is suppressed as <span class="sup">meta_gate</span> in <code>cycle.py</code>.</p>
+      </div>
+
+      <div class="step">
+        <h4>Barrier prices recorded — TP 1.5×ATR, SL 1.0×ATR <span class="src"><b>grading/barriers.barrier_prices()</b> · cycle.py</span></h4>
+        <p>For every <b>directional</b> final action (emitted or not): entry = the true close of the last closed candle; ATR from the regime snapshot (simple rolling mean of true range, <code>ATR_LEN=14</code>). <code>BARRIER_MULTS</code>: 1h/4h/1d = (1.5, 1.0), 1w = (2.0, 1.25). Buy: TP = entry + 1.5·ATR, SL = entry − 1.0·ATR; sell mirrored. These exact prices are stored on the prediction row — the grader never recomputes them.</p>
+      </div>
+
+      <div class="step">
+        <h4>Meta shadow stamps <span class="src"><b>jobs/nightly.meta_probability() · apply_calibration()</b> · behind META_SHADOW=true</span></h4>
+        <p>A prediction-shaped dict is built from the in-flight decision and pushed through the nightly artifacts: <code>meta_p</code> = p(correct) from <code class="p">logs/meta_model.pkl</code> (mtime-cached), <code>calibrated_conf</code> = np.interp over the isotonic knots in <code class="p">logs/calibration.json</code>. Both are None until the artifacts exist — identity shadow, zero effect on emission until <code>META_GATE_ENABLED</code>.</p>
+      </div>
+
+      <div class="step">
+        <h4>Record the full prediction row <span class="src"><b>persistence.Store.record_prediction()</b></span></h4>
+        <p>Everything needed to grade and re-train later, snapshotted at decide time: identity + timing (<code>candle_close_ts</code> = CLOSE epoch of the entry candle, <code>grade_due_ts</code> = close + k·TF), the final action/confidence/score + <code>final_action_v2</code>, per-agent replay payloads (<code>news_feats</code> 10-dim + action_idx, <code>research_feats</code> 10-dim + idx, <code>indicator_blend</code>, <code>deriv_feats</code> 8-dim + idx), regime + regime_feats, atr/tp_price/sl_price, trigger_source (emit reason), meta_p, calibrated_conf, brain_weights, session_id. <b>Skips are recorded too</b> — a skip that misses a move is a gradeable error (−1.0).</p>
+      </div>
+
+      <div class="step">
+        <h4>Broadcast + durable session <span class="src"><b>telegram_app.Broadcaster.broadcast()</b> · signals.fmt_signal_message()/fmt_brain_dump()</span></h4>
+        <p><b>Customer channel</b> gets the clean signal: action, NWE reading, pair, TF, confidence, reason, regime, trigger, calibrated confidence (when present), a one-line derivatives note ("funding +0.031%/8h, OI rising 2.4%, crowded longs — squeeze risk"), and the disclaimer. <b>Dev channel</b> gets the same message + the brain dump (per-agent action/conf, meta_p, NWE direct) + a 3-row inline keyboard: <code>BUY / SELL / SKIP LEARNING</code> · <code>1.0 / −4.0 / Auto-Assign</code> · <code>CLOSE SESSION</code>. A durable session row is created first (its id rides in the callback data), the dev send retries once, and a session whose dev send failed twice is <b>deactivated</b> — a button-less ACTIVE session would be unreachable forever (fix A8). The previous active session for the same (pair, TF) is superseded; sessions expire after <code>SESSION_TTL_HOURS=12</code> (keyboard stripped on GC).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 GRADING & LEARNING -->
+  <section id="grading">
+    <div class="eyebrow">06 — grading &amp; learning loop</div>
+    <h2>Judge the <em>path</em>, not the endpoint.</h2>
+    <p class="lead">A background task polls every <code>GRADER_INTERVAL_S=60</code> seconds for predictions whose horizon has printed, fetches the post-entry path, labels it, and pays each agent for what it said. <span class="src"><b>grader.py · grading/barriers.py</b></span></p>
+
+    <div class="kv" style="margin-top:22px">
+      <span class="k2">grade after k closed candles · <b>1h: k=3</b> · <b>4h: k=2</b> · <b>1d: k=1</b> · <b>1w: k=1</b></span>
+      <span class="k2 vio">fixed-horizon θ · <b>1h ±0.4%</b> · <b>4h ±1.0%</b> · <b>1d ±2.5%</b> · <b>1w ±5%</b></span>
+      <span class="k2 amb">path fetch: first candle whose OPEN == candle_close_ts (close-epoch convention, A-series fix) · retries until k closed candles exist</span>
+    </div>
+
+    <h3 class="sub">Triple-barrier, first touch wins<small>grading/barriers.triple_barrier() — same function live and in backtests</small></h3>
+    <div class="tbfig">
+      <svg viewBox="0 0 860 300" role="img" aria-label="Triple barrier diagram">
+        <defs>
+          <linearGradient id="pgrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#7c5cff"/>
+          </linearGradient>
+        </defs>
+        <line x1="70" y1="60"  x2="820" y2="60"  stroke="#34f5c5" stroke-width="1.5" stroke-dasharray="6 5" opacity=".85"/>
+        <line x1="70" y1="150" x2="820" y2="150" stroke="#646a96" stroke-width="1" stroke-dasharray="2 5"/>
+        <line x1="70" y1="235" x2="820" y2="235" stroke="#ff4d8d" stroke-width="1.5" stroke-dasharray="6 5" opacity=".85"/>
+        <line x1="640" y1="30" x2="640" y2="270" stroke="#ffcf5c" stroke-width="1.2" stroke-dasharray="5 5" opacity=".8"/>
+        <text x="74" y="48"  fill="#34f5c5" font-size="12" font-family="JetBrains Mono, monospace">TP = entry + 1.5·ATR   → label "tp" · reward +1</text>
+        <text x="74" y="141" fill="#9499c4" font-size="12" font-family="JetBrains Mono, monospace">entry (true candle close)</text>
+        <text x="74" y="257" fill="#ff4d8d" font-size="12" font-family="JetBrains Mono, monospace">SL = entry − 1.0·ATR   → label "sl" · reward −4</text>
+        <text x="648" y="44" fill="#ffcf5c" font-size="12" font-family="JetBrains Mono, monospace">time barrier: k candles</text>
+        <text x="648" y="62" fill="#ffcf5c" font-size="11" font-family="JetBrains Mono, monospace">"timeout" → exit at k-th close</text>
+        <circle cx="70" cy="150" r="4.5" fill="#22d3ee"/>
+        <path d="M70,150 L150,120 L230,170 L310,95 L390,130 L470,72 L520,60" fill="none" stroke="url(#pgrad)" stroke-width="2.5"/>
+        <circle cx="520" cy="60" r="5" fill="#34f5c5"/>
+        <text x="500" y="88" fill="#34f5c5" font-size="11.5" font-family="JetBrains Mono, monospace">first touch decides</text>
+        <path d="M70,150 L140,190 L210,160 L280,215 L330,235" fill="none" stroke="#ff4d8d" stroke-width="1.6" opacity=".55" stroke-dasharray="4 3"/>
+        <text x="240" y="262" fill="#ff4d8d" opacity=".8" font-size="11.5" font-family="JetBrains Mono, monospace">…even if price recovers later — SL-first counts</text>
+      </svg>
+    </div>
+    <p class="lead" style="font-size:14px;margin-top:14px">Scans at most k candles after entry. A candle whose range spans <b>both</b> barriers is unresolvable from OHLC alone — the reading is the <b>pessimistic SL-first</b> (<code>ambiguous=true</code>), consistent with the precision-first brand. Fewer than k candles and no touch ⇒ "incomplete" (grader retries later; backtest drops tail emissions). The <b>fixed-horizon ±θ label is always computed and recorded alongside</b> for comparability — path-blind grading flattered NWE by judging endpoints while stop-outs happened mid-path. Legacy rows without barrier prices grade via the fixed-horizon path forever. TB labels only <i>drive rewards</i> when <code>TB_GRADING_ENABLED</code>.</p>
+
+    <h3 class="sub">Reward map v2<small>grader.reward_for_v2() · active when TB_GRADING_ENABLED · config REWARD_*</small></h3>
+    <div class="tablewrap"><table class="t" style="min-width:680px">
+      <thead><tr><th>case</th><th>label logic</th><th style="width:170px">reward</th></tr></thead>
+      <tbody>
+        <tr><td><b>Correct call</b> (incl. skip when flat)</td><td class="mut">predicted == realized (tp ⇒ own direction; timeout falls back to fixed-horizon label)</td><td class="num pos">+1.0</td></tr>
+        <tr><td><b>Wrong direction</b></td><td class="mut">directional call, opposite realized (sl ⇒ opposite direction)</td><td class="num neg">−4.0</td></tr>
+        <tr><td><b>Timeout-flat</b></td><td class="mut">directional call, market went nowhere</td><td class="num neg">−1.5</td></tr>
+        <tr><td><b>Missed move</b></td><td class="mut">predicted skip, market moved decisively</td><td class="num neg">−1.0</td></tr>
+      </tbody>
+    </table></div>
+    <p class="archnote">The asymmetry is deliberate: a wrong direction costs 4 corrects; sitting in a dead market with a directional call costs 1.5; missing a move is the cheapest sin. Legacy map (flag off): flat +1/−4 on the fixed-horizon label.</p>
+
+    <h3 class="sub">The claim CAS — auto vs manual can't double-grade<small>persistence.claim_grading() · grader.py (fix A8)</small></h3>
+    <p class="lead" style="font-size:14.5px">The auto-grader runs in a worker thread; a human's Telegram callback lands on the event loop. Both can reach the same pending row. <code>claim_grading()</code> is a single-statement compare-and-swap — <code>UPDATE predictions SET graded=1, label_source=? WHERE id=? AND label_source='pending'</code> — and exactly one caller sees rowcount 1. The auto-grader claims <b>before</b> applying rewards and silently drops the row if it loses. A manual claimer that loses re-reads the row and takes the <b>correction path</b> instead.</p>
+
+    <h3 class="sub">Manual feedback flow — human verdict always nets out<small>telegram_app.handle_callback() → grader.apply_manual_feedback()</small></h3>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="card"><h3>1 · Buttons</h3><p>Row 1 sets the session's true outcome (<code>BUY/SELL/SKIP LEARNING</code>). Row 2 picks the news reward — explicit <code>1.0</code> / <code>−4.0</code> or <code>Auto-Assign</code> (match-based); pressing it applies the grade and closes the session (keyboard stripped). <code>SKIP LEARNING</code> + reward ⇒ session closed, nothing trained. <code>CLOSE SESSION</code> just deactivates.</p></div>
+      <div class="card"><h3>2 · Pending row</h3><p>Manual claims the CAS, applies per-agent rewards from the stored snapshots with source <code>manual</code>, records the outcome (no realized_return — the human judged it), and back-fills the session's true outcome.</p></div>
+      <div class="card"><h3>3 · Already auto-graded</h3><p>Correction math: for each agent, <b>correction = manual_reward − prior_auto_reward</b> applied on the same stored features, recorded with source <code>correction</code> — the net policy effect equals the human verdict. (The brain's slow priority drift keeps the earlier auto signal — not worth unwinding at LR 0.05.)</p></div>
+    </div>
+
+    <h3 class="sub">Stateless apply_reward — the historic feature-race fix<small>news/research/derivatives .apply_reward(feats, action_idx, r) · indicator .apply_reward(blend, r)</small></h3>
+    <p class="lead" style="font-size:14.5px">The original agents trained on <code>self._last_features</code> — with 48 pairs analysed concurrently, the grader would reward agent state belonging to <i>whatever pair ran last</i>. Now every reward replays the exact snapshot recorded at decide time: the bandits update from stored (features, action_idx); the indicator agent replays the stored blend (type-1/2 shares + <code>fired_direct</code>) instead of re-reading its multi-MB predictions log (the old <code>learn()</code> was O(file size) per call <i>and</i> racy). Finally <code>dm.apply_brain_feedback()</code> drifts the brain's priority scores: Δ = (+1 correct / −4 wrong)·conf per agent, <b>learning rate 0.05</b>, news score additionally nudged by the explicit news reward — then weights renormalize. Slow by design: Indicator &gt; Research &gt; News stays stable unless long-term evidence says otherwise.</p>
+  </section>
+
+  <!-- 07 NIGHTLY -->
+  <section id="nightly">
+    <div class="eyebrow">07 — nightly self-training</div>
+    <h2>02:00 IST — <em>learn from the track record</em>.</h2>
+    <p class="lead">The third background task (<code>jobs/nightly.nightly_loop()</code>, hour set by <code>NIGHTLY_HOUR_IST=2</code>) pulls every graded prediction joined with its outcome (<code>persistence.training_rows()</code>) and fits four artifacts. All shadow-first: nothing gates until its evidence criteria hold. Trigger manually anytime with <code class="p">python scripts/run_training.py</code>.</p>
+
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card" style="border-color:rgba(124,92,255,.3)">
+        <h3>1 · Meta-label model<small>jobs/nightly.train_meta_model() → logs/meta_model.pkl + logs/meta_metrics.json</small></h3>
+        <p>p(final call correct | prediction-time features). LogisticRegression (balanced classes) behind a StandardScaler; LightGBM only if installed and <code>META_MODEL=lgbm</code>. Needs ≥ <code>META_MIN_ROWS=500</code> graded <b>directional</b> rows; the split is <b>time-ordered 80/20</b> — never shuffled, because random splits leak future regimes into train. Degenerate train labels ⇒ skip. Holdout metrics (AUC, base rate, precision at the 0.55 gate, lift) land in meta_metrics.json.</p>
+        <p><b>Enable criteria for META_GATE_ENABLED:</b> holdout <b>AUC ≥ 0.60</b> AND <b>precision lift ≥ +5 pts</b>, sustained over <b>≥ 4 weeks of shadow</b>. Until then meta_p is a column, not a veto.</p>
+      </div>
+      <div class="card" style="border-color:rgba(34,211,238,.28)">
+        <h3>2 · Confidence calibration<small>jobs/nightly.fit_calibration() → logs/calibration.json</small></h3>
+        <p>Per-timeframe isotonic regression mapping the brain's raw <code>final_confidence</code> to the observed hit rate — exported as <b>JSON knots</b> ({x: […], y: […]} per TF). Runtime application is a single <code>np.interp</code> (<code>apply_calibration()</code>): <b>zero sklearn on the hot path</b>. TFs with fewer than <code>CALIBRATION_MIN_ROWS_PER_TF=150</code> graded rows are omitted (identity mapping — the Telegram line simply doesn't show a calibrated value).</p>
+      </div>
+      <div class="card" style="border-color:rgba(52,245,197,.26)">
+        <h3>3 · Empirical-Bayes direct confidences<small>jobs/nightly.fit_direct_conf() → logs/indicator_conf.json (D4)</small></h3>
+        <p>Replaces the hardcoded 0.9s that treated every Chandelier/AlphaTrend flip as near-certain. Groups graded rows by which direct signal fired (<code>blend.fired_direct</code>); win = indicator action matched the realized label; shrunk toward the global directional win rate: <b>p̂ = (wins + 20·p̄) / (n + 20)</b>, and <b>conf = 0.5 + 0.45·p̂</b> keeps the [0.5, 0.95] range the merge code expects. Indicators with <b>n &lt; 30</b> get no entry — callers keep their default. Consumed at decide time (mtime-cached) only when <code>EMPIRICAL_DIRECT_CONF=true</code>; the flag <b>self-arms in effect</b> once live data accumulates.</p>
+      </div>
+      <div class="card" style="border-color:rgba(255,207,92,.26)">
+        <h3>4 · Ecosystem refresh + dev summary<small>scripts/refresh_ecosystems.py · behind ECOSYSTEMS_AUTO (off)</small></h3>
+        <p>Maps ~10 CoinGecko categories onto the ecosystem names, intersects with the 48-pair universe, writes <code class="p">logs/ecosystems_cache.json</code> (~10 calls/night, free tier). The research agent overlays cached <b>membership</b> only when the flag is on AND the cache is &lt; 7 days old; <b>ECOSYSTEM_DRIVERS are never auto-changed</b> — they encode priority judgment. Then the dev channel gets the nightly summary: <span class="src">🌙 nightly training · rows=N · calibrated=[tfs] · meta: AUC=… lift=… (n_hold=…)</span> — or "below META_MIN_ROWS, model skipped".</p>
+      </div>
+    </div>
+
+    <h3 class="sub">The 29 meta features — one builder, no train/serve skew<small>jobs/features.py FEATURE_NAMES · used by both training and cycle.py stamping</small></h3>
+    <div class="codeblock">regime_trend_up · regime_trend_down · regime_ranging · regime_mixed        <span class="c"># one-hot regime</span>
+adx/50 · chop/100 · vol_pct · atr_pct(=min(atr/entry,.25)·4) · vol_ok      <span class="c"># regime features</span>
+agreement(voters agreeing with final / voters) · n_voters/4                <span class="c"># consensus</span>
+final_conf · indicator_conf · research_conf · news_conf · deriv_conf       <span class="c"># confidences</span>
+deriv_available · funding_extreme · funding_z_abs                          <span class="c"># positioning</span>
+tf_1h · tf_4h · tf_1d · tf_1w                                              <span class="c"># one-hot timeframe</span>
+hour_sin · hour_cos                                                        <span class="c"># time of day (cyclic)</span>
+trigger_nwe · trigger_trend · trigger_conf · emitted                       <span class="c"># gate outcome</span></div>
+    <p class="archnote">Every feature must be knowable at prediction time — the builder never touches outcome fields. At train time the input is a DB row; at decide time cycle.py builds the same dict shape from the in-flight decision. One code path is the whole guard against train/serve skew (tested in tests/test_nightly_training.py).</p>
+  </section>
+
+  <!-- 08 ENV VARS -->
+  <section id="env">
+    <div class="eyebrow">08 — env vars, the complete reference</div>
+    <h2>Every knob, <em>one table</em>.</h2>
+    <p class="lead">Everything in <code>.env.example</code> plus the config-only keys from <code>config.py</code>. "Default" is the code default; "now" is the current recommended production state (matches README's flag table). Flags marked <span class="pill never">measured off</span> were turned off <b>by backtest evidence</b> — re-enabling them means re-arguing the numbers.</p>
+
+    <div class="criteria warn" style="margin-top:24px"><b>⚠ the dotenv trap:</b> python-dotenv treats an inline <code style="color:var(--amber);background:none;border:none"># comment</code> after an <b>empty</b> value as the value itself — <code style="color:var(--amber);background:none;border:none">CUSTOMER_CHAT_ID=   # channel id</code> silently sets the id to the comment text. Keep comments on their own lines for empty keys. This bit production once; the fix is commit <b>f0d9822</b> and the warning now lives at the top of .env.example.</div>
+
+    <div class="tablewrap" style="margin-top:22px;max-height:none">
+      <table class="t" style="min-width:1080px">
+        <thead><tr><th style="width:230px">key</th><th style="width:150px">default</th><th style="width:110px">now</th><th>what it does</th><th style="width:26%">when / why to change</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="5">required</td></tr>
+          <tr><td class="mono">OPENAI_API_KEY</td><td class="mono dim">—</td><td><span class="pill req">required</span></td><td class="mut">LLM for the news + research agents (client built lazily in agents/llm_client.py — imports never need it).</td><td class="mut">preflight fails without it; tests never need it (mock client).</td></tr>
+          <tr><td class="mono">TELEGRAM_BOT_TOKEN</td><td class="mono dim">—</td><td><span class="pill req">required</span></td><td class="mut">Bot A — sends signals to the customer + dev channels; the runtime refuses to start without it.</td><td class="mut">rotate via BotFather if leaked; restart the service.</td></tr>
+          <tr class="grp"><td colspan="5">channels (numeric chat/channel ids)</td></tr>
+          <tr><td class="mono">CUSTOMER_CHAT_ID</td><td class="mono dim">unset</td><td><span class="pill on">set</span></td><td class="mut">Public signals channel — clean signal text, no buttons.</td><td class="mut">leave unset for a dev-only deployment; signals then reach only the dev channel.</td></tr>
+          <tr><td class="mono">DEV_CHAT_ID</td><td class="mono dim">unset</td><td><span class="pill on">set</span></td><td class="mut">Dev channel — signal + brain dump + 3-row feedback keyboard + nightly training summary.</td><td class="mut">unset ⇒ no manual grading and no nightly report; strongly recommended.</td></tr>
+          <tr><td class="mono">TELEGRAM_SIGNALS_CHANNEL_ID<br>TELEGRAM_DEV_CHANNEL_ID</td><td class="mono dim">unset</td><td><span class="pill off">alternates</span></td><td class="mut">Accepted aliases for the two ids (telegram_app._chat_id tries names in order).</td><td class="mut">use whichever naming you already had; first non-empty wins.</td></tr>
+          <tr class="grp"><td colspan="5">optional</td></tr>
+          <tr><td class="mono">TELEGRAM_CONTROL_BOT_TOKEN</td><td class="mono dim">unset</td><td><span class="pill off">optional</span></td><td class="mut">Bot B — on-demand agent commands: /news /indicator /research /context /regime /derivs.</td><td class="mut">set when you want to poke agents without waiting for a cycle.</td></tr>
+          <tr><td class="mono">FRED_API_KEY</td><td class="mono dim">unset</td><td><span class="pill on">get one (free)</span></td><td class="mut">Unlocks real DXY (DTWEXBGS) and official SP500 series for research logics 2/5.</td><td class="mut">without it SPX falls back to keyless stooq ^spx and DXY to news-only. fred.stlouisfed.org.</td></tr>
+          <tr class="grp"><td colspan="5">core tuning</td></tr>
+          <tr><td class="mono">LLM_MODEL</td><td class="mono">gpt-4o-mini</td><td><span class="pill on">keep</span></td><td class="mut">Model for both LLM agents (agents/llm_client.py, JSON mode).</td><td class="mut">swap to test a cheaper/better model; must support response_format json_object.</td></tr>
+          <tr><td class="mono">MAX_CONCURRENCY</td><td class="mono">5</td><td><span class="pill on">keep</span></td><td class="mut">Semaphore width for the per-pair fan-out in cycle.run_cycle.</td><td class="mut">raise on a beefier box — watch Binance spot rate limits and LLM TPM.</td></tr>
+          <tr><td class="mono">GRADER_INTERVAL_S</td><td class="mono">60</td><td><span class="pill on">keep</span></td><td class="mut">Grader poll period (seconds).</td><td class="mut">lower for snappier grading; grading is cheap (cached OHLCV).</td></tr>
+          <tr><td class="mono">SESSION_TTL_HOURS</td><td class="mono">12</td><td><span class="pill on">keep</span></td><td class="mut">Age at which active feedback sessions are GC'd (keyboard stripped).</td><td class="mut">extend if you grade manually less often than twice a day.</td></tr>
+          <tr><td class="mono">OHLCV_TTL</td><td class="mono">300</td><td><span class="pill on">keep</span></td><td class="mut">Module-level OHLCV cache TTL in seconds (utils/data_fetcher.py).</td><td class="mut">rarely — the cycle clears the cache at start anyway (A8).</td></tr>
+          <tr><td class="mono">BITREINFORCEX_DB</td><td class="mono">logs/bitreinforcex.db</td><td><span class="pill on">keep</span></td><td class="mut">The one SQLite file (WAL). Also read by deploy/backup.sh.</td><td class="mut">point at a mounted volume in production if the repo dir is ephemeral.</td></tr>
+          <tr><td class="mono">RAG_EMBEDDER</td><td class="mono">auto</td><td><span class="pill on">auto</span></td><td class="mut">auto → MiniLM if importable, else hashing · minilm (strict) · model2vec · hashing.</td><td class="mut">try model2vec (pip install model2vec==0.8.2) — real semantics, numpy&lt;2-safe, no torch.</td></tr>
+          <tr class="grp"><td colspan="5">accuracy-upgrade flags (v2) — ship dark, enable on evidence</td></tr>
+          <tr><td class="mono">GATE_V2_ENABLED</td><td class="mono">false</td><td><span class="pill on">true</span></td><td class="mut">Regime × trigger truth table replaces the v1 gate; also switches the indicator agent's trigger set by regime.</td><td class="mut">backtest-validated: 4h trending conf +7.6/+4.4 pts (significant), trending NWE eliminated.</td></tr>
+          <tr><td class="mono">GATE_1H_TREND</td><td class="mono">false</td><td><span class="pill off">off</span></td><td class="mut">Allows aligned trend triggers to emit on 1h (trend_1h).</td><td class="mut">needs a dedicated 1h trend backtest showing positive expectancy first.</td></tr>
+          <tr><td class="mono">GATE_TREND_REVERSAL</td><td class="mono">false</td><td><span class="pill never">measured off</span></td><td class="mut">SuperTrend flip against the classified trend may emit (trend_reversal).</td><td class="mut">amendment: graded 0/6 decided in the gate-v2 run — don't re-enable without new evidence.</td></tr>
+          <tr><td class="mono">GATE_NWE_HIGHER_TF</td><td class="mono">false</td><td><span class="pill never">measured off</span></td><td class="mut">NWE emissions on 4h/1d/1w ranging/mixed (1h keeps NWE regardless).</td><td class="mut">amendment: 4h ranging NWE graded 12.5% TB precision.</td></tr>
+          <tr><td class="mono">TB_GRADING_ENABLED</td><td class="mono">false</td><td><span class="pill on">true</span></td><td class="mut">Rewards flow from triple-barrier labels + reward map v2. Labels are recorded either way.</td><td class="mut">flip off to fall back to fixed-horizon ±θ rewards (flat +1/−4).</td></tr>
+          <tr><td class="mono">DERIVATIVES_ENABLED</td><td class="mono">false</td><td><span class="pill on">true</span></td><td class="mut">The derivatives voter's confidence counts in the brain vote.</td><td class="mut">off ⇒ byte-identical 3-voter behavior; grader still replays old deriv rows.</td></tr>
+          <tr><td class="mono">META_SHADOW</td><td class="mono">true</td><td><span class="pill on">true</span></td><td class="mut">Stamp meta_p + calibrated_conf on every prediction — measurement, never intervention.</td><td class="mut">leave on; it is the evidence stream for META_GATE.</td></tr>
+          <tr><td class="mono">META_GATE_ENABLED</td><td class="mono">false</td><td><span class="pill shadow">shadow</span></td><td class="mut">Suppress emissions with meta_p &lt; META_GATE_THRESHOLD (reason meta_gate).</td><td class="mut">only after holdout AUC ≥ 0.60 AND +5 pts precision over ≥ 4 weeks of shadow.</td></tr>
+          <tr class="grp"><td colspan="5">v2 tuning</td></tr>
+          <tr><td class="mono">CONFIDENCE_GATE</td><td class="mono">0.80</td><td><span class="pill on">keep</span></td><td class="mut">Brain-confidence threshold for the conf_over_80 path (4h/1d/1w only).</td><td class="mut">raise to trade volume for precision; re-backtest first.</td></tr>
+          <tr><td class="mono">VOLUME_SMA_LEN</td><td class="mono">20</td><td><span class="pill on">keep</span></td><td class="mut">vol_ok = last closed volume &gt; SMA-N(volume) — the gate's volume confirmation.</td><td class="mut">part of the gate-v2 validated config.</td></tr>
+          <tr><td class="mono">REGIME_ADX_ENTER<br>REGIME_ADX_EXIT</td><td class="mono">25.0 / 20.0</td><td><span class="pill on">keep</span></td><td class="mut">Hysteresis: enter trending at ADX ≥ enter OR chop ≤ chop-enter; exit at ADX ≤ exit AND chop ≥ chop-exit.</td><td class="mut">tighter enter ⇒ fewer trending classifications ⇒ more NWE emissions. Sweep in the harness.</td></tr>
+          <tr><td class="mono">REGIME_CHOP_ENTER<br>REGIME_CHOP_EXIT</td><td class="mono">38.2 / 45.0</td><td><span class="pill on">keep</span></td><td class="mut">Choppiness thresholds paired with the ADX ones (38.2 is the Fibonacci convention).</td><td class="mut">same trade-off as above.</td></tr>
+          <tr><td class="mono">REGIME_MIN_DWELL</td><td class="mono">2</td><td><span class="pill on">keep</span></td><td class="mut">Bars a regime must hold before another flip is allowed (anti-flapping).</td><td class="mut">raise if regime flips look noisy in /regime output.</td></tr>
+          <tr><td class="mono">REGIME_ADX_LEN / REGIME_CHOP_LEN</td><td class="mono">14 / 14</td><td><span class="pill off">config-only</span></td><td class="mut">ADX / Choppiness lookbacks (not in .env.example, still env-readable).</td><td class="mut">standard lengths; changing them invalidates the backtest evidence.</td></tr>
+          <tr><td class="mono">REGIME_VOL_LOOKBACK / REGIME_WALK_BARS</td><td class="mono">100 / 50</td><td><span class="pill off">config-only</span></td><td class="mut">Realized-vol percentile window; length of the stateless hysteresis walk.</td><td class="mut">walk ≥ dwell·flips you care about; rarely touched.</td></tr>
+          <tr><td class="mono">ATR_LEN</td><td class="mono">14</td><td><span class="pill on">keep</span></td><td class="mut">ATR period for barriers (simple rolling mean of true range — matches chandelier/alpha convention).</td><td class="mut">changing it rescales every barrier; re-backtest.</td></tr>
+          <tr><td class="mono">BARRIER_MULTS</td><td class="mono">1h/4h/1d (1.5, 1.0)<br>1w (2.0, 1.25)</td><td><span class="pill on">keep</span></td><td class="mut">Per-TF (tp_mult, sl_mult) in ATR units, as JSON: {"1h": [1.5, 1.0], …}.</td><td class="mut">breakeven precision at 1.5/1.0 is 40% — widen only with the sweep's blessing.</td></tr>
+          <tr><td class="mono">REWARD_CORRECT / REWARD_WRONG</td><td class="mono">1.0 / −4.0</td><td><span class="pill off">config-only</span></td><td class="mut">The base reward pair (also the legacy map).</td><td class="mut">the 1:4 asymmetry is the system's risk personality; change deliberately.</td></tr>
+          <tr><td class="mono">REWARD_TIMEOUT_FLAT</td><td class="mono">−1.5</td><td><span class="pill on">keep</span></td><td class="mut">Directional call, market went nowhere (TB timeout ⇒ flat fixed label).</td><td class="mut">raise magnitude to punish dead-market calls harder.</td></tr>
+          <tr><td class="mono">REWARD_MISSED_MOVE</td><td class="mono">−1.0</td><td><span class="pill on">keep</span></td><td class="mut">Predicted skip, market moved decisively.</td><td class="mut">raise magnitude if the system gets too shy.</td></tr>
+          <tr><td class="mono">DERIV_TTL_SECONDS</td><td class="mono">3300 (55 min)</td><td><span class="pill on">keep</span></td><td class="mut">Derivatives snapshot cache TTL — the 4h/1d cascade reuses the hourly fetch.</td><td class="mut">lowering it multiplies Binance USDM request volume (~144 req/h today).</td></tr>
+          <tr><td class="mono">DERIV_FUNDING_EXTREME</td><td class="mono">0.0005</td><td><span class="pill on">keep</span></td><td class="mut">|funding| ≥ 0.05%/8h counts as crowded — fires the squeeze-against-crowd feature + Telegram note.</td><td class="mut">market-cycle dependent; revisit in prolonged high-funding regimes.</td></tr>
+          <tr><td class="mono">DERIV_OI_WINDOW_H</td><td class="mono">6</td><td><span class="pill off">config-only</span></td><td class="mut">Hours of open-interest history for the OI-change feature.</td><td class="mut">rarely.</td></tr>
+          <tr><td class="mono">DERIV_BRAIN_SCORE</td><td class="mono">1.5</td><td><span class="pill on">keep</span></td><td class="mut">The derivatives voter's starting brain score (between research 2.0 and news 1.0).</td><td class="mut">only affects a fresh brain_policy.json; learned scores drift from feedback.</td></tr>
+          <tr><td class="mono">META_MIN_ROWS</td><td class="mono">500</td><td><span class="pill on">keep</span></td><td class="mut">Graded directional rows required before the meta model trains at all.</td><td class="mut">lowering it invites overfitting; the guard exists on purpose.</td></tr>
+          <tr><td class="mono">META_MODEL</td><td class="mono">logreg</td><td><span class="pill on">keep</span></td><td class="mut">logreg | lgbm (LightGBM only if installed — requirements comment).</td><td class="mut">try lgbm once rows ≫ 500 and AUC plateaus.</td></tr>
+          <tr><td class="mono">META_GATE_THRESHOLD</td><td class="mono">0.55</td><td><span class="pill on">keep</span></td><td class="mut">meta_p below this ⇒ suppressed (when the meta gate is on); also the training lift readout point.</td><td class="mut">tune from meta_metrics.json gated_precision curves.</td></tr>
+          <tr><td class="mono">CALIBRATION_MIN_ROWS_PER_TF</td><td class="mono">150</td><td><span class="pill off">config-only</span></td><td class="mut">Minimum graded rows per TF before isotonic knots are fitted for it.</td><td class="mut">rarely.</td></tr>
+          <tr><td class="mono">NIGHTLY_HOUR_IST</td><td class="mono">2</td><td><span class="pill on">keep</span></td><td class="mut">Hour (IST) the nightly trainer wakes.</td><td class="mut">move it off any backup cron you add.</td></tr>
+          <tr><td class="mono">META_MODEL_PATH / META_METRICS_PATH / CALIBRATION_PATH</td><td class="mono">logs/meta_model.pkl<br>logs/meta_metrics.json<br>logs/calibration.json</td><td><span class="pill off">config-only</span></td><td class="mut">Artifact locations (train writes, decide-time inference mtime-watches).</td><td class="mut">keep inside logs/ so backup.sh's DB backup plus logs/ rsync covers everything.</td></tr>
+          <tr class="grp"><td colspan="5">correctness v3 flags</td></tr>
+          <tr><td class="mono">CLOSED_CANDLES_ONLY</td><td class="mono">true</td><td><span class="pill on">true</span></td><td class="mut">Live fetches drop the in-progress candle — analysis only ever sees closed bars (A2).</td><td class="mut">never disable in production; only for debugging fetch behavior.</td></tr>
+          <tr><td class="mono">NEWS_RAG_ENABLED</td><td class="mono">true</td><td><span class="pill on">true</span></td><td class="mut">Ground news prompts in stored headlines; empty corpus adds the ≤0.4-confidence hallucination guard (A4).</td><td class="mut">off restores the ungrounded legacy prompts — don't.</td></tr>
+          <tr><td class="mono">NWE_EVENT_MODE</td><td class="mono">false <span class="fnt">(code)</span> · true <span class="fnt">(.env.example)</span></td><td><span class="pill on">true</span></td><td class="mut">NWE fires on the band-CROSSING bar instead of every bar outside the band (A3).</td><td class="mut">backtest-validated: −25–36% duplicate 1h emissions at +0.8–1.1 pp precision. Run with true.</td></tr>
+          <tr><td class="mono">BRAIN_DEADZONE_V2</td><td class="mono">false</td><td><span class="pill shadow">shadow</span></td><td class="mut">Directional final additionally needs conf ≥ BRAIN_MIN_CONF; final_action_v2 is stamped regardless (A7).</td><td class="mut">enable if the suppressed cohort shows negative expectancy over ≥ 2 weeks of live rows.</td></tr>
+          <tr><td class="mono">BRAIN_MIN_CONF</td><td class="mono">0.25</td><td><span class="pill on">keep</span></td><td class="mut">The deadzone-v2 confidence floor.</td><td class="mut">tune from the shadow cohort's conf distribution.</td></tr>
+          <tr class="grp"><td colspan="5">agent enhancements v3 (default off — enable on evidence)</td></tr>
+          <tr><td class="mono">MACRO_PRICES_ENABLED</td><td class="mono">false</td><td><span class="pill on">true</span></td><td class="mut">Real SPX/DXY 5-day trends carry 60% of research logics 2/5 (B1).</td><td class="mut">README ships it on: SPX works keyless via stooq; DXY arms once FRED_API_KEY is set.</td></tr>
+          <tr><td class="mono">MONEY_FLOW_V2</td><td class="mono">false</td><td><span class="pill shadow">off → shadow</span></td><td class="mut">Quantitative 4-phase money-flow classifier replaces the v1 heuristic (B2), same [-1,1] slot.</td><td class="mut">enable after a shadow-sanity pass of its phase labels vs the market you actually saw.</td></tr>
+          <tr><td class="mono">ECOSYSTEMS_AUTO</td><td class="mono">false</td><td><span class="pill shadow">off → shadow</span></td><td class="mut">Nightly CoinGecko ecosystem-membership refresh (B4); 7-day freshness guard; drivers untouched.</td><td class="mut">enable after eyeballing a produced ecosystems_cache.json against reality.</td></tr>
+          <tr><td class="mono">ECOSYSTEMS_CACHE_PATH</td><td class="mono">logs/ecosystems_cache.json</td><td><span class="pill on">keep</span></td><td class="mut">Where the refresh writes and load_ecosystems_cache() reads.</td><td class="mut">rarely.</td></tr>
+          <tr><td class="mono">NEWS_EVENTS_ENABLED</td><td class="mono">false</td><td><span class="pill shadow">off</span></td><td class="mut">Typed event extraction (hack/regulatory/etf_flow/listing/delisting/unlock/partnership/macro) added to news prompts + 5 event features (C1).</td><td class="mut">see the runbook audit note before arming — the live NewsAgent constructs its bandit 5-dim.</td></tr>
+          <tr><td class="mono">DIVERGENCE_VOTES</td><td class="mono">false</td><td><span class="pill never">measured off</span></td><td class="mut">RSI/OBV pivot-divergence type-2 votes on 4h/1d (D1/D2).</td><td class="mut">A/B deltas ≈ 0 — divergences fire too rarely to move group metrics (held, not shipped).</td></tr>
+          <tr><td class="mono">EMPIRICAL_DIRECT_CONF</td><td class="mono">false</td><td><span class="pill shadow">off → self-arms</span></td><td class="mut">Direct-signal confidences come from logs/indicator_conf.json instead of hardcoded defaults (D4).</td><td class="mut">flip on once ≥ 30 graded direct-fires exist per indicator you care about.</td></tr>
+          <tr><td class="mono">INDICATOR_CONF_PATH</td><td class="mono">logs/indicator_conf.json</td><td><span class="pill on">keep</span></td><td class="mut">EB confidence artifact path (nightly writes, decide-time reads).</td><td class="mut">rarely.</td></tr>
+          <tr class="grp"><td colspan="5">operational</td></tr>
+          <tr><td class="mono">PREFLIGHT_SKIP_NETWORK</td><td class="mono dim">unset</td><td><span class="pill off">CI only</span></td><td class="mut">Set 1 to skip preflight's Binance universe-freshness check.</td><td class="mut">offline/CI runs; never in a real deploy — the check catches delistings.</td></tr>
+          <tr><td class="mono">BACKUP_KEEP</td><td class="mono">14</td><td><span class="pill on">keep</span></td><td class="mut">How many WAL-safe DB backups deploy/backup.sh retains.</td><td class="mut">size vs history trade-off on the backup volume.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 09 HOW TO START -->
+  <section id="start">
+    <div class="eyebrow">09 — how to start</div>
+    <h2>Zero to <em>running</em>.</h2>
+
+    <h3 class="sub">a · Local</h3>
+    <div class="codeblock"><span class="c"># clone + venv (Python 3.11)</span>
+git clone https://github.com/hharshmishra/ai_trading_bot.git &amp;&amp; cd ai_trading_bot
+python3.11 -m venv venv &amp;&amp; source venv/bin/activate
+
+<span class="c"># install — this also installs the VENDORED pandas_ta from ./vendor/pandas-ta</span>
+<span class="c"># (upstream is deleted from PyPI/GitHub; requirements pins numpy==1.25.0, pandas==2.0.3)</span>
+pip install -r requirements.txt
+
+<span class="c"># configure — minimum: OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, CUSTOMER_CHAT_ID, DEV_CHAT_ID</span>
+cp .env.example .env
+
+<span class="c"># preflight must print READY</span>
+python <span class="p">scripts/preflight.py</span>
+
+<span class="c"># tests need no network and no keys</span>
+pytest -q                        <span class="c"># → 167 passed</span>
+
+<span class="c"># run everything — scheduler + grader + nightly in ONE process</span>
+python <span class="p">telegram_app.py</span></div>
+
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><h3>What preflight checks<small>scripts/preflight.py — exit 0 = READY</small></h3>
+        <p><b>imports</b> — core deps + every app module import cleanly. <b>sklearn</b> — numpy still 1.x (the ABI pin; a numpy 2.x sneaking in fails here, loudly). <b>database</b> — temp SQLite schema + CRUD round-trip. <b>rag embedder</b> — whichever embedder resolves actually embeds. <b>env vars</b> — required keys present; reports which channel ids are set. <b>universe</b> — every one of the 48 pairs must have a 1h candle fresher than 2 h on Binance spot; delisted/halted pairs fail loudly (this check caught LRC dead 93 d and MKR dead 291 d). Skip only offline: <code>PREFLIGHT_SKIP_NETWORK=1</code>.</p></div>
+      <div class="card"><h3>Oracle ARM deploy<small>deploy/bitreinforcex.service · Ubuntu aarch64</small></h3>
+        <p>One systemd unit, restart-always, env from <code class="p">.env</code>, stdout/err appended to <code class="p">logs/runtime.log</code>:</p>
+        <div class="codeblock" style="font-size:11.5px">sudo cp deploy/bitreinforcex.service /etc/systemd/system/
+<span class="c"># edit User= + paths (assumes /home/ubuntu/ai_trading_bot)</span>
+sudo systemctl daemon-reload
+sudo systemctl enable --now bitreinforcex
+journalctl -u bitreinforcex -f</div>
+        <p style="margin-top:10px"><b>Backups:</b> nightly <code class="p">deploy/backup.sh</code> (sqlite3 <code>.backup</code> — consistent while writing; keeps 14) or continuous Litestream replication via <code class="p">deploy/litestream.yml</code> (local replica or S3-compatible Oracle Object Storage).</p></div>
+      <div class="card"><h3>Operating it<small>control bot + dev buttons + nightly summary</small></h3>
+        <p><b>Control bot</b> (Bot B): <code>/news BTCUSDT</code> · <code>/indicator BTCUSDT 4h</code> · <code>/research ETHUSDT 4h</code> · <code>/context 4h</code> (SPX/DXY/money-flow/dominance + driver count) · <code>/regime BTCUSDT 4h</code> (adx/chop/vol_pct/atr) · <code>/derivs BTCUSDT</code> (funding, OIΔ, L/S ratios).</p>
+        <p><b>Dev buttons</b>: row 1 = the truth (BUY/SELL/SKIP LEARNING) · row 2 = news reward (1.0 / −4.0 / Auto-Assign) — pressing row 2 applies the grade · row 3 = CLOSE SESSION.</p>
+        <p><b>Nightly summary</b>: rows = graded training rows so far · calibrated = which TFs have knots · meta AUC/lift = the running answer to "is META_GATE earning its evidence?". "model skipped" just means &lt; 500 graded directional rows — patience, not breakage.</p></div>
+    </div>
+  </section>
+
+  <!-- 10 BACKTEST HARNESS -->
+  <section id="backtest">
+    <div class="eyebrow">10 — backtest harness</div>
+    <h2>Simulation <em>is</em> production.</h2>
+    <p class="lead">The harness never re-implements strategy logic. At every historical bar it slices the same trailing 500-candle window the live system sees and calls the real <code>IndicatorAgent.decide(ohlcv=window, log=False)</code>, the real gate from <code>signals.py</code>, and the real <code>grading/barriers.triple_barrier()</code>. Parity is by construction — and guarded by <code>tests/test_backtest_harness.py</code>.</p>
+
+    <div class="grid g4" style="margin-top:28px">
+      <div class="card"><h3>Closed candles</h3><p><code>backtest/data.py</code> drops the final (possibly open) candle from every cached CSV — the exact guarantee the live scheduler has at :30. History cache backfills earlier <code>--start</code> AND tops up forward.</p></div>
+      <div class="card"><h3>Per-bar windows</h3><p>window=500 matches the live fetch limit; frames are <code>reset_index</code>-ed to the exact 0-based shape ccxt hands the live agent (chandelier aligns positionally and breaks otherwise).</p></div>
+      <div class="card"><h3>Shared labeler</h3><p>Every emission is labeled twice: triple-barrier via the very function the live grader calls, and legacy fixed-horizon ±θ for baseline comparability.</p></div>
+      <div class="card"><h3>Funnel telemetry</h3><p>Every suppressed bar is counted under its gate reason — the funnel table in each report shows what the gate is <i>rejecting</i>, not just what it emits.</p></div>
+    </div>
+
+    <h3 class="sub">CLI cookbook<small>scripts/run_backtest.py · downloads serially (shared ccxt client), replays in parallel</small></h3>
+    <div class="codeblock"><span class="c"># quick look — 3 pairs, two TFs, from July 2024</span>
+python <span class="p">scripts/run_backtest.py</span> --pairs BTCUSDT,ETHUSDT,SOLUSDT --tfs 1h,4h --start 2024-07-01
+
+<span class="c"># archive a labelled baseline over the full 48-pair universe (slow — use workers)</span>
+python <span class="p">scripts/run_backtest.py</span> --pairs all --tfs 1h,4h,1d --start 2024-07-01 --label baseline --workers 6
+
+<span class="c"># A/B any flag: env var flips the behavior, --gate v2 selects the gate fn, --baseline compares</span>
+<span class="k">NWE_EVENT_MODE=true GATE_V2_ENABLED=true</span> python <span class="p">scripts/run_backtest.py</span> --pairs all --tfs 1h \
+    --gate v2 --start 2024-07-01 --label my-experiment \
+    --baseline logs/backtest/candidate-v3/report.json
+
+<span class="c"># both env flag AND --gate v2 are required for a true gate-v2 run:</span>
+<span class="c"># the env flag makes decide() regime-condition its trigger set, --gate picks the gate function.</span>
+<span class="c"># (forgetting --gate v2 once produced the trigger-ablation run — kept, it cleanly isolates the trigger effect)</span>
+
+python <span class="p">scripts/analyze_indicators.py</span> --pairs BTCUSDT,ETHUSDT,SOLUSDT,ADAUSDT --tf 4h   <span class="c"># redundancy + standalone win rates</span>
+python <span class="p">scripts/experiments/lorentzian_knn.py</span> --pairs BTCUSDT,ETHUSDT --tf 4h          <span class="c"># experiment tier — never wired in</span>
+python <span class="p">scripts/run_training.py</span>                                                        <span class="c"># manual nightly-training run</span></div>
+
+    <h3 class="sub">Report anatomy<small>backtest/report.py → report.json (machine) + report.md (human) + emissions.json (row-level)</small></h3>
+    <p class="lead" style="font-size:14.5px">Groups are keyed <code>tf|regime|trigger</code> (e.g. <code>4h|trend_down|trend_continuation</code>). Per group: n, tp/sl/timeout counts, <b>TB precision = tp/(tp+sl)</b> with a Wilson 95% CI, timeout share, <b>expectancy R</b> (tp ⇒ +tp_mult, sl ⇒ −sl_mult, timeout ⇒ signed move/ATR — breakeven precision at 1.5/1.0 barriers is 40%), and the legacy fixed hit rate. A/B runs add per-group deltas with a two-proportion z (significant at |z| ≥ 1.96). The funnel table closes each report.</p>
+    <p class="warncave">⚠ the honest caveat, printed in every report: news/research agents call live LLMs and feeds — not replayable. The confidence-gate path uses <b>indicator-only confidence as a proxy</b> for brain confidence, so conf_over_80 rows overfire relative to live. <b>NWE and trend-trigger paths are exact.</b> Ship decisions are made on the trigger groups.</p>
+  </section>
+
+  <!-- 11 EVIDENCE LEDGER -->
+  <section id="evidence">
+    <div class="eyebrow">11 — evidence ledger</div>
+    <h2>Every flag flip has a <em>paper trail</em>.</h2>
+    <p class="lead">All archived runs, in order. Standard configuration: 12 representative pairs × 1h/4h/1d, 2024-07-01 → run date, ~254k bars replayed (the 48-pair exact sweep is ~25 h; groups pool across pairs, so 12 is representative). Every number below is copied from the archived report.</p>
+
+    <div class="tablewrap" style="margin-top:28px">
+      <table class="t" style="min-width:1040px">
+        <thead><tr><th style="width:150px">run</th><th style="width:210px">what it tested</th><th>headline numbers</th><th style="width:250px">report</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">smoke</td><td class="mut">3 majors × 1h, gate v1 (2026-05 →)</td><td class="mut"><b>336</b> emissions · 1h NWE TB precision <b class="amb">33.2%</b> (62 tp / 125 sl) — the band-walk failure, first quantified.</td><td class="file">logs/backtest/smoke/report.md</td></tr>
+          <tr><td class="mono">baseline</td><td class="mut">v1 gate as it ran in production</td><td class="mut"><b>65,430</b> emissions · 1h NWE <b class="neg">25.9–31.2%</b> TB precision, <b class="neg">~88%</b> of 1h NWE fires landed in classified trends (16,352 of 18,600 — structurally counter-trend) · 4h ranging NWE <b class="neg">12.9%</b>, −0.243 R.</td><td class="file">logs/backtest/baseline/report.md</td></tr>
+          <tr><td class="mono">trigger-ablation</td><td class="mut">env flags on, gate still v1 (kept accident)</td><td class="mut"><b>30,969</b> emissions · isolates the regime-conditioned <i>trigger set</i>: 4h trend conf <b class="pos">+7.4 / +4.8 pts (sig)</b> before the gate even changes.</td><td class="file">logs/backtest/trigger-ablation/report.md</td></tr>
+          <tr><td class="mono">gate-v2</td><td class="mut">full truth table, no amendments</td><td class="mut"><b>28,775</b> emissions · trend_continuation <b class="pos">41.9% / 39.7%</b> at 4h with positive expectancy · 4h trending conf <b class="pos">+7.6 / +4.4 pts (sig)</b> · trend_reversal <b class="neg">0/6 decided</b> → amendment · 4h ranging NWE <b class="neg">12.5%</b> → amendment.</td><td class="file">logs/backtest/gate-v2/report.md</td></tr>
+          <tr><td class="mono">gate-v2-amended</td><td class="mut">+ both amendments (the ship config)</td><td class="mut"><b>28,479</b> emissions · reversal + higher-TF-NWE rows gone, everything else byte-identical — this is what <code>GATE_V2_ENABLED=true</code> means today.</td><td class="file">logs/backtest/gate-v2-amended/report.md</td></tr>
+          <tr><td class="mono">gate-v2-postA</td><td class="mut">regression guard after correctness-v3 Phase A</td><td class="mut"><b>28,565</b> emissions · reproduced the amended run with <b class="pos">max drift 0.14 pp</b> — the correctness fixes changed no strategy behavior.</td><td class="file">logs/backtest/gate-v2-postA/report.md</td></tr>
+          <tr><td class="mono">nwe-event</td><td class="mut">NWE_EVENT_MODE=true A/B</td><td class="mut"><b>28,339</b> emissions · 1h NWE volume <b class="pos">−25% overall</b> (mixed −36%, ranging −14%) at <b class="pos">+0.8–1.1 pp</b> precision — kills duplicate sessions/RL rows → <b class="pos">SHIPPED</b>.</td><td class="file">logs/backtest/nwe-event/report.md</td></tr>
+          <tr><td class="mono">divergence</td><td class="mut">DIVERGENCE_VOTES=true on 4h/1d</td><td class="mut"><b>27,378</b> emissions · every group delta <b class="amb">≈ 0.0</b> — divergences fire too rarely to move metrics (indicator-corr: rsi_div n=2, obv_div n=5) → <b class="amb">HELD</b>.</td><td class="file">logs/backtest/divergence/report.md</td></tr>
+          <tr><td class="mono">candidate-v3</td><td class="mut">today's full stack vs the ORIGINAL v1 baseline</td><td class="mut"><b>28,339</b> emissions (−57% vs baseline) · 4h trending conf <b class="pos">+7.6 / +4.4 pts (sig@95)</b> · 1d trend_down +11.3 pts (ns) · 1h NWE 29.7% / 33.8% on far fewer, deduplicated fires.</td><td class="file">logs/backtest/candidate-v3/report.md</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="archnote">Side artifact — <b>logs/backtest/indicator-corr.md</b> (D3, report-only): no redundant indicator pairs at |ρ| &gt; 0.75; standalone TB win rates put chandelier at 0.405 and alpha_trend at 0.401 vs the 40% breakeven, momentum-rule votes (rsi_zone 0.243, bb_pos 0.258) well under it — they survive only as small votes inside type-2, never as direct triggers.</p>
+  </section>
+
+  <!-- 12 DATA MODEL -->
+  <section id="datamodel">
+    <div class="eyebrow">12 — data model</div>
+    <h2>One SQLite file <em>remembers everything</em>.</h2>
+    <p class="lead"><code>persistence.py</code> — WAL journal, <code>synchronous=NORMAL</code>, foreign keys on, one <code>check_same_thread=False</code> connection behind one process-wide lock (writes are tiny; serializing them is plenty). Schema changes are <b>additive-only</b>: <code>_migrate()</code> diffs <code>PRAGMA table_info</code> against the expected columns and issues <code>ALTER TABLE ADD COLUMN</code>; legacy rows keep NULLs and grade via the legacy path forever.</p>
+
+    <div class="grid g2" style="margin-top:28px">
+      <div class="card" style="grid-column:1/-1">
+        <h3>predictions<small>one row per (pair, tf, cycle) decision — emitted or not</small></h3>
+        <p class="src" style="line-height:2.1">
+          <b>identity/timing</b> — id · cycle_id · pair · tf · created_ts · <b style="color:var(--cyan)">candle_close_ts</b> <span class="fnt">(CLOSE epoch of the entry candle = open + TF — the v3 convention; ccxt rows are OPEN-stamped, so the first path candle is the one whose open == this)</span> · entry_price · horizon_k · grade_due_ts<br>
+          <b>final</b> — final_action · final_confidence · final_score · <b style="color:var(--amber)">final_action_v2</b> <span class="fnt">(deadzone-v2 shadow)</span> · emitted · trigger_source <span class="fnt">(gate reason)</span> · session_id<br>
+          <b>per-agent replay snapshots</b> — news_action/_idx/<b style="color:var(--mint)">news_feats</b><span class="fnt">(JSON 10)</span>/news_conf · research_action/_idx/<b style="color:var(--mint)">research_feats</b><span class="fnt">(JSON 10)</span>/research_conf · indicator_action/indicator_conf/<b style="color:var(--mint)">indicator_blend</b><span class="fnt">(JSON: shares + fired_direct)</span> · deriv_action/_idx/<b style="color:var(--mint)">deriv_feats</b><span class="fnt">(JSON 8)</span>/deriv_conf · brain_weights<span class="fnt">(JSON)</span><br>
+          <b>regime + barriers</b> — regime · regime_feats<span class="fnt">(JSON: adx/chop/vol_pct/atr/±di/vol_ok)</span> · atr · <b style="color:var(--mint)">tp_price</b> · <b style="color:var(--magenta)">sl_price</b><br>
+          <b>meta shadow</b> — meta_p · calibrated_conf<br>
+          <b>grading state</b> — label_source <span class="fnt">('pending' | 'auto' | 'manual' — the CAS column)</span> · graded<br>
+          <span class="fnt">indexes: (grade_due_ts, graded) · (pair, tf, created_ts)</span>
+        </p>
+      </div>
+      <div class="card"><h3>outcomes<small>1:1 with graded predictions</small></h3>
+        <p class="src" style="line-height:2.1">prediction_id <span class="fnt">(PK → predictions)</span> · realized_return <span class="fnt">(fwd return at k; NULL on manual)</span> · realized_label <span class="fnt">(buy/sell/skip — what drove rewards)</span> · threshold · horizon_k · graded_ts · source <span class="fnt">(auto | manual)</span> · <b style="color:var(--mint)">label_tb</b> <span class="fnt">(tp | sl | timeout)</span> · barrier_hit_idx <span class="fnt">(1-based candle)</span> · exit_price</p></div>
+      <div class="card"><h3>rewards<small>audit trail of every policy update</small></h3>
+        <p class="src" style="line-height:2.1">id · prediction_id · agent <span class="fnt">(news/research/indicator/derivatives)</span> · predicted_action · reward · applied_ts · source <span class="fnt">(auto | manual | <b style="color:var(--amber)">correction</b> — corrections store the delta, so Σ per prediction = net effect)</span></p></div>
+      <div class="card"><h3>sessions<small>durable Telegram feedback lifecycle</small></h3>
+        <p class="src" style="line-height:2.1">id · pair · tf · prediction_id · created_ts · active · customer_chat_id/customer_msg_id · dev_chat_id/dev_msg_id · true_outcome <span class="fnt">(set by row-1 buttons)</span> · superseded_by <span class="fnt">(new session id for the same pair+tf)</span></p></div>
+      <div class="card"><h3>macro_snapshots + news_items<small>context history + RAG corpus</small></h3>
+        <p class="src" style="line-height:2.1"><b>macro_snapshots</b> — ts <span class="fnt">(PK)</span> · btc_dominance · fear_greed <span class="fnt">(feeds the ~24h dominance ROC)</span><br>
+        <b>news_items</b> — id <span class="fnt">(sha256 of url|title)</span> · source · title · body · url · published_ts · ingested_ts · assets <span class="fnt">(JSON tickers)</span> · <b style="color:var(--cyan)">embedding BLOB</b> <span class="fnt">(float32 vector — brute-force numpy cosine at query time)</span> · sentiment_cached <span class="fnt">(quiet-coin cache)</span></p></div>
+    </div>
+  </section>
+
+  <!-- 13 HISTORY -->
+  <section id="history">
+    <div class="eyebrow">13 — history</div>
+    <h2>Three eras, <em>one direction</em>.</h2>
+
+    <div class="grid g3" style="margin-top:28px">
+      <div class="card"><h3>v1 — the rebuild<small>docs/system-design.html · 22 tests</small></h3>
+        <p>From monolith to the current shape in 6 phases: shared market context (measured 488 → 85 LLM calls/cycle at the time), stateless <code>apply_reward</code> (the feature-race fix), SQLite WAL persistence replacing unbounded JSONL state, the auto-grader, the single-process Telegram runtime (scheduler cascade bug #8, policy write race #10 fixed), RSS ingestion + RAG.</p></div>
+      <div class="card"><h3>v2 — accuracy<small>docs/accuracy-upgrade.html · 111 tests · merged 734ec4c</small></h3>
+        <p>Measure first: the backtest harness quantified the NWE band-walk failure, then shipped the regime classifier + gate v2 (with two evidence amendments), triple-barrier grading + reward map v2, the derivatives voter, and nightly meta/calibration training. decide() optimized 487 → 258 ms (supertrend numpy port, NWE weight cache, alpha_trend arrays).</p></div>
+      <div class="card"><h3>v3 — correctness<small>tasks/todo.md review · 167 tests · this snapshot</small></h3>
+        <p>An 11-defect audit (5 critical) plus per-agent enhancements: real SPX/DXY trends, money-flow v2, ecosystem auto-refresh, typed news events (logit-preserving 5→10 RL migration), tiered headlines, model2vec embedder option, divergences (held), EB confidences, the D3 redundancy report, and the Lorentzian experiment. Universe: preflight's new freshness check caught LRC (dead 93 d) and MKR (dead 291 d) → LTC/TRX in.</p></div>
+    </div>
+
+    <h3 class="sub">The v3 defect audit — what was actually wrong<small>tests/test_correctness_v3.py pins every fix · commit trail 4ea156b…a6fd195</small></h3>
+    <div class="tablewrap">
+      <table class="t" style="min-width:980px">
+        <thead><tr><th style="width:46px">#</th><th style="width:32%">defect</th><th>fix</th><th style="width:24%">where</th></tr></thead>
+        <tbody>
+          <tr><td class="mono neg">A1</td><td class="mut"><b>UTC schedule:</b> the cascade keyed off IST hours — every 4h/1d/1w analysis ran hours away from a real Binance candle close.</td><td class="mut">timeframes_due() takes UTC; the IST :30 tick IS the UTC :00 boundary, so only the cascade needed converting. <span class="pill never">critical</span></td><td class="file">signals.py · telegram_app.py</td></tr>
+          <tr><td class="mono neg">A2</td><td class="mut"><b>Partial candle:</b> live analysis included the in-progress bar — signals could form and vanish with the forming candle; backtest never saw that world.</td><td class="mut">CLOSED_CANDLES_ONLY drop in the fetcher + close-epoch candle_close_ts convention end-to-end. <span class="pill never">critical</span></td><td class="file">utils/data_fetcher.py · cycle.py · grader.py</td></tr>
+          <tr><td class="mono neg">A3</td><td class="mut"><b>NWE state-fire:</b> the band signal re-fired every bar price stayed outside the envelope — duplicate sessions and duplicate RL rows for one move.</td><td class="mut">NWE_EVENT_MODE: fire only on the crossing bar; re-fire requires re-entering the band. A/B-validated, shipped. <span class="pill never">critical</span></td><td class="file">agents/custom_indicators.py</td></tr>
+          <tr><td class="mono neg">A4</td><td class="mut"><b>RAG unwired:</b> headlines were ingested and embedded — and never reached a prompt. The news agent answered from stale training data.</td><td class="mut">Stored headlines injected into overall + pair prompts with [age][tier] prefixes; empty corpus adds the ≤0.4-confidence no-hallucination guard. <span class="pill never">critical</span></td><td class="file">agents/news_agent.py · market_context.py · brain/decision_maker.py</td></tr>
+          <tr><td class="mono neg">A5</td><td class="mut"><b>Dominance dead:</b> logic 4 fetched "BTCDOMUSDT" on spot — a symbol that does not exist there — so the score was silently 0.0 forever.</td><td class="mut">CoinGecko dominance level + ~24h ROC from stored macro_snapshots; ROC/level/news fallback chain. <span class="pill never">critical</span></td><td class="file">agents/research_agent.py · market_context.py · utils/macro_fetcher.py</td></tr>
+          <tr><td class="mono amb">A6</td><td class="mut"><b>Universe rot:</b> LUNA long dead; the freshness check then immediately caught LRC (93 d) and MKR (291 d) — every cycle had been silently skipping them.</td><td class="mut">SUI/LTC/TRX in; preflight fails loudly on the next delisting.</td><td class="file">cycle.py · scripts/preflight.py</td></tr>
+          <tr><td class="mono amb">A7</td><td class="mut"><b>Deadzone too thin:</b> one weak voter could push |score| past ±0.05 into a directional final while three confident skips disagreed.</td><td class="mut">Deadzone v2: conf ≥ 0.25 floor, computed always, stored as final_action_v2, drives only behind the flag (shadow first).</td><td class="file">brain/decision_maker.py</td></tr>
+          <tr><td class="mono amb">A8</td><td class="mut"><b>Grading claim race:</b> auto-grader (thread) and manual callback (event loop) could both read 'pending' and double-apply rewards.</td><td class="mut">claim_grading() CAS — exactly one wins; the loser re-reads and takes the correction path.</td><td class="file">persistence.py · grader.py</td></tr>
+          <tr><td class="mono amb">A8</td><td class="mut"><b>Mid-cycle cache drift:</b> a TTL expiry inside one cycle could hand different agents different frames for the same pair.</td><td class="mut">clear_ohlcv_cache() at cycle start — one consistent snapshot per cycle.</td><td class="file">cycle.py · utils/data_fetcher.py</td></tr>
+          <tr><td class="mono amb">A8</td><td class="mut"><b>Unbounded dedup:</b> new stories were cosine-deduped against the entire corpus history — recurring narratives were suppressed forever.</td><td class="mut">7-day dedup window on the hourly ingest.</td><td class="file">telegram_app.py · rag.py</td></tr>
+          <tr><td class="mono amb">A8</td><td class="mut"><b>Dev-send zombie sessions:</b> a failed dev send left an ACTIVE session no keyboard could ever reach.</td><td class="mut">One retry, then deactivate_session() — feedback is either possible or the session is closed.</td><td class="file">telegram_app.py</td></tr>
+          <tr><td class="mono amb">A8</td><td class="mut"><b>Stale supersede:</b> multiple stale actives for one (pair, tf) could linger around send-order edge cases.</td><td class="mut">supersede_active() deactivates every active session except the new one, robust to call order.</td><td class="file">persistence.py</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 14 RUNBOOK -->
+  <section id="runbook">
+    <div class="eyebrow">14 — runbook &amp; gotchas</div>
+    <h2>The things that <em>bite</em>.</h2>
+
+    <div class="grid g2" style="margin-top:28px">
+      <div class="card" style="border-color:rgba(255,77,141,.3)">
+        <h3 style="color:var(--magenta)">Pinned stack — never bare pip install<small>requirements.txt · tasks/lessons.md #2 · preflight asserts</small></h3>
+        <p><code>numpy==1.25.0</code> · <code>pandas==2.0.3</code> · vendored <code>pandas_ta 0.3.14b0</code> (upstream deleted from PyPI/GitHub) · <code>scikit-learn==1.3.2</code> · <code>scipy==1.11.4</code>. A bare <code>pip install scikit-learn</code> once pulled numpy 2.4.6 and <b>broke the pandas/pandas_ta ABI</b>. Always install with explicit pins, then re-verify <code>numpy==1.25.0</code> and <code>import pandas_ta</code>. Preflight's sklearn check fails loudly on any numpy 2.x. Upgrading the stack = migrating the 5 type-2 indicators off pandas_ta first (frees the pin) — a project, not a pip command.</p>
+      </div>
+      <div class="card">
+        <h3>Universe freshness failure<small>scripts/preflight.py · cycle.SYMBOLS</small></h3>
+        <p>Preflight reports <code>stale/dead pairs: [XXXUSDT]</code> ⇒ the pair was delisted/halted on Binance spot. Fix: swap the base ticker in <code>cycle.SYMBOLS</code> for a live one (precedent: LUNA→SUI, LRC→LTC, MKR→TRX), rerun preflight until READY. Check whether the corpse also appears in <code>ECOSYSTEMS</code>/<code>ECOSYSTEM_DRIVERS</code> and <code>ingestion.KNOWN_TICKERS</code> while you're there.</p>
+      </div>
+      <div class="card">
+        <h3>logs/ artifact map<small>what each file is, who writes it</small></h3>
+        <p class="src" style="line-height:2">
+          <span>bitreinforcex.db</span> — everything durable (predictions/outcomes/rewards/sessions/news/macro)<br>
+          <span>brain_policy.json</span> — brain scores/weights · <span>*_agent_policy.json</span> — the four voter policies (the only learned state outside the DB)<br>
+          <span>news_agent_policy.json.bak-5dim</span> — automatic backup written by the 5→10 width migration<br>
+          <span>meta_model.pkl · meta_metrics.json · calibration.json · indicator_conf.json · ecosystems_cache.json</span> — nightly artifacts<br>
+          <span>indicator_predictions.jsonl · research_predictions.jsonl · predictions_log.json</span> — append-only trace logs (safe to rotate)<br>
+          <span>backtest/&lt;label&gt;/</span> — report.json + report.md + emissions.json per archived run · <span>runtime.log</span> — systemd stdout/err
+        </p>
+      </div>
+      <div class="card">
+        <h3>Telegram failure semantics<small>telegram_app.Broadcaster · sessions</small></h3>
+        <p>Customer send failure: logged, signal still proceeds (dev channel + DB record intact). Dev send failure: one retry; a second failure <b>deactivates the session</b> — no zombie button-less sessions. New signal for the same (pair, TF) supersedes the previous active session; GC strips keyboards after <code>SESSION_TTL_HOURS=12</code>. Subscribers' expectation setting: signals land at :30 IST only — a "missing" 4h signal at 3:30 IST is the schedule working, not breaking (4h closes are 1:30/5:30/9:30/13:30/17:30/21:30 IST).</p>
+      </div>
+      <div class="card">
+        <h3>Add a new indicator<small>agents/custom_indicators.py → indicator_agent.py → backtest → flag</small></h3>
+        <p>1) Write the pure signal fn in <code>custom_indicators.py</code> returning <code>{"signal", "confidence", "name"}</code> on the last closed bar (no lookahead — prior-window comparisons only). 2) Wire it into <code>_collect_direct_signals()</code> (choose which regime set owns it) or add a vote in <code>_type2_rules()</code> — 0-fill columns, never NaN (the dropna eats the frame). 3) A/B it in the harness against <code>candidate-v3</code> with a flag env var. 4) Ship behind the flag, default off; the per-indicator learned weight and EB confidence pick it up automatically via its <code>name</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Add a new voter<small>brain/decision_maker.py · grader.py · persistence.py</small></h3>
+        <p>1) Agent class exposing <code>decide(symbol, tf) → {"action", "confidence", "rl": {feats, action_idx}}</code> and a <b>stateless</b> <code>apply_reward(feats, action_idx, reward)</code>. 2) Add to <code>AGENT_NAMES</code> + a <code>DEFAULT_SCORES</code> prior — <code>_normalize_weights()</code>'s setdefault absorbs it into existing policy files, no migration. 3) Snapshot columns in <code>persistence._MIGRATION_COLS</code> (+ record_prediction wiring) — additive ALTERs handle old DBs. 4) A reward block in <code>grader._apply_rewards()</code> / <code>_apply_correction()</code>. 5) Gate the voter behind a flag in <code>DecisionMaker.decide()</code> so off ⇒ byte-identical behavior. The derivatives agent is the template for all five steps.</p>
+      </div>
+      <div class="card" style="grid-column:1/-1;border-color:rgba(255,207,92,.3)">
+        <h3 style="color:var(--amber)">Deck-audit notes — two verified quirks in this snapshot<small>found while sourcing this page against f0d9822; both are latent, neither affects today's enabled config</small></h3>
+        <p><b>1 · Manual REWARD path can't find its prediction.</b> <code>Broadcaster.broadcast()</code> creates the session <i>before</i> the prediction row exists (telegram_app.py:101) and nothing back-fills <code>sessions.prediction_id</code> afterwards — so <code>handle_callback</code>'s REWARD branch (telegram_app.py:184) calls <code>apply_manual_feedback(None)</code>, which returns <code>unknown_prediction</code>: the buttons answer and close the session, but <b>no manual grade is applied</b>. (Tests pass because they create sessions with an explicit prediction_id.) Fix when touched next: after <code>record_prediction()</code> in cycle.py, <code>UPDATE sessions SET prediction_id=? WHERE id=?</code>.</p>
+        <p><b>2 · News bandit is constructed 5-dim.</b> <code>NewsAgent.__init__</code> builds <code>NewsRL(n_features=5)</code> (news_agent.py:383) while <code>features_from_jsons()</code> emits 10-dim vectors; <code>_pad()</code> truncates them, so the 5 event dims are recorded in the DB but not trained by the live instance. Harmless while <code>NEWS_EVENTS_ENABLED=false</code> (those dims are all 0.0) — but switch the constructor to <code>NewsRL()</code> (defaults to N_FEATURES=10, with the logit-preserving migration) <b>before</b> arming events.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 PENDING -->
+  <section id="pending">
+    <div class="eyebrow">15 — what's pending</div>
+    <h2>Evidence gates <em>not yet met</em>.</h2>
+    <p class="lead">Nothing here is blocked on code — it is all blocked on data. Each item names the evidence that flips it.</p>
+
+    <div class="tablewrap" style="margin-top:28px">
+      <table class="t" style="min-width:860px">
+        <thead><tr><th style="width:250px">waiting flag / work</th><th>the gate it must pass</th><th style="width:200px">where the evidence accrues</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">META_GATE_ENABLED</td><td class="mut">≥ 500 graded directional rows, then holdout <b>AUC ≥ 0.60</b> AND <b>+5 pts precision lift</b> sustained over <b>≥ 4 weeks</b> of shadow.</td><td class="file">logs/meta_metrics.json · nightly summary</td></tr>
+          <tr><td class="mono">BRAIN_DEADZONE_V2</td><td class="mut">The final ≠ final_action_v2 cohort shows <b>negative expectancy over ≥ 2 weeks</b> of live rows — then the floor stops real losses, not hypothetical ones.</td><td class="file">predictions.final_action_v2 vs outcomes</td></tr>
+          <tr><td class="mono">EMPIRICAL_DIRECT_CONF</td><td class="mut">≥ 30 graded direct-fires per indicator so the EB shrinkage has something to shrink; then flip the flag.</td><td class="file">logs/indicator_conf.json</td></tr>
+          <tr><td class="mono">MONEY_FLOW_V2 · NEWS_EVENTS_ENABLED · ECOSYSTEMS_AUTO</td><td class="mut">Shadow-sanity passes: phase labels / extracted events / refreshed memberships eyeballed against reality for a few weeks. (NEWS_EVENTS also needs the 5-dim constructor fix — runbook note 2.)</td><td class="file">logic details · events JSON · ecosystems_cache.json</td></tr>
+          <tr><td class="mono">GATE_1H_TREND</td><td class="mut">A dedicated 1h trend-trigger backtest with positive expectancy — trending 1h is currently a deliberate emission desert.</td><td class="file">logs/backtest/&lt;new-label&gt;/</td></tr>
+          <tr><td class="mono">divergence tuning</td><td class="mut">D1/D2 held because fire-rate is too low to measure (n=2/5 standalone). Loosen prominence/recency, re-run the A/B, only then reconsider.</td><td class="file">logs/backtest/divergence/report.md</td></tr>
+          <tr><td class="mono">model2vec embedder trial</td><td class="mut">Set RAG_EMBEDDER=model2vec (pip install model2vec==0.8.2), watch dedup rates + retrieval quality vs hashing before making it the default.</td><td class="file">rag.py · ingest stats in logs</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="philo">ship dark → <span class="grad">measure</span> → enable on evidence.</p>
+  </section>
+</div>
+
+<footer>
+  <b>BitReinforceX — Developer Deck.</b> Static documentation of main @ f0d9822 — every number above is traceable to a file in this repo, most of them to <span style="color:var(--muted)">logs/backtest/*/report.json</span>.
+  <div class="paths">
+    <span>siblings</span> <a href="accuracy-upgrade.html">accuracy-upgrade.html</a> (v2 evidence deck) · <a href="system-design.html">system-design.html</a> (v1 rebuild deck) ·
+    <span>repo</span> github.com/hharshmishra/ai_trading_bot ·
+    <span>logs</span> logs/backtest/&lt;label&gt;/report.md · logs/meta_metrics.json · logs/bitreinforcex.db
+  </div>
+  <div class="warn">⚠ Advisory signals only — this is not financial advice and the system places no orders.</div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- constellation hero ---------- */
+  var cv = document.getElementById("constellation");
+  if (cv && cv.getContext) {
+    var ctx = cv.getContext("2d");
+    var pts = [], W = 0, H = 0, N = 70;
+    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function resize(){
+      W = cv.width = cv.offsetWidth * (window.devicePixelRatio || 1);
+      H = cv.height = cv.offsetHeight * (window.devicePixelRatio || 1);
+    }
+    function seed(){
+      pts = [];
+      for (var i = 0; i < N; i++) {
+        pts.push({ x: Math.random()*W, y: Math.random()*H,
+                   vx: (Math.random()-.5)*.12*(window.devicePixelRatio||1),
+                   vy: (Math.random()-.5)*.12*(window.devicePixelRatio||1),
+                   r: Math.random()*1.6 + .4 });
+      }
+    }
+    var COLS = ["34,211,238","124,92,255","255,77,141"];
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      var linkD = Math.min(W,H)*.16;
+      for (var i = 0; i < N; i++) {
+        var p = pts[i];
+        if (!reduced) {
+          p.x += p.vx; p.y += p.vy;
+          if (p.x < 0 || p.x > W) p.vx *= -1;
+          if (p.y < 0 || p.y > H) p.vy *= -1;
+        }
+        for (var j = i+1; j < N; j++) {
+          var q = pts[j], dx = p.x-q.x, dy = p.y-q.y, d = Math.sqrt(dx*dx+dy*dy);
+          if (d < linkD) {
+            ctx.strokeStyle = "rgba(124,92,255," + (0.14*(1-d/linkD)).toFixed(3) + ")";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.stroke();
+          }
+        }
+      }
+      for (var k = 0; k < N; k++) {
+        var s = pts[k];
+        ctx.fillStyle = "rgba(" + COLS[k % 3] + ",.55)";
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+      }
+      if (!reduced) requestAnimationFrame(draw);
+    }
+    resize(); seed(); draw();
+    window.addEventListener("resize", function(){ resize(); seed(); if (reduced) draw(); });
+  }
+
+  /* ---------- rail active-section highlight ---------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll("#nav a"));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute("href").slice(1)] = a; });
+  var sections = Object.keys(map).map(function(id){ return document.getElementById(id); }).filter(Boolean);
+  function setActive(id){
+    links.forEach(function(a){ a.classList.remove("active"); });
+    var a = map[id];
+    if (a) { a.classList.add("active");
+      if (a.scrollIntoView) a.scrollIntoView({ block: "nearest" });
+    }
+  }
+  if ("IntersectionObserver" in window) {
+    var visible = {};
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ visible[e.target.id] = e.isIntersecting; });
+      for (var i = 0; i < sections.length; i++) {
+        if (visible[sections[i].id]) { setActive(sections[i].id); break; }
+      }
+    }, { rootMargin: "-15% 0px -55% 0px", threshold: 0 });
+    sections.forEach(function(s){ io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>
