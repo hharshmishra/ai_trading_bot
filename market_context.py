@@ -161,9 +161,17 @@ def build_market_context(
     overall_json = news_agent.scan_overall(headlines=market_headlines).model_dump()
     shared_news = _SharedOverallNews(news_agent, overall_json, store=store)
 
-    # 2) Global news-driven signals (1 LLM each), via Research's own logic.
-    spx_score, spx_details = research_agent._logic2_spx(shared_news)
-    dxy_score, dxy_details = research_agent._logic5_dxy(shared_news)
+    # 2) Global macro signals (1 LLM each) via Research's own logic; real
+    #    SPX/DXY price trends blended in when MACRO_PRICES_ENABLED (B1).
+    spx_price = dxy_price = None
+    if _cfg.MACRO_PRICES_ENABLED:
+        try:
+            from utils.macro_prices import dxy_score as _dxy, spx_score as _spx
+            spx_price, dxy_price = _spx(), _dxy()
+        except Exception:
+            spx_price = dxy_price = None
+    spx_score, spx_details = research_agent._logic2_spx(shared_news, price_score=spx_price)
+    dxy_score, dxy_details = research_agent._logic5_dxy(shared_news, price_score=dxy_price)
 
     # 3) Global indicator-driven signals (no LLM; OHLCV cached). Dominance
     #    (A5): CoinGecko level + ~24h rate-of-change from stored snapshots —
@@ -186,7 +194,11 @@ def build_market_context(
         except Exception:
             btc_dom_roc = None
 
-    money_flow, mf_details = research_agent._logic3_money_flow(timeframe, indicator_agent, None)
+    if _cfg.MONEY_FLOW_V2:
+        money_flow, mf_details = research_agent._logic3_money_flow_v2(
+            timeframe, indicator_agent, dom_level=btc_dominance, dom_roc=btc_dom_roc)
+    else:
+        money_flow, mf_details = research_agent._logic3_money_flow(timeframe, indicator_agent, None)
     btdom, btd_details = research_agent._logic4_btcdominance(
         timeframe, indicator_agent, None,
         dom_level=btc_dominance, dom_roc=btc_dom_roc)

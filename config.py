@@ -72,6 +72,14 @@ BRAIN_DEADZONE_V2 = _env_bool("BRAIN_DEADZONE_V2", False)     # directional fina
 BRAIN_MIN_CONF = _env_float("BRAIN_MIN_CONF", 0.25)
 
 # --------------------------------------------------------------------------
+# Research agent enhancements (Phase B)
+# --------------------------------------------------------------------------
+MACRO_PRICES_ENABLED = _env_bool("MACRO_PRICES_ENABLED", False)  # real SPX/DXY trends into logics 2/5
+MONEY_FLOW_V2 = _env_bool("MONEY_FLOW_V2", False)                # quantitative 4-phase money-flow
+ECOSYSTEMS_AUTO = _env_bool("ECOSYSTEMS_AUTO", False)            # CoinGecko-refreshed ecosystem lists
+ECOSYSTEMS_CACHE_PATH = os.getenv("ECOSYSTEMS_CACHE_PATH", "logs/ecosystems_cache.json")
+
+# --------------------------------------------------------------------------
 # Signal gate
 # --------------------------------------------------------------------------
 CONFIDENCE_GATE = _env_float("CONFIDENCE_GATE", 0.80)

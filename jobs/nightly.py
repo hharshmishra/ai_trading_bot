@@ -141,8 +141,22 @@ def run_nightly_training(store) -> Dict[str, Any]:
     rows = store.training_rows()
     meta = train_meta_model(rows)
     calib = fit_calibration(rows)
+
+    # Ecosystem refresh (B4): best-effort — network failures keep the current
+    # (cached or hardcoded) lists; reload applies the new cache in-process.
+    ecosystems_refreshed = False
+    if config.ECOSYSTEMS_AUTO:
+        try:
+            from scripts.refresh_ecosystems import refresh
+            refresh()
+            from agents.research_agent import load_ecosystems_cache
+            ecosystems_refreshed = load_ecosystems_cache()
+        except Exception as e:
+            logger.error("ecosystem refresh failed: %s", e)
+
     return {"rows": len(rows), "meta": meta,
-            "calibrated_tfs": sorted((calib or {}).get("knots", {}))}
+            "calibrated_tfs": sorted((calib or {}).get("knots", {})),
+            "ecosystems_refreshed": ecosystems_refreshed}
 
 
 # --------------------------------------------------------------------------- #

@@ -60,6 +60,38 @@ ECOSYSTEMS: Dict[str, List[str]] = {
     'payments': ['XRP', 'WAVES']
 }
 
+def load_ecosystems_cache(path: Optional[str] = None) -> bool:
+    """Overlay CoinGecko-refreshed ecosystem MEMBERSHIP onto ECOSYSTEMS
+    (enhancement B4; scripts/refresh_ecosystems.py writes the cache nightly).
+
+    In-place dict update so every importer holding a reference sees it.
+    Guards: flag off / cache missing / cache older than 7 days -> no-op, the
+    hardcoded lists stay. ECOSYSTEM_DRIVERS are never auto-changed — they
+    encode priority judgment, not membership.
+    """
+    import config
+    if not config.ECOSYSTEMS_AUTO:
+        return False
+    path = path or config.ECOSYSTEMS_CACHE_PATH
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if time.time() - float(payload.get("fetched_ts", 0)) > 7 * 86400:
+            return False
+        cached = payload.get("ecosystems") or {}
+        applied = False
+        for eco, members in cached.items():
+            if eco in ECOSYSTEMS and members:
+                ECOSYSTEMS[eco] = [str(m).upper() for m in members]
+                applied = True
+        return applied
+    except Exception:
+        return False
+
+
+load_ecosystems_cache()   # apply at import when enabled + fresh
+
+
 # For Logic 1 (ecosystem), define up to 3 driver coins per ecosystem in priority order.
 ECOSYSTEM_DRIVERS: Dict[str, List[str]] = {
     'ethereum': ['ETH', 'POL', 'LINK'],
@@ -456,18 +488,32 @@ class ResearchAgent:
         # Default parent: BTC
         return "BTCUSDT"
 
-    # ---------- Logic 2: SPX influence via news ----------
-    def _logic2_spx(self, news_agent: Optional[Any]) -> Tuple[float, Dict[str, Any]]:
-        if news_agent is None:
-            return 0.0, {"used": False}
-        try:
-            r = news_agent.run(pair="SPX")  # let your NewsAgent map this to S&P 500
-            oj = r.get("overall_json", {})
-            pj = r.get("pair_json", {})
-            s = _sent_to_score(pj.get("sentiment") or oj.get("sentiment"), pj.get("confidence") or oj.get("confidence"))
-            return float(np.clip(s, -1, 1)), {"used": True, "pair_json": pj, "overall_json": oj}
-        except Exception:
-            return 0.0, {"used": False}
+    # ---------- Logic 2: SPX influence (price trend + news) ----------
+    def _logic2_spx(self, news_agent: Optional[Any],
+                    price_score: Optional[float] = None) -> Tuple[float, Dict[str, Any]]:
+        """Enhancement B1: when a real SPX price trend is available (FRED/stooq
+        via utils.macro_prices), it carries 60% of the score and news sentiment
+        40%. Without it, behavior is exactly the old news-only path."""
+        news_score = None
+        details: Dict[str, Any] = {"used": False}
+        if news_agent is not None:
+            try:
+                r = news_agent.run(pair="SPX")  # let your NewsAgent map this to S&P 500
+                oj = r.get("overall_json", {})
+                pj = r.get("pair_json", {})
+                news_score = _sent_to_score(pj.get("sentiment") or oj.get("sentiment"),
+                                            pj.get("confidence") or oj.get("confidence"))
+                details = {"used": True, "pair_json": pj, "overall_json": oj}
+            except Exception:
+                news_score = None
+        details["price_score"] = price_score
+        if price_score is not None:
+            combined = 0.6 * price_score + 0.4 * (news_score or 0.0)
+            details["source"] = "price+news" if news_score is not None else "price_only"
+            return float(np.clip(combined, -1, 1)), details
+        if news_score is None:
+            return 0.0, details
+        return float(np.clip(news_score, -1, 1)), details
 
     # ---------- Logic 3: Money-flow phase ----------
     def _logic3_money_flow(self, timeframe: str, indicator_agent: Optional[Any], news_agent: Optional[Any]) -> Tuple[float, Dict[str, Any]]:
@@ -513,6 +559,50 @@ class ResearchAgent:
             "eth_trend": float(eth_tr),
             "alt_basket_trend": float(alt_tr)
         }
+
+    def _logic3_money_flow_v2(self, timeframe: str, indicator_agent: Optional[Any],
+                              dom_level: Optional[float] = None,
+                              dom_roc: Optional[float] = None) -> Tuple[float, Dict[str, Any]]:
+        """Enhancement B2: quantitative money-flow phase from data we actually
+        have (TOTAL2/TOTAL3 are not free — honest approximation): BTC trend,
+        ETHBTC trend, dominance level/ROC, alt-basket trend. Same [-1, 1] slot
+        as v1, so the research feature vector is unchanged.
+
+        Phases: BTC-led (-0.8) / ETH rotation (-0.2) / alt breadth (+0.7) /
+        risk-off (-1.0) / else the v1-style soft blend."""
+        def trend_of(pair: str) -> float:
+            try:
+                if indicator_agent is None:
+                    return 0.0
+                out = indicator_agent.decide(pair, timeframe)
+                act = getattr(out, 'action', None) if hasattr(out, 'action') else out.get('action')
+                conf = float(getattr(out, 'confidence', 0.6)) if hasattr(out, 'confidence') else float(out.get('confidence', 0.6))
+                return _action_to_score(act, conf)
+            except Exception:
+                return 0.0
+
+        btc_tr = trend_of("BTCUSDT")
+        ethbtc_tr = trend_of("ETHBTC")
+        alt_tr = float(np.mean([trend_of(p) for p in
+                                ["LINKUSDT", "POLUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]]))
+        dom_rising = (dom_roc or 0.0) > 0.005     # +0.5%/24h counts as rising
+        dom_falling = (dom_roc or 0.0) < -0.005
+
+        if btc_tr < -0.2 and dom_rising:
+            phase, score = "risk_off", -1.0
+        elif btc_tr > 0.2 and dom_rising:
+            phase, score = "btc_led", -0.8
+        elif dom_falling and alt_tr > 0.2:
+            phase, score = "alt_breadth", 0.7
+        elif ethbtc_tr > 0.2 and not dom_rising:
+            phase, score = "eth_rotation", -0.2
+        else:
+            phase = "blend"
+            score = float(np.clip(0.3 * alt_tr + 0.1 * ethbtc_tr - 0.2 * btc_tr, -1, 1))
+
+        return float(np.clip(score, -1, 1)), {
+            "phase": phase, "btc_trend": btc_tr, "ethbtc_trend": ethbtc_tr,
+            "alt_basket_trend": alt_tr, "dom_level": dom_level, "dom_roc": dom_roc}
 
     # ---------- Logic 4: Bitcoin dominance ----------
     def _logic4_btcdominance(self, timeframe: str, indicator_agent: Optional[Any],
@@ -578,19 +668,33 @@ class ResearchAgent:
 
         return float(np.clip(alt_favor, -1, 1)), details
 
-    # ---------- Logic 5: DXY inverse via news ----------
-    def _logic5_dxy(self, news_agent: Optional[Any]) -> Tuple[float, Dict[str, Any]]:
-        if news_agent is None:
-            return 0.0, {"used": False}
-        try:
-            r = news_agent.run(pair="DXY")
-            oj = r.get("overall_json", {})
-            pj = r.get("pair_json", {})
-            s = _sent_to_score(pj.get("sentiment") or oj.get("sentiment"), pj.get("confidence") or oj.get("confidence"))
-            # Inverse relation: bullish DXY → bearish BTC → negative score
-            return float(np.clip(-s, -1, 1)), {"used": True, "pair_json": pj, "overall_json": oj}
-        except Exception:
-            return 0.0, {"used": False}
+    # ---------- Logic 5: DXY inverse (price trend + news) ----------
+    def _logic5_dxy(self, news_agent: Optional[Any],
+                    price_score: Optional[float] = None) -> Tuple[float, Dict[str, Any]]:
+        """Enhancement B1: real dollar-index trend (FRED DTWEXBGS) at 60% when
+        available, news 40%. The combined bullish-dollar score is NEGATED at
+        the end (existing convention: strong dollar = crypto headwind)."""
+        news_score = None
+        details: Dict[str, Any] = {"used": False}
+        if news_agent is not None:
+            try:
+                r = news_agent.run(pair="DXY")
+                oj = r.get("overall_json", {})
+                pj = r.get("pair_json", {})
+                news_score = _sent_to_score(pj.get("sentiment") or oj.get("sentiment"),
+                                            pj.get("confidence") or oj.get("confidence"))
+                details = {"used": True, "pair_json": pj, "overall_json": oj}
+            except Exception:
+                news_score = None
+        details["price_score"] = price_score
+        if price_score is not None:
+            combined = 0.6 * price_score + 0.4 * (news_score or 0.0)
+            details["source"] = "price+news" if news_score is not None else "price_only"
+            return float(np.clip(-combined, -1, 1)), details
+        if news_score is None:
+            return 0.0, details
+        # Inverse relation: bullish DXY → bearish BTC → negative score
+        return float(np.clip(-news_score, -1, 1)), details
 
     # ---------- Helper trends ----------
     def _child_trend(self, df: Optional[pd.DataFrame]) -> float:
