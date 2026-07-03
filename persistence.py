@@ -146,6 +146,7 @@ _MIGRATION_COLS = {
         ("deriv_conf", "REAL"),
         ("meta_p", "REAL"),                # meta-label p(correct), shadow
         ("calibrated_conf", "REAL"),
+        ("final_action_v2", "TEXT"),       # deadzone-v2 shadow action (A7)
     ],
     "outcomes": [
         ("label_tb", "TEXT"),              # tp | sl | timeout
@@ -268,6 +269,7 @@ class Store:
             "final_action": final.get("action"),
             "final_confidence": final.get("confidence"),
             "final_score": final.get("score"),
+            "final_action_v2": final.get("action_v2"),
             "emitted": 1 if emitted else 0,
             "news_action": news_raw.get("action"),
             "news_action_idx": news_rl.get("action_idx"),
@@ -330,6 +332,22 @@ class Store:
                 (label_source, prediction_id),
             )
             self.conn.commit()
+
+    def claim_grading(self, prediction_id: str, label_source: str) -> bool:
+        """Atomically claim a still-pending prediction for grading (A8).
+
+        The auto-grader (worker thread) and a Telegram manual callback (event
+        loop) can race on the same pending row; both would read 'pending' and
+        double-apply rewards. This compare-and-swap makes exactly one caller
+        the grader — the loser must re-read and take the correction path.
+        """
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE predictions SET graded = 1, label_source = ? "
+                "WHERE id = ? AND label_source = 'pending'",
+                (label_source, prediction_id))
+            self.conn.commit()
+            return cur.rowcount == 1
 
     def _pred_row(self, r: Optional[sqlite3.Row]) -> Optional[Dict[str, Any]]:
         if r is None:

@@ -207,6 +207,109 @@ class TestUniverse:
         assert len(SYMBOLS) == 48
 
 
+class TestBrainDeadzoneV2:
+    def _dm(self, tmp_path, monkeypatch):
+        import brain.decision_maker as bdm
+        monkeypatch.setattr(bdm, "POLICY_PATH", str(tmp_path / "brain.json"))
+        dm = bdm.DecisionMaker(store=_FakeStore())
+        # one weak buy voter (news, lowest weight) vs strong skips
+        monkeypatch.setattr(dm.indicator, "decide",
+                            lambda s, tf, **k: {"action": "skip", "confidence": 0.9})
+        monkeypatch.setattr(dm.research, "decide",
+                            lambda *a, **k: {"action": "skip", "confidence": 0.9})
+        monkeypatch.setattr(dm.news, "run",
+                            lambda *a, **k: {"action": "BUY", "confidence": 0.95})
+        monkeypatch.setattr(dm, "_headlines_for", lambda s: None)
+        return dm
+
+    def test_weak_single_voter(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config, "BRAIN_DEADZONE_V2", False)
+        dm = self._dm(tmp_path, monkeypatch)
+        res = dm.decide("BTCUSDT", "4h", use_agents=("indicator", "research", "news"))
+        assert res["final"]["action"] == "buy"            # v1: emitted despite ~12% conf
+        assert res["final"]["confidence"] < config.BRAIN_MIN_CONF
+        assert res["final"]["action_v2"] == "skip"        # shadow says skip
+
+        monkeypatch.setattr(config, "BRAIN_DEADZONE_V2", True)
+        res2 = dm.decide("BTCUSDT", "4h", use_agents=("indicator", "research", "news"))
+        assert res2["final"]["action"] == "skip"
+
+    def test_action_v2_persisted(self, tmp_path):
+        from persistence import Store
+        s = Store(str(tmp_path / "v2.db"))
+        pid = s.record_prediction({
+            "chartName": "X", "timeframe": "1h",
+            "final": {"action": "buy", "confidence": 0.1, "score": 0.06, "action_v2": "skip"},
+            "agents": {}, "policy": {}})
+        assert s.get_prediction(pid)["final_action_v2"] == "skip"
+        s.close()
+
+
+class TestClaimGrading:
+    def test_exactly_one_claim_wins(self, tmp_path):
+        from persistence import Store
+        s = Store(str(tmp_path / "c.db"))
+        s.conn.execute("INSERT INTO predictions (id, pair, tf, created_ts) "
+                       "VALUES ('p1','BTCUSDT','1h',1.0)")
+        s.conn.commit()
+        assert s.claim_grading("p1", "auto") is True
+        assert s.claim_grading("p1", "manual") is False    # already claimed
+        assert s.get_prediction("p1")["label_source"] == "auto"
+        s.close()
+
+    def test_manual_loser_takes_correction_path(self, tmp_path, monkeypatch):
+        """If auto claims mid-callback, apply_manual_feedback must correct, not
+        double-apply."""
+        from persistence import Store
+        from grader import Grader
+
+        class _Agent:
+            def __init__(self): self.calls = []
+            def apply_reward(self, *a): self.calls.append(a)
+
+        class _DM:
+            def __init__(self):
+                self.news = _Agent(); self.research = _Agent(); self.indicator = _Agent()
+            def apply_brain_feedback(self, *a): pass
+
+        s = Store(str(tmp_path / "r.db"))
+        pid = s.record_prediction({
+            "chartName": "X", "timeframe": "4h",
+            "final": {"action": "buy", "confidence": 0.8, "score": 0.5},
+            "agents": {"indicator": {"action": "buy", "confidence": 0.7,
+                                     "raw": {"action": "buy", "details": {"blend": {"type1_share": 0.5}}}}},
+            "policy": {}})
+        g = Grader(_DM(), data_fetcher=None, store=s)
+        # simulate auto winning the row first
+        assert s.claim_grading(pid, "auto")
+        s.record_reward(pid, "indicator", "buy", 1.0, source="auto")
+        res = g.apply_manual_feedback(pid, "sell")
+        assert res["status"] == "corrected"
+        # correction = manual(-4) - auto(+1) = -5 applied once
+        assert res["corrections"]["indicator"] == pytest.approx(-5.0)
+        s.close()
+
+
+class TestBroadcastFailure:
+    def test_dev_send_failure_deactivates_session(self, tmp_path):
+        import asyncio as aio
+        from persistence import Store
+        from telegram_app import Broadcaster
+
+        class _BadBot:
+            async def send_message(self, **kw):
+                raise RuntimeError("tg down")
+
+        s = Store(str(tmp_path / "b.db"))
+        b = Broadcaster(_BadBot(), s, customer_chat_id=None, dev_chat_id=123)
+        sid = aio.run(b.broadcast(pair="BTCUSDT", tf="1h", overall="buy", nwe="buy",
+                                  conf=0.9, reason="nwe_ranging",
+                                  decision={"agents": {}, "final": {}}))
+        sess = s.get_session(sid)
+        assert sess["active"] == 0    # no buttons ever existed -> not left active
+        s.close()
+
+
 class TestNweEventMode:
     def _df_beyond_band(self):
         # noisy flat price (constant would NaN-out RSI/StochRSI), then a hard

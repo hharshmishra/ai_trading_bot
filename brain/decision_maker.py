@@ -275,11 +275,23 @@ class DecisionMaker:
         else:
             final_action = "skip"
 
+        # Deadzone v2 (correctness v3, A7): a single weak voter can push
+        # |score| past 0.05 while three high-confidence skips disagree —
+        # v2 additionally requires a confidence floor. Always computed and
+        # stamped (shadow column final_action_v2); only DRIVES the final
+        # action when BRAIN_DEADZONE_V2 is on, after live shadow evidence.
+        action_v2 = final_action
+        if final_action != "skip" and final_confidence < config.BRAIN_MIN_CONF:
+            action_v2 = "skip"
+        if config.BRAIN_DEADZONE_V2:
+            final_action = action_v2
+
         result = {
             "chartName": symbol,
             "timeframe": timeframe,
             "agents": agent_results,
-            "final": {"action": final_action, "confidence": round(final_confidence, 4), "score": round(total_score, 6)},
+            "final": {"action": final_action, "confidence": round(final_confidence, 4),
+                      "score": round(total_score, 6), "action_v2": action_v2},
             "policy": {"scores": self.policy.get("scores"), "weights": self.policy.get("weights")},
         }
         return result

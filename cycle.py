@@ -65,6 +65,14 @@ async def run_cycle(
     store = store or get_store()
     symbols = symbols or SYMBOLS
     cycle_id = cycle_id or f"cyc-{int(now_ts or time.time())}"
+    # One consistent OHLCV snapshot per cycle (A8): without this the module
+    # TTL cache could refetch mid-cycle and hand different agents different
+    # frames for the same pair.
+    try:
+        from utils.data_fetcher import clear_ohlcv_cache
+        clear_ohlcv_cache()
+    except Exception:
+        pass
     sem = asyncio.Semaphore(concurrency)
     summary = {"cycle_id": cycle_id, "analyzed": 0, "emitted": 0, "errors": 0}
 

@@ -166,11 +166,14 @@ class Grader:
             label = label_fixed
         reward_fn = reward_for_v2 if config.TB_GRADING_ENABLED else reward_for
 
+        # Claim BEFORE applying rewards (A8): a Telegram manual callback can
+        # land mid-grade; exactly one grader wins the pending row.
+        if not self.store.claim_grading(p["id"], "auto"):
+            return None
         rewards = self._apply_rewards(p, label, source="auto", reward_fn=reward_fn)
         self.store.record_outcome(p["id"], fr, label, th, k, source="auto",
                                   label_tb=label_tb, barrier_hit_idx=hit_idx,
                                   exit_price=exit_price)
-        self.store.mark_graded(p["id"], "auto")
         return {"id": p["id"], "pair": p["pair"], "tf": tf, "forward_return": fr,
                 "realized_label": label, "label_tb": label_tb, "rewards": rewards}
 
@@ -242,13 +245,19 @@ class Grader:
             # Already auto-graded; net the policy to the human verdict.
             return self._apply_correction(p, label, news_reward)
 
-        # pending -> apply the manual labels directly
+        # pending -> claim first (A8): the auto-grader may be mid-grade on this
+        # row in its worker thread; the CAS decides who applies rewards.
+        if not self.store.claim_grading(p["id"], "manual"):
+            p = self.store.get_prediction(p["id"])
+            if p.get("label_source") == "manual":
+                return {"status": "already_manual"}
+            return self._apply_correction(p, label, news_reward)
+
         rewards = self._apply_rewards(p, label, source="manual", news_reward_override=news_reward)
         self.store.record_outcome(p["id"], None, label, THRESHOLD.get(p["tf"], 0.01),
                                   HORIZON_K.get(p["tf"], 1), source="manual")
         if p.get("session_id"):
             self.store.set_session_true_outcome(p["session_id"], label)
-        self.store.mark_graded(p["id"], "manual")
         return {"status": "manual", "rewards": rewards, "realized_label": label}
 
     def _apply_correction(self, p: Dict[str, Any], label: str,

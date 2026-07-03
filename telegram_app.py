@@ -104,14 +104,21 @@ class Broadcaster:
 
         dev_msg_id = None
         if self.dev_chat_id is not None:
-            try:
-                dump = text + "\n\n" + fmt_brain_dump(decision)
-                m = await self.bot.send_message(chat_id=self.dev_chat_id, text=dump,
-                                                parse_mode=ParseMode.HTML, disable_web_page_preview=True,
-                                                reply_markup=build_dev_keyboard(session_id))
-                dev_msg_id = m.message_id
-            except Exception as e:
-                logger.error("dev send failed: %s", e)
+            dump = text + "\n\n" + fmt_brain_dump(decision)
+            for attempt in (1, 2):   # one retry (A8): transient TG hiccups
+                try:
+                    m = await self.bot.send_message(chat_id=self.dev_chat_id, text=dump,
+                                                    parse_mode=ParseMode.HTML, disable_web_page_preview=True,
+                                                    reply_markup=build_dev_keyboard(session_id))
+                    dev_msg_id = m.message_id
+                    break
+                except Exception as e:
+                    logger.error("dev send failed (attempt %d): %s", attempt, e)
+            if dev_msg_id is None:
+                # No buttons ever reached the dev channel — a button-less
+                # ACTIVE session would be unreachable for feedback forever.
+                self.store.deactivate_session(session_id)
+                logger.error("session %s deactivated (dev send failed twice)", session_id)
 
         # Persist message ids + supersede the previous active session.
         with self.store._lock:
@@ -275,7 +282,10 @@ async def scheduler_loop(application) -> None:
                 try:
                     rag_index = bd.get("rag_index")
                     if rag_index is not None:
-                        stats = await asyncio.to_thread(ingest_all, rag_index)
+                        import time as _time
+                        stats = await asyncio.to_thread(
+                            ingest_all, rag_index,
+                            dedup_window_ts=_time.time() - 7 * 86400)
                         logger.info("news ingest: %s", stats)
                 except Exception as e:
                     logger.error("ingest failed: %s", e)
