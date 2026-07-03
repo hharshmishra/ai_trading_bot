@@ -25,3 +25,9 @@
 
 5. **Don't trust `pkill` exit alone** — verify with `pgrep` after; the first kill
    left a worker alive.
+
+6. **Check the report's own meta before drawing conclusions.** The first "gate-v2"
+   A/B run silently ran the v1 gate — the env flag was set but `--gate v2` was
+   omitted from the CLI. The report header (`gate: v1`) exposed it. Every run's
+   meta must be read back against the intended configuration. (The accident was
+   kept as `trigger-ablation/` — it cleanly isolates the trigger-set effect.)

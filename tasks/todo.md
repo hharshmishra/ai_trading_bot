@@ -2,11 +2,26 @@
 
 Branch: `feature/accuracy-upgrade-v2`. Rule: 22 existing tests stay green before every commit.
 
-STATUS 2026-07-03: Phases 1-5 code committed (25aebba, 6e2bde6, 690e6b9, 6b99a4b), 107 tests green.
-Baseline 48-pair backtest RUNNING in background (logs/backtest/baseline-run.log).
-Remaining: baseline archive -> gate v2 A/B -> deck -> merge.
-Smoke evidence: 1h NWE TB-precision 33% (62tp/125sl) on 3 majors = the band-walk failure, quantified.
-Caveat noted: backtest conf_over_80 path overfires on 4h/1d (indicator-only conf proxy vs live brain conf) — ship decisions use NWE/trend trigger groups.
+STATUS 2026-07-03 ~04:50: Phases 1-5 code committed (25aebba, 6e2bde6, 690e6b9, 6b99a4b,
+4d8250f fix, perf commit, README), 107 tests green. Forced-cycle integration VERIFIED
+(deriv vote moves final conf; regime/barriers/meta fields persisted; found+fixed
+cycle passing legacy 3-agent tuple).
+decide() optimized 487->258ms (supertrend numpy port parity-locked, NWE W-cache, alpha_trend arrays).
+Baseline RESCOPED to 12 representative pairs (48-pair exact = ~25h; groups pool across pairs).
+12-pair baseline RUNNING (logs/backtest/baseline-run.log), ETA ~2.5h.
+
+NEXT (in order):
+1. Baseline report archived -> logs/backtest/baseline/
+2. A/B: GATE_V2_ENABLED=true env + --gate v2 --label gate-v2 --baseline .../baseline/report.json
+   (env flag REQUIRED so decide() regime-conditions the trigger set)
+3. Ship check: nwe/trend groups per tf x regime — precision up, CI-separated, 1h volume 0.5-1.5x
+4. Deck: subagent writes docs/accuracy-upgrade.html (aesthetic ref docs/system-design.html),
+   then scripts/build_deck_data.py injects report JSONs between /*__DECK_DATA_START__*/ markers
+5. Full pytest + merge feature/accuracy-upgrade-v2 -> main + push
+
+Smoke evidence: 1h NWE TB-precision 33% (62tp/125sl) on 3 majors = band-walk failure, quantified.
+Caveat: backtest conf_over_80 path overfires on 4h/1d (indicator-only conf proxy vs live
+brain conf) — ship decisions use NWE/trend trigger groups; caveat printed in every report.
 
 ## Phase 1 — Backtest harness + baseline
 - [ ] `config.py` (flags + thresholds, env-driven)

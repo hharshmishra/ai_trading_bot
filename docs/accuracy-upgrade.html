@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitReinforceX v2 — Accuracy Upgrade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#06070f; --void2:#0a0c1a; --ink:#0e1124; --ink2:#141833;
+    --line:rgba(140,150,210,.14); --line2:rgba(140,150,210,.28);
+    --cyan:#22d3ee; --violet:#7c5cff; --magenta:#ff4d8d; --mint:#34f5c5; --amber:#ffcf5c;
+    --text:#e8eaf6; --muted:#9499c4; --faint:#646a96;
+    --g1:linear-gradient(120deg,var(--cyan),var(--violet) 55%,var(--magenta));
+    --g2:linear-gradient(135deg,var(--violet),var(--magenta));
+    --glass:rgba(20,24,52,.55); --glass2:rgba(16,19,42,.72);
+    --shadow:0 30px 80px -30px rgba(0,0,0,.85);
+    --radius:18px;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:"Space Grotesk","Inter",system-ui,sans-serif;
+    --body:"Inter",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--void); color:var(--text); font-family:var(--body);
+    line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  body::before{ /* ambient gradient haze */
+    content:""; position:fixed; inset:-20%; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(40% 50% at 78% 8%, rgba(124,92,255,.20), transparent 60%),
+      radial-gradient(45% 55% at 12% 22%, rgba(34,211,238,.14), transparent 60%),
+      radial-gradient(50% 60% at 60% 100%, rgba(255,77,141,.13), transparent 60%);
+    filter:saturate(1.1);
+  }
+  a{color:inherit}
+  ::selection{background:rgba(124,92,255,.4)}
+
+  /* ---------- layout rail ---------- */
+  .rail{
+    position:fixed; left:0; top:0; height:100vh; width:230px; z-index:40;
+    padding:26px 20px; display:flex; flex-direction:column; gap:8px;
+    border-right:1px solid var(--line); background:linear-gradient(180deg,rgba(8,9,18,.7),rgba(8,9,18,.35));
+    backdrop-filter:blur(10px);
+  }
+  .brand{display:flex; align-items:center; gap:11px; margin-bottom:22px}
+  .mark{width:34px;height:34px;border-radius:10px;background:var(--g1);position:relative;flex:0 0 auto;
+    box-shadow:0 0 22px rgba(124,92,255,.55), inset 0 0 12px rgba(255,255,255,.25)}
+  .mark::after{content:"";position:absolute;inset:6px;border-radius:6px;border:1.5px solid rgba(7,8,15,.85)}
+  .brand b{font-family:var(--disp);font-weight:700;letter-spacing:-.02em;font-size:16px}
+  .brand span{display:block;font-size:10px;color:var(--faint);letter-spacing:.18em;text-transform:uppercase}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+  .nav a{
+    font-size:12.5px;color:var(--muted);text-decoration:none;padding:7px 11px;border-radius:9px;
+    display:flex;align-items:center;gap:10px;transition:.25s; letter-spacing:.01em;
+  }
+  .nav a .dot{width:6px;height:6px;border-radius:50%;background:var(--line2);transition:.25s;flex:0 0 auto}
+  .nav a:hover{color:var(--text);background:rgba(124,92,255,.08)}
+  .nav a.active{color:var(--text);background:rgba(124,92,255,.12)}
+  .nav a.active .dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .rail .pulse{margin-top:auto;font-size:11px;color:var(--faint);display:flex;align-items:center;gap:8px;font-family:var(--mono)}
+  .pulse i{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 12px var(--mint);animation:beat 1.8s infinite;flex:0 0 auto}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+
+  .wrap{margin-left:230px;position:relative;z-index:1}
+  section{padding:96px 7vw;max-width:1180px;margin:0 auto;scroll-margin-top:20px}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--cyan);
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:18px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:linear-gradient(90deg,var(--cyan),transparent)}
+  h2{font-family:var(--disp);font-weight:600;font-size:clamp(26px,3.4vw,40px);letter-spacing:-.025em;margin:0 0 14px;line-height:1.08}
+  h2 em{font-style:normal;background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--muted);font-size:16.5px;max-width:62ch}
+  .grad{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* ---------- hero ---------- */
+  .hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;position:relative;
+    padding-top:60px;padding-bottom:60px;max-width:none}
+  #constellation{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  .hero-inner{position:relative;z-index:2;max-width:1180px;margin:0 auto;width:100%;padding:0 7vw}
+  .hero h1{font-family:var(--disp);font-weight:700;letter-spacing:-.04em;line-height:.94;
+    font-size:clamp(46px,7.4vw,108px);margin:14px 0 10px}
+  .hero h1 .x{background:var(--g1);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 40px rgba(124,92,255,.35))}
+  .tagline{font-family:var(--disp);font-size:clamp(17px,2.2vw,24px);color:var(--text);font-weight:500;margin:0 0 14px;letter-spacing:-.01em}
+  .hero p.sub{color:var(--muted);max-width:62ch;font-size:16.5px}
+  .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+  .chip{display:flex;flex-direction:column;gap:2px;padding:14px 20px;border-radius:14px;
+    background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(8px);min-width:150px}
+  .chip b{font-family:var(--disp);font-size:24px;font-weight:600;letter-spacing:-.02em}
+  .chip span{font-size:11px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+  .scrollcue{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);font-family:var(--mono);
+    font-size:11px;color:var(--faint);letter-spacing:.2em;z-index:2;animation:float 2.4s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,7px)}}
+
+  /* ---------- cards / glass ---------- */
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+  .card{position:relative;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px;backdrop-filter:blur(9px);box-shadow:var(--shadow);transition:border-color .3s, transform .1s;
+    transform-style:preserve-3d;will-change:transform}
+  .card:hover{border-color:var(--line2)}
+  .card .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;margin-bottom:16px;
+    font-family:var(--mono);font-weight:700;font-size:15px;background:rgba(124,92,255,.12);border:1px solid var(--line2)}
+  .card h3{font-family:var(--disp);font-size:18.5px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+  .card h3 small{display:block;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.05em;font-weight:400;margin-top:3px}
+  .card p{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+  .tags{display:flex;flex-wrap:wrap;gap:7px}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--text);padding:4px 9px;border-radius:7px;
+    background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2)}
+  .tag.v{background:rgba(124,92,255,.1);border-color:rgba(124,92,255,.26)}
+  .tag.m{background:rgba(255,77,141,.1);border-color:rgba(255,77,141,.26)}
+  .tag.a{background:rgba(255,207,92,.07);border-color:rgba(255,207,92,.24)}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  .archnote{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--faint);
+    border-left:2px solid var(--violet);padding-left:14px}
+  .warncave{margin-top:20px;font-family:var(--mono);font-size:12.5px;color:var(--amber);
+    border-left:2px solid var(--amber);padding-left:14px;max-width:80ch}
+
+  /* ---------- pending placeholder chip ---------- */
+  .pend{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;color:var(--amber);
+    padding:9px 14px;border-radius:10px;border:1px dashed rgba(255,207,92,.42);background:rgba(255,207,92,.05);line-height:1.5}
+  .pend i{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px rgba(255,207,92,.6);
+    animation:beat 1.8s infinite;flex:0 0 auto}
+
+  /* ---------- failure stat cards ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:34px}
+  .stat{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;backdrop-filter:blur(8px)}
+  .stat .sk{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+  .stat .sv{font-family:var(--disp);font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:7px 0 3px}
+  .sv.bad{color:var(--magenta)} .sv.warn{color:var(--amber)} .sv.good{color:var(--mint)}
+  .stat .sci{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+  .stat .sm{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.5}
+  .stat .sm b{color:var(--text)}
+
+  /* ---------- before / after architecture ---------- */
+  .arch2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+  .pane{background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);padding:24px;backdrop-filter:blur(9px)}
+  .pane.after{border-color:rgba(52,245,197,.22)}
+  .pane .ph2{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:9px}
+  .pane.before .ph2{color:var(--faint)} .pane.after .ph2{color:var(--mint)}
+  .vrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .vconn{height:16px;margin-left:22px;border-left:1px dashed var(--line2)}
+  .node{position:relative;padding:11px 15px;border-radius:13px;background:var(--glass2);border:1px solid var(--line);
+    font-size:13px;font-weight:500;display:flex;align-items:center;gap:9px;backdrop-filter:blur(6px)}
+  .node small{font-family:var(--mono);font-size:10.5px;color:var(--faint);font-weight:400}
+  .node.cy{border-color:rgba(34,211,238,.32);box-shadow:0 0 22px -8px var(--cyan)}
+  .node.vi{border-color:rgba(124,92,255,.36);box-shadow:0 0 22px -8px var(--violet)}
+  .node.ma{border-color:rgba(255,77,141,.34);box-shadow:0 0 22px -8px var(--magenta)}
+  .node.mi{border-color:rgba(52,245,197,.32);box-shadow:0 0 22px -8px var(--mint)}
+  .node.dimn{opacity:.66}
+  .node .led{width:8px;height:8px;border-radius:50%;background:currentColor;flex:0 0 auto}
+  .cy .led{color:var(--cyan)} .vi .led{color:var(--violet)} .ma .led{color:var(--magenta)} .mi .led{color:var(--mint)}
+  .node .led.gy{color:var(--faint)}
+  .newtag{font-family:var(--mono);font-size:9px;color:var(--mint);border:1px solid rgba(52,245,197,.45);
+    padding:1px 6px;border-radius:5px;letter-spacing:.14em}
+  .gatecap{font-family:var(--mono);font-size:10.5px;color:var(--violet);letter-spacing:.06em}
+
+  /* ---------- tables ---------- */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--glass2);
+    backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+  table.truth{width:100%;border-collapse:collapse;font-size:13.5px;min-width:860px}
+  .truth th,.truth td{padding:16px 18px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left;line-height:1.6}
+  .truth tbody tr:last-child td{border-bottom:none}
+  .truth thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .truth thead th.rg-r{color:var(--cyan)} .truth thead th.rg-m{color:var(--violet)} .truth thead th.rg-t{color:var(--magenta)}
+  .truth td.tf{font-family:var(--mono);color:var(--cyan);white-space:nowrap;font-weight:700;font-size:13px}
+  .truth td b{color:var(--text)} .truth td .mut{color:var(--muted)}
+  .never{font-family:var(--mono);font-size:10.5px;color:var(--magenta);border:1px solid rgba(255,77,141,.35);
+    background:rgba(255,77,141,.07);padding:2px 8px;border-radius:6px;letter-spacing:.08em;white-space:nowrap}
+  .offd{font-family:var(--mono);font-size:10.5px;color:var(--amber);border:1px solid rgba(255,207,92,.3);
+    background:rgba(255,207,92,.06);padding:2px 8px;border-radius:6px;letter-spacing:.08em;white-space:nowrap}
+
+  table.params{width:100%;border-collapse:collapse;margin-top:14px;font-family:var(--mono);font-size:12.5px}
+  .params th,.params td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  .params th{color:var(--faint);font-weight:500;letter-spacing:.08em;text-transform:uppercase;font-size:10.5px}
+  .params td b{color:var(--mint)}
+  .params td .neg{color:var(--magenta)} .params td .amb{color:var(--amber)}
+
+  table.cmp{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;min-width:920px}
+  .cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  .cmp thead th{color:var(--faint);font-weight:500;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .cmp thead tr.gh th{border-bottom:1px solid var(--line2);padding-top:14px;font-size:10.5px;text-align:center}
+  .cmp thead tr.gh th.bl{color:var(--cyan)} .cmp thead tr.gh th.cd{color:var(--violet)}
+  .cmp td.g,.cmp th.g{text-align:left}
+  .cmp .sep{border-left:1px dashed var(--line2)}
+  .cmp tbody tr:hover{background:rgba(124,92,255,.05)}
+  .cmp tbody tr:last-child td{border-bottom:none}
+  .cmp .tfp{color:var(--cyan);font-weight:700}
+  .cmp .rgp{color:var(--text)}
+  .cmp .trg{color:var(--faint);font-size:10px}
+  .cmp .cin{color:var(--faint);font-size:10px;display:block;margin-top:1px}
+  .pos{color:var(--mint)} .neg{color:var(--magenta)} .dim{color:var(--faint)} .star{color:var(--amber)}
+
+  table.flags{width:100%;border-collapse:collapse;font-size:13px;min-width:820px}
+  .flags th,.flags td{padding:14px 16px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;line-height:1.6}
+  .flags tbody tr:last-child td{border-bottom:none}
+  .flags thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .flags td code{font-family:var(--mono);font-size:12px;color:var(--cyan);white-space:nowrap}
+  .flags td.ev{color:var(--muted);font-size:12.5px}
+  .flags td.ev b{color:var(--mint)}
+
+  /* ---------- charts ---------- */
+  .chartcard{margin-top:18px;padding:22px 22px 14px;border-radius:var(--radius);background:var(--glass);
+    border:1px solid var(--line);backdrop-filter:blur(9px);box-shadow:var(--shadow)}
+  .chartcard h3{font-family:var(--disp);font-size:16px;font-weight:600;margin:0 0 4px}
+  .chartcard .ch-sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:14px}
+  .svgwrap{overflow-x:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);align-items:center}
+  .legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:7px}
+
+  .frow{display:grid;grid-template-columns:158px 1fr 128px;gap:10px;align-items:center;margin:9px 0;font-family:var(--mono);font-size:11px}
+  .flabel{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+  .fbar{height:14px;border-radius:5px;background:rgba(140,150,210,.07);overflow:hidden;position:relative}
+  .fbar i{position:absolute;top:0;bottom:0;left:0;border-radius:5px;min-width:2px}
+  .fbar i.emit{background:var(--g1)}
+  .fbar i.sup{background:rgba(255,77,141,.30);border:1px solid rgba(255,77,141,.28)}
+  .fnum{color:var(--faint);white-space:nowrap}
+  .ftot{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+
+  .runmeta{display:flex;flex-wrap:wrap;gap:9px;margin:26px 0 20px}
+  .rm{font-family:var(--mono);font-size:11.5px;padding:8px 12px;border-radius:9px;line-height:1.5;
+    background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.18);color:var(--muted)}
+  .rm b{color:var(--cyan);font-weight:700}
+  .rm.cd{background:rgba(124,92,255,.07);border-color:rgba(124,92,255,.24)} .rm.cd b{color:var(--violet)}
+
+  .kv{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+  .k2{font-family:var(--mono);font-size:11.5px;padding:7px 11px;border-radius:9px;
+    background:rgba(52,245,197,.05);border:1px solid rgba(52,245,197,.2);color:var(--muted)}
+  .k2 b{color:var(--mint);font-weight:700}
+  .mixrow{display:grid;grid-template-columns:96px 1fr 74px;gap:10px;align-items:center;font-family:var(--mono);font-size:11px;margin:7px 0}
+  .mixrow .ml{color:var(--muted);text-align:right}
+
+  .criteria{margin-top:22px;padding:20px 24px;border-radius:14px;border:1px solid rgba(52,245,197,.28);
+    background:rgba(52,245,197,.05);font-family:var(--mono);font-size:13.5px;color:var(--muted);line-height:1.8}
+  .criteria b{color:var(--mint)}
+  .philo{margin-top:30px;font-family:var(--disp);font-size:clamp(20px,2.6vw,30px);font-weight:600;letter-spacing:-.02em}
+
+  /* ---------- tb diagram ---------- */
+  .tbfig{margin-top:26px;padding:20px;border-radius:var(--radius);background:var(--glass);
+    border:1px solid var(--line);backdrop-filter:blur(9px);box-shadow:var(--shadow)}
+  .tbfig svg{display:block;width:100%;height:auto}
+
+  .deploycode{font-family:var(--mono);font-size:12.5px;background:var(--void2);border:1px solid var(--line);
+    border-radius:12px;padding:18px 20px;color:var(--muted);overflow-x:auto;line-height:1.9;white-space:pre}
+  .deploycode .c{color:var(--faint)} .deploycode .p{color:var(--mint)}
+
+  footer{margin-left:230px;padding:50px 7vw 70px;border-top:1px solid var(--line);position:relative;z-index:1;color:var(--faint);font-size:13px}
+  footer b{font-family:var(--disp);color:var(--text)}
+  footer .paths{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:14px;line-height:2}
+  footer .paths span{color:var(--muted)}
+  footer a{color:var(--cyan);text-decoration:none} footer a:hover{text-decoration:underline}
+  .warn{font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:14px;letter-spacing:.03em}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:960px){
+    .rail{transform:translateX(-100%)} .wrap,footer{margin-left:0}
+    .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:1fr} .g2{grid-template-columns:1fr}
+    .arch2{grid-template-columns:1fr} .stats{grid-template-columns:repeat(2,1fr)}
+    .frow{grid-template-columns:110px 1fr 100px}
+    section{padding:70px 6vw}
+  }
+  @media (max-width:560px){.stats{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.scrollcue,.pulse i,.pend i{animation:none}}
+  .card:focus-visible,.nav a:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+</style>
+</head>
+<body>
+
+<aside class="rail">
+  <div class="brand"><div class="mark"></div><div><b>BitReinforceX</b><span>v2 · Accuracy</span></div></div>
+  <nav class="nav" id="nav">
+    <a href="#failure"><span class="dot"></span>The measured failure</a>
+    <a href="#changed"><span class="dot"></span>What changed</a>
+    <a href="#gate"><span class="dot"></span>Gate v2 truth table</a>
+    <a href="#tb"><span class="dot"></span>Triple-barrier</a>
+    <a href="#evidence"><span class="dot"></span>Evidence A/B</a>
+    <a href="#learn"><span class="dot"></span>Self-learning</a>
+    <a href="#flags"><span class="dot"></span>Rollout flags</a>
+    <a href="#risks"><span class="dot"></span>Limitations</a>
+  </nav>
+  <div class="pulse"><i></i><span id="datapulse">deck data · checking…</span></div>
+</aside>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero" id="top">
+    <canvas id="constellation" aria-hidden="true"></canvas>
+    <div class="hero-inner">
+      <div class="eyebrow">BitReinforceX v2 · evidence deck</div>
+      <h1>Accuracy <span class="x">Upgrade</span></h1>
+      <p class="tagline">Evidence-first: measure the failure, gate by regime, grade by path, learn from our own track record.</p>
+      <p class="sub">v1 shipped the loop. v2 makes it accurate — and proves it. Every number on this page is rendered live from archived backtest reports injected into this file; nothing below is typed by hand, and every behavioural change ships behind a flag, dark by default.</p>
+      <div class="chips">
+        <div class="chip"><b class="grad">107</b><span>tests green</span></div>
+        <div class="chip"><b>+$0<span style="font-size:14px;color:var(--faint)">/mo</span></b><span>added cost</span></div>
+        <div class="chip"><b>0</b><span>new LLM calls</span></div>
+        <div class="chip"><b>flag-gated</b><span>every change</span></div>
+      </div>
+    </div>
+    <div class="scrollcue">scroll ↓</div>
+  </header>
+
+  <!-- 01 FAILURE -->
+  <section id="failure">
+    <div class="eyebrow">01 — the measured failure</div>
+    <h2>First, <em>measure the failure</em>.</h2>
+    <p class="lead">The Nadaraya-Watson Envelope is a mean-reversion trigger: price pierces a smoothed band, you fade the move. The 12-pair replay shows where it actually fires on 1h: overwhelmingly <b style="color:var(--text)">during strong moves</b> — a hard directional push against a still-flat envelope, the <b style="color:var(--text)">band-walk</b> pattern. The band lags, price walks along it, and the trigger keeps fading a trend that keeps going. Structurally counter-trend exactly when trend is strongest.</p>
+    <div class="stats" id="failstats"><!-- data-driven --></div>
+    <p class="archnote" style="margin-top:26px" id="failnote">Grading the same signals two ways exposes the second failure: a fixed-horizon close judges the <i>endpoint</i>, the triple-barrier judges the <i>path</i>. Path-blind grading flattered the trigger — many "hits" rode through a stop-out first.</p>
+    <p class="warncave">⚠ honest caveat — confidence-gate path uses indicator-only confidence (news/research not backtestable); NWE/trend trigger paths are exact.</p>
+  </section>
+
+  <!-- 02 WHAT CHANGED -->
+  <section id="changed">
+    <div class="eyebrow">02 — architecture delta</div>
+    <h2>What changed: <em>gate, don't vote</em>.</h2>
+    <p class="lead">Three additions, one demotion. A fourth voter (Derivatives) joins the brain vote; a regime classifier is deliberately <b style="color:var(--text)">not</b> a voter — it gates which triggers are even allowed to emit. Downstream, the grader learns to judge the path and a nightly trainer learns from our own graded history.</p>
+
+    <div class="arch2">
+      <div class="pane before reveal">
+        <div class="ph2">before · v1</div>
+        <div class="vrow">
+          <div class="node dimn"><span class="led gy"></span>News</div>
+          <div class="node dimn"><span class="led gy"></span>Indicator</div>
+          <div class="node dimn"><span class="led gy"></span>Research</div>
+        </div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node vi dimn"><span class="led"></span>Brain <small>weighted vote</small></div></div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node dimn"><span class="led gy"></span>Gate v1 <small>conf ≥ 0.80 OR NWE · 1h = NWE-only</small></div></div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node dimn"><span class="led gy"></span>Grader <small>fixed-horizon close vs θ</small></div></div>
+      </div>
+
+      <div class="pane after reveal">
+        <div class="ph2">after · v2</div>
+        <div class="vrow">
+          <div class="node"><span class="led gy"></span>News</div>
+          <div class="node"><span class="led gy"></span>Indicator</div>
+          <div class="node"><span class="led gy"></span>Research</div>
+          <div class="node mi"><span class="led"></span>Derivatives <span class="newtag">NEW</span></div>
+        </div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node vi"><span class="led"></span>Brain <small>weighted vote · 4 voters</small></div></div>
+        <div class="vconn"></div>
+        <div class="vrow">
+          <div class="node ma"><span class="led"></span>Regime classifier <span class="newtag">NEW</span></div>
+          <span class="gatecap">→ gates, never votes</span>
+        </div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node cy"><span class="led"></span>Gate v2 <small>regime × trigger truth table</small></div></div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node mi"><span class="led"></span>Triple-barrier grader <span class="newtag">NEW</span></div></div>
+        <div class="vconn"></div>
+        <div class="vrow"><div class="node vi"><span class="led"></span>Nightly trainer <small>meta-label + calibration → shadow</small><span class="newtag">NEW</span></div></div>
+      </div>
+    </div>
+
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card reveal"><div class="ic" style="color:var(--magenta)">R</div>
+        <h3>RegimeAgent<small>agents/regime_agent.py · gate, not voter</small></h3>
+        <p>Classifies each (pair, timeframe) bar as trending / ranging / mixed from ADX(14), CHOP(14) and a volatility percentile. Hysteresis: enter trend at ADX ≥ 25 <b style="color:var(--text)">or</b> CHOP ≤ 38.2; exit at ADX ≤ 20 <b style="color:var(--text)">and</b> CHOP ≥ 45; minimum dwell 2 bars. Trend direction from DMI.</p>
+        <div class="tags"><span class="tag m">ADX(14)</span><span class="tag m">CHOP(14)</span><span class="tag m">vol percentile</span><span class="tag v">DMI direction</span><span class="tag a">dwell 2 bars</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--mint)">D</div>
+        <h3>DerivativesAgent<small>agents/derivatives_agent.py · 4th voter</small></h3>
+        <p>Funding rate, open-interest change and top-trader long/short positioning — 8 features into the same softmax contextual bandit as the other agents. Keyless Binance USDM, ~144 req/h, zero LLM calls. No futures market for a pair ⇒ confidence 0, a guaranteed no-op.</p>
+        <div class="tags"><span class="tag">funding</span><span class="tag">OI Δ</span><span class="tag">top-trader L/S</span><span class="tag v">softmax bandit</span><span class="tag a">keyless · ~144 req/h</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--cyan)">T</div>
+        <h3>Trend triggers<small>indicators/trend_triggers.py · trend-side entries</small></h3>
+        <p>So trending regimes aren't emission deserts once NWE is suppressed there: SuperTrend flip (parity-ported from the vendored pandas_ta), Donchian 20/55 breakout, and squeeze release. Gate v2 decides where each is allowed to fire.</p>
+        <div class="tags"><span class="tag">supertrend flip</span><span class="tag">donchian 20/55</span><span class="tag">squeeze release</span><span class="tag v">parity-tested</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 GATE V2 -->
+  <section id="gate">
+    <div class="eyebrow">03 — emission policy</div>
+    <h2>Gate v2: <em>one truth table</em>.</h2>
+    <p class="lead">The whole emission policy fits in six cells. The rule that matters most: a mean-reversion trigger never emits into a classified trend, and 1h — the noisiest timeframe — never emits on confidence alone.</p>
+
+    <div class="tablewrap" style="margin-top:30px">
+      <table class="truth">
+        <thead><tr>
+          <th style="width:120px">timeframe</th>
+          <th class="rg-r">● ranging</th>
+          <th class="rg-m">● mixed</th>
+          <th class="rg-t">● trending</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="tf">1h</td>
+            <td><b>NWE + volume</b> only.</td>
+            <td><b>NWE + volume + brain agreement</b>.</td>
+            <td>NWE <b>suppressed</b>. Trend triggers <span class="offd">OFF by default · GATE_1H_TREND</span><br><span class="never">confidence NEVER emits on 1h</span></td>
+          </tr>
+          <tr>
+            <td class="tf">4h · 1d · 1w</td>
+            <td><b>NWE + volume overrides conf</b>;<br><span class="mut">else conf ≥ 0.80.</span></td>
+            <td><b>NWE + volume + agreement</b>,<br><span class="mut">else conf.</span></td>
+            <td>NWE <b>suppressed</b>. Aligned trend trigger + volume ⇒ <b>trend_continuation</b>. SuperTrend flip against ⇒ <b>trend_reversal</b>. <span class="mut">Conf only if trend-aligned.</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="archnote">Every suppression is logged with a reason — the funnel charts in the evidence section are that telemetry, not an estimate.</p>
+  </section>
+
+  <!-- 04 TRIPLE BARRIER -->
+  <section id="tb">
+    <div class="eyebrow">04 — grading</div>
+    <h2>Grade the <em>path</em>, not the endpoint.</h2>
+    <p class="lead">A trade that rides through a −1×ATR stop before recovering was a loss in the real world, whatever the close says k candles later. The triple-barrier method grades what a position would have lived through: take-profit, stop-loss, or time — <b style="color:var(--text)">first touch wins</b>.</p>
+
+    <div class="tbfig reveal">
+      <svg viewBox="0 0 780 320" role="img" aria-label="Triple-barrier diagram: entry, TP at +1.5 ATR, SL at −1.0 ATR, time barrier at k candles">
+        <defs>
+          <linearGradient id="tbpath" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#34f5c5"/>
+          </linearGradient>
+        </defs>
+        <!-- zones -->
+        <rect x="60" y="80" width="660" height="110" fill="rgba(52,245,197,.045)"/>
+        <rect x="60" y="190" width="660" height="82" fill="rgba(255,77,141,.05)"/>
+        <!-- barrier lines -->
+        <line x1="60" y1="80" x2="720" y2="80" stroke="#34f5c5" stroke-width="1.6" stroke-dasharray="7 6" opacity=".85"/>
+        <line x1="60" y1="272" x2="720" y2="272" stroke="#ff4d8d" stroke-width="1.6" stroke-dasharray="7 6" opacity=".85"/>
+        <line x1="60" y1="190" x2="720" y2="190" stroke="#646a96" stroke-width="1" stroke-dasharray="2 6" opacity=".6"/>
+        <line x1="640" y1="56" x2="640" y2="296" stroke="#ffcf5c" stroke-width="1.6" stroke-dasharray="5 7" opacity=".9"/>
+        <!-- labels -->
+        <text x="66" y="70" font-family="JetBrains Mono,monospace" font-size="11.5" fill="#34f5c5">TP · +1.5 × ATR</text>
+        <text x="66" y="290" font-family="JetBrains Mono,monospace" font-size="11.5" fill="#ff4d8d">SL · −1.0 × ATR</text>
+        <text x="66" y="182" font-family="JetBrains Mono,monospace" font-size="11" fill="#9499c4">entry</text>
+        <text x="632" y="50" font-family="JetBrains Mono,monospace" font-size="11" fill="#ffcf5c" text-anchor="end">time barrier · k candles</text>
+        <text x="446" y="60" font-family="JetBrains Mono,monospace" font-size="11.5" fill="#34f5c5" text-anchor="middle">first touch wins ✓</text>
+        <text x="720" y="312" font-family="JetBrains Mono,monospace" font-size="10.5" fill="#646a96" text-anchor="end">candles →</text>
+        <!-- price path -->
+        <polyline points="90,190 126,204 158,182 192,196 224,168 256,180 288,148 320,158 352,124 384,136 412,104 446,80"
+          fill="none" stroke="url(#tbpath)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="446,80 480,106 516,92 552,120 588,102 620,116" fill="none" stroke="#8c96d2"
+          stroke-width="1.6" stroke-dasharray="4 6" opacity=".28"/>
+        <circle cx="90" cy="190" r="5" fill="#22d3ee"/>
+        <circle cx="90" cy="190" r="9.5" fill="none" stroke="#22d3ee" opacity=".4"/>
+        <circle cx="446" cy="80" r="5.5" fill="#34f5c5"/>
+        <circle cx="446" cy="80" r="10.5" fill="none" stroke="#34f5c5" opacity=".45"/>
+      </svg>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px;align-items:start">
+      <div class="card reveal">
+        <h3 style="margin-bottom:4px">Reward map v2 <small style="font-family:var(--mono);color:var(--faint);font-weight:400">flows only when TB_GRADING_ENABLED</small></h3>
+        <table class="params">
+          <tr><th>outcome</th><th>reward</th><th>reading</th></tr>
+          <tr><td>correct</td><td><b>+1.0</b></td><td>TP first, or timeout with the called direction realized</td></tr>
+          <tr><td>wrong</td><td><span class="neg">−4.0</span></td><td>SL first — asymmetric pain, as in v1</td></tr>
+          <tr><td>directional-but-flat</td><td><span class="amb">−1.5</span></td><td>called a move, price went nowhere by the time barrier</td></tr>
+          <tr><td>missed move</td><td><span class="amb">−1.0</span></td><td>skipped while a real threshold move printed</td></tr>
+        </table>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-bottom:4px">Edge rules</h3>
+        <p style="margin-bottom:10px">TP and SL both inside one candle is unknowable from OHLC — graded as <b style="color:var(--magenta)">pessimistic SL</b>. Barrier never touched ⇒ <b style="color:var(--amber)">timeout</b>, labeled by the fixed-horizon rule. Labels are <b style="color:var(--text)">always recorded</b>; only the reward path flips with the flag, and legacy rows keep the old grading path.</p>
+        <div class="tags">
+          <span class="tag m">both-in-one-candle ⇒ SL</span>
+          <span class="tag a">timeout ⇒ fixed-horizon label</span>
+          <span class="tag">labels always recorded</span>
+          <span class="tag v">legacy rows untouched</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 EVIDENCE -->
+  <section id="evidence">
+    <div class="eyebrow">05 — the receipts</div>
+    <h2>Evidence: baseline vs <em>gate v2</em>.</h2>
+    <p class="lead">Same replay harness, same pairs, same bars — only the gate differs. Groups are <span style="font-family:var(--mono);font-size:14px;color:var(--text)">timeframe | regime | trigger</span>; precision is triple-barrier (TP vs SL, timeouts excluded), with 95% Wilson intervals. Breakeven at 1.5R barriers is 40%.</p>
+
+    <div class="runmeta" id="runmeta"><!-- data-driven --></div>
+    <div id="cmp-pending" style="margin:0 0 16px"></div>
+    <div class="tablewrap reveal"><div id="cmptable"></div></div>
+
+    <div class="chartcard reveal">
+      <h3>TB precision by group — trigger paths</h3>
+      <div class="ch-sub">nwe_direct + trend_* groups · whiskers = 95% CI · amber line = 40% breakeven at 1.5R</div>
+      <div class="svgwrap" id="barchart"></div>
+      <div class="legend" id="barlegend"></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="chartcard reveal" style="margin-top:0">
+        <h3>Signal funnel — baseline · gate v1</h3>
+        <div class="ch-sub">every evaluated bar lands in exactly one bucket</div>
+        <div id="funnelB"></div>
+      </div>
+      <div class="chartcard reveal" style="margin-top:0">
+        <h3>Signal funnel — candidate · gate v2</h3>
+        <div class="ch-sub">suppressions logged with a reason</div>
+        <div id="funnelC"></div>
+      </div>
+    </div>
+    <p class="archnote" id="smokeline"></p>
+  </section>
+
+  <!-- 06 SELF-LEARNING -->
+  <section id="learn">
+    <div class="eyebrow">06 — self-learning</div>
+    <h2>Learning from <em>our own track record</em>.</h2>
+    <p class="lead">Once graded outcomes accumulate, the system stops trusting raw confidence and starts estimating it: a nightly trainer fits a meta-label model and per-timeframe calibration on our own predictions — then runs them in <b style="color:var(--text)">shadow</b>, logged on every row, gating nothing.</p>
+
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card reveal"><div class="ic" style="color:var(--violet)">M</div>
+        <h3>Meta-label model<small>training/meta_model.py · LogisticRegression</small></h3>
+        <p>Estimates <span style="font-family:var(--mono);font-size:13px;color:var(--text)">p(correct | regime, agreement, positioning, confidence, tf, hour, trigger)</span>. Requires ≥ 500 graded rows before it writes anything; evaluated on a time-ordered holdout — no shuffle leakage. Logged as <span style="font-family:var(--mono);font-size:12.5px;color:var(--cyan)">meta_p</span>.</p>
+        <div class="tags"><span class="tag v">LogReg</span><span class="tag v">≥ 500 rows</span><span class="tag a">time-ordered holdout</span></div>
+      </div>
+      <div class="card reveal"><div class="ic" style="color:var(--cyan)">C</div>
+        <h3>Isotonic calibration<small>training/calibration.py · per-timeframe</small></h3>
+        <p>Per-TF isotonic regression maps raw confidence to observed hit rate, exported as <b style="color:var(--text)">JSON knot arrays</b>. Runtime cost is one <span style="font-family:var(--mono);font-size:12.5px;color:var(--cyan)">np.interp</span> call — no sklearn at inference. Logged as <span style="font-family:var(--mono);font-size:12.5px;color:var(--cyan)">calibrated_conf</span>.</p>
+        <div class="tags"><span class="tag">isotonic → JSON knots</span><span class="tag">np.interp only</span><span class="tag v">nightly</span></div>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card reveal">
+        <h3 style="margin-bottom:8px">Trainer metrics <small style="font-family:var(--mono);color:var(--faint);font-weight:400">logs/meta_metrics.json</small></h3>
+        <div id="metastats"></div>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-bottom:8px">Shadow coverage <small style="font-family:var(--mono);color:var(--faint);font-weight:400">live DB · predictions table</small></h3>
+        <div id="shadowstats"></div>
+      </div>
+    </div>
+
+    <div class="criteria reveal">enable criteria for META_GATE_ENABLED — <b>AUC ≥ 0.60</b> AND <b>precision lift ≥ +5 pts</b>, sustained over <b>≥ 4 weeks of shadow</b>. Until both hold, meta_p is a column, not a veto.</div>
+  </section>
+
+  <!-- 07 FLAGS -->
+  <section id="flags">
+    <div class="eyebrow">07 — rollout</div>
+    <h2>Ship dark. <em>Enable on evidence.</em></h2>
+    <p class="lead">All six flags default to the current production behaviour. Each one names the evidence that flips it — nothing turns on because it "should" work.</p>
+
+    <div class="tablewrap" style="margin-top:30px">
+      <table class="flags">
+        <thead><tr><th style="width:220px">flag</th><th>unlocks</th><th style="width:34%">evidence gate</th></tr></thead>
+        <tbody>
+          <tr><td><code>GATE_V2_ENABLED</code></td><td>The regime × trigger truth table replaces the v1 emission gate.</td><td class="ev">A/B report: <b>significant TB-precision lift</b> on trigger groups without collapsing signal volume.</td></tr>
+          <tr><td><code>GATE_1H_TREND</code></td><td>1h trend-continuation triggers inside gate v2 (until then 1h trending stays silent).</td><td class="ev">1h trend groups show <b>positive expectancy</b> in the candidate report.</td></tr>
+          <tr><td><code>TB_GRADING_ENABLED</code></td><td>Reward map v2 flows from triple-barrier labels; labels are recorded either way.</td><td class="ev">Label audit vs fixed-horizon on replay; <b>agent policies stay stable</b> under the new rewards.</td></tr>
+          <tr><td><code>DERIVATIVES_ENABLED</code></td><td>The Derivatives voter's confidence counts in the brain vote.</td><td class="ev">Bandit weights <b>converge in shadow</b>; keyless budget holds at ~144 req/h.</td></tr>
+          <tr><td><code>META_SHADOW</code></td><td>Nightly trainer writes meta_p + calibrated_conf on every prediction — never gates.</td><td class="ev">On by design: <b>this is the measurement</b>, not the intervention.</td></tr>
+          <tr><td><code>META_GATE_ENABLED</code></td><td>Meta-probability veto on borderline emissions.</td><td class="ev"><b>AUC ≥ 0.60</b> AND <b>≥ +5 pts precision lift</b> over <b>≥ 4 weeks</b> of shadow.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="philo">ship dark → <span class="grad">measure</span> → enable on evidence.</p>
+  </section>
+
+  <!-- 08 RISKS -->
+  <section id="risks">
+    <div class="eyebrow">08 — honesty</div>
+    <h2>What this deck <em>doesn't claim</em>.</h2>
+    <p class="lead">The strongest version of this system is the one whose limits are written down next to its wins.</p>
+    <div class="grid g3" style="margin-top:30px">
+      <div class="card reveal"><h3 style="color:var(--amber)">Confidence path is a proxy</h3>
+        <p>News and research agents call live LLMs and feeds — not replayable. In backtests the confidence gate uses indicator-only confidence. NWE and trend trigger paths are exact; conf_over_80 rows carry that asterisk.</p></div>
+      <div class="card reveal"><h3 style="color:var(--amber)">12-pair baseline</h3>
+        <p>Majors + mid-caps, ~254k bars — representative, not exhaustive. The full 48-pair sweep is optional and slow; tail-pair behaviour could shift the small-n groups.</p></div>
+      <div class="card reveal"><h3 style="color:var(--amber)">Regime flapping</h3>
+        <p>Hysteresis (enter ADX ≥ 25 or CHOP ≤ 38.2, exit ADX ≤ 20 and CHOP ≥ 45) plus a 2-bar dwell bound the switch rate — but boundary bars are still the noisiest, and they get graded like any other.</p></div>
+      <div class="card reveal"><h3 style="color:var(--amber)">Meta can overfit</h3>
+        <p>Guards: ≥ 500 graded rows before training, time-ordered holdout, shadow-first rollout, a single LogReg rather than a model zoo, and per-TF isotonic instead of one global curve.</p></div>
+      <div class="card reveal"><h3 style="color:var(--amber)">Frozen stack</h3>
+        <p>The numpy&lt;2 pin (vendored pandas_ta) holds sklearn at 1.3.2. Upgrades are a deliberate migration project, not a pip install — the pins are the price of reproducibility.</p></div>
+      <div class="card reveal"><h3 style="color:var(--amber)">News breadth reduced</h3>
+        <p>CryptoPanic's free tier is dead; ingestion is RSS-only until a replacement source is vetted. Fewer headlines in RAG means the news agent sees a narrower world.</p></div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <b>BitReinforceX v2 — Accuracy Upgrade.</b> Every number on this page is injected from archived artifacts — traceable, re-buildable, never typed.
+  <div class="paths">
+    <span>baseline</span> logs/backtest/baseline/report.json ·
+    <span>candidate</span> logs/backtest/gate-v2/report.json ·
+    <span>smoke</span> logs/backtest/smoke/report.json ·
+    <span>trainer</span> logs/meta_metrics.json ·
+    <span>shadow</span> logs/bitreinforcex.db
+  </div>
+  <div class="deploycode" style="margin-top:16px;max-width:640px"><span class="c"># refresh the numbers on this page</span>
+python <span class="p">scripts/build_deck_data.py</span> --candidate logs/backtest/gate-v2/report.json</div>
+  <p style="margin-top:18px">Part of the same series — <a href="system-design.html">BitReinforceX · System Design</a></p>
+  <div class="warn">⚠ Advisory signals only — this is not financial advice and the system places no orders.</div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= deck data (injected by scripts/build_deck_data.py) ================= */
+  const DECK_DATA = /*__DECK_DATA_START__*/{"baseline": {"meta": {"label": "baseline", "pairs": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "NEARUSDT", "ARBUSDT", "GALAUSDT"], "tfs": ["1h", "4h", "1d"], "start": "2024-07-01", "end": null, "gate": "v1", "window": 500, "bars": 254317, "failures": [], "elapsed_s": 11907.9}, "summary": {"total_emissions": 65430, "groups": {"1d|mixed|conf_over_80": {"n": 189, "tp": 10, "sl": 12, "timeout": 166, "incomplete": 1, "tb_precision": 0.45454545454545453, "tb_precision_ci": [0.26920014432004846, 0.6534052671095845], "timeout_share": 0.8829787234042553, "expectancy_r": 0.09004595906737206, "fixed_hit_rate": 0.1702127659574468, "ambiguous": 0}, "1d|ranging|conf_over_80": {"n": 486, "tp": 20, "sl": 68, "timeout": 397, "incomplete": 1, "tb_precision": 0.22727272727272727, "tb_precision_ci": [0.1522163058823423, 0.3251447157026475], "timeout_share": 0.8185567010309278, "expectancy_r": -0.04052589599746344, "fixed_hit_rate": 0.13195876288659794, "ambiguous": 0}, "1d|trend_down|conf_over_80": {"n": 1452, "tp": 57, "sl": 134, "timeout": 1253, "incomplete": 8, "tb_precision": 0.29842931937172773, "tb_precision_ci": [0.23803100697155422, 0.3667761799946787], "timeout_share": 0.8677285318559557, "expectancy_r": 0.06348314308672963, "fixed_hit_rate": 0.24930747922437674, "ambiguous": 0}, "1d|trend_down|nwe_direct": {"n": 53, "tp": 3, "sl": 16, "timeout": 34, "incomplete": 0, "tb_precision": 0.15789473684210525, "tb_precision_ci": [0.05520371039927824, 0.37565927643176683], "timeout_share": 0.6415094339622641, "expectancy_r": -0.14712794414457653, "fixed_hit_rate": 0.16981132075471697, "ambiguous": 0}, "1d|trend_up|conf_over_80": {"n": 475, "tp": 22, "sl": 65, "timeout": 386, "incomplete": 2, "tb_precision": 0.25287356321839083, "tb_precision_ci": [0.17333087433749278, 0.3533177095712012], "timeout_share": 0.8160676532769556, "expectancy_r": -0.0896778179093493, "fixed_hit_rate": 0.1543340380549683, "ambiguous": 0}, "1d|trend_up|nwe_direct": {"n": 12, "tp": 3, "sl": 4, "timeout": 5, "incomplete": 0, "tb_precision": 0.42857142857142855, "tb_precision_ci": [0.15821692226262685, 0.7495457695909742], "timeout_share": 0.4166666666666667, "expectancy_r": 0.14094472172580078, "fixed_hit_rate": 0.5, "ambiguous": 0}, "1h|mixed|nwe_direct": {"n": 1488, "tp": 241, "sl": 587, "timeout": 660, "incomplete": 0, "tb_precision": 0.29106280193236717, "tb_precision_ci": [0.26114289507905086, 0.32291253085781024], "timeout_share": 0.4435483870967742, "expectancy_r": -0.03364696721649309, "fixed_hit_rate": 0.4099462365591398, "ambiguous": 7}, "1h|ranging|nwe_direct": {"n": 760, "tp": 116, "sl": 271, "timeout": 373, "incomplete": 0, "tb_precision": 0.2997416020671835, "tb_precision_ci": [0.25624614736663004, 0.3471737547113474], "timeout_share": 0.49078947368421055, "expectancy_r": 0.017308694774014234, "fixed_hit_rate": 0.45, "ambiguous": 2}, "1h|trend_down|nwe_direct": {"n": 8207, "tp": 1065, "sl": 3049, "timeout": 4093, "incomplete": 0, "tb_precision": 0.25887214389888186, "tb_precision_ci": [0.24571661061602118, 0.2724775812149613], "timeout_share": 0.4987206043621299, "expectancy_r": -0.03269490489843506, "fixed_hit_rate": 0.4304861703423906, "ambiguous": 17}, "1h|trend_up|nwe_direct": {"n": 8145, "tp": 1315, "sl": 2903, "timeout": 3927, "incomplete": 0, "tb_precision": 0.31175912754860124, "tb_precision_ci": [0.2979565170001508, 0.3259043118855184], "timeout_share": 0.4821362799263352, "expectancy_r": -0.0006420258963960512, "fixed_hit_rate": 0.40331491712707185, "ambiguous": 20}, "4h|mixed|conf_over_80": {"n": 3400, "tp": 507, "sl": 798, "timeout": 2093, "incomplete": 2, "tb_precision": 0.38850574712643676, "tb_precision_ci": [0.3624246747106802, 0.4152413163458387], "timeout_share": 0.6159505591524426, "expectancy_r": 0.01979133465152848, "fixed_hit_rate": 0.24720423778693348, "ambiguous": 8}, "4h|mixed|nwe_direct": {"n": 274, "tp": 31, "sl": 91, "timeout": 152, "incomplete": 0, "tb_precision": 0.2540983606557377, "tb_precision_ci": [0.18517041283138747, 0.33803971799975263], "timeout_share": 0.5547445255474452, "expectancy_r": -0.0007591878916608135, "fixed_hit_rate": 0.35766423357664234, "ambiguous": 1}, "4h|ranging|conf_over_80": {"n": 11204, "tp": 1416, "sl": 2707, "timeout": 7075, "incomplete": 6, "tb_precision": 0.34343924326946396, "tb_precision_ci": [0.32909621126716215, 0.3580737542580472], "timeout_share": 0.6318092516520807, "expectancy_r": 0.006950398829674167, "fixed_hit_rate": 0.25290230398285407, "ambiguous": 32}, "4h|ranging|nwe_direct": {"n": 192, "tp": 12, "sl": 81, "timeout": 99, "incomplete": 0, "tb_precision": 0.12903225806451613, "tb_precision_ci": [0.07537662016293771, 0.21211966242636277], "timeout_share": 0.515625, "expectancy_r": -0.24318761840333022, "fixed_hit_rate": 0.2552083333333333, "ambiguous": 0}, "4h|trend_down|conf_over_80": {"n": 14944, "tp": 1649, "sl": 3104, "timeout": 10191, "incomplete": 0, "tb_precision": 0.3469387755102041, "tb_precision_ci": [0.3335348655762248, 0.3605899083073536], "timeout_share": 0.681945931477516, "expectancy_r": 0.01545187661201712, "fixed_hit_rate": 0.2732200214132762, "ambiguous": 15}, "4h|trend_down|nwe_direct": {"n": 1630, "tp": 147, "sl": 480, "timeout": 1003, "incomplete": 0, "tb_precision": 0.23444976076555024, "tb_precision_ci": [0.2029669753592927, 0.2691667583703789], "timeout_share": 0.6153374233128834, "expectancy_r": 0.014080733547977523, "fixed_hit_rate": 0.4208588957055215, "ambiguous": 2}, "4h|trend_up|conf_over_80": {"n": 10577, "tp": 1265, "sl": 2601, "timeout": 6703, "incomplete": 8, "tb_precision": 0.3272115882048629, "tb_precision_ci": [0.3125991038949196, 0.34216712736374477], "timeout_share": 0.6342132652095752, "expectancy_r": -0.0029378121160538568, "fixed_hit_rate": 0.2741035102658719, "ambiguous": 22}, "4h|trend_up|nwe_direct": {"n": 1942, "tp": 243, "sl": 689, "timeout": 1006, "incomplete": 4, "tb_precision": 0.2607296137339056, "tb_precision_ci": [0.2335658339729117, 0.28985778814433555], "timeout_share": 0.5190918472652218, "expectancy_r": -0.04742706730180314, "fixed_hit_rate": 0.36790505675954593, "ambiguous": 7}}}, "funnel": {"conf_over_80": 44245, "nwe_direct": 22703, "suppressed:no_trigger": 187369}}, "candidate": null, "smoke": {"meta": {"label": "smoke", "pairs": ["BTCUSDT", "ETHUSDT", "SOLUSDT"], "tfs": ["1h"], "start": "2026-05-01", "end": null, "gate": "v1", "window": 500, "bars": 3030, "failures": [], "elapsed_s": 128.1}, "summary": {"total_emissions": 336, "groups": {"1h|all|nwe_direct": {"n": 336, "tp": 62, "sl": 125, "timeout": 149, "incomplete": 0, "tb_precision": 0.3315508021390374, "tb_precision_ci": [0.2680629642261224, 0.4018203316590514], "timeout_share": 0.44345238095238093, "expectancy_r": 0.07977156178092397, "fixed_hit_rate": 0.4255952380952381, "ambiguous": 0}}}, "funnel": {"suppressed:no_trigger": 2694, "nwe_direct": 336}}, "meta_metrics": null, "shadow": null}/*__DECK_DATA_END__*/;
+
+  /* ================= helpers ================= */
+  const D = DECK_DATA || {};
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function pct(x,d){ return (x==null||isNaN(x)) ? "—" : (100*x).toFixed(d==null?1:d)+"%"; }
+  function ciTxt(a){ return (a&&a.length===2) ? "["+pct(a[0])+", "+pct(a[1])+"]" : "—"; }
+  function r3(x){ return (x==null||isNaN(x)) ? "—" : (x>=0?"+":"")+Number(x).toFixed(3); }
+  function ints(n){ return (n==null||isNaN(n)) ? "—" : Number(n).toLocaleString("en-US"); }
+  function hours(s){ if(s==null) return "—"; return s>=3600 ? (s/3600).toFixed(1)+" h" : Math.round(s/60)+" min"; }
+  function pend(msg){ return '<span class="pend"><i></i>'+esc(msg||"run pending — inject with scripts/build_deck_data.py")+'</span>'; }
+  const TFO = {"1h":0,"4h":1,"1d":2,"1w":3};
+  const RGO = {"all":0,"ranging":1,"mixed":2,"trend_up":3,"trend_down":4};
+  function parseKey(k){ const p=k.split("|"); return {tf:p[0]||"?", regime:p[1]||"?", trigger:p.slice(2).join("|")||"?"}; }
+  function keySort(a,b){
+    const A=parseKey(a), B=parseKey(b);
+    const t=(TFO[A.tf]!==undefined?TFO[A.tf]:9)-(TFO[B.tf]!==undefined?TFO[B.tf]:9); if(t) return t;
+    const r=(RGO[A.regime]!==undefined?RGO[A.regime]:9)-(RGO[B.regime]!==undefined?RGO[B.regime]:9); if(r) return r;
+    return A.trigger<B.trigger?-1:A.trigger>B.trigger?1:0;
+  }
+  function isTrigger(k){ const t=parseKey(k).trigger; return t==="nwe_direct" || t.indexOf("trend_")===0; }
+  function groupsOf(rep){ return (rep&&rep.summary&&rep.summary.groups)||null; }
+  function regimeTxt(r){ return r.replace("trend_up","trend-up").replace("trend_down","trend-down"); }
+
+  /* ================= rail data pulse ================= */
+  (function(){
+    const mk=function(name,ok){ return name+" "+(ok?"✓":"◌"); };
+    $("datapulse").textContent = DECK_DATA
+      ? mk("baseline",!!D.baseline)+" · "+mk("candidate",!!D.candidate)+" · "+mk("shadow",!!D.shadow)
+      : "deck data · not injected";
+  })();
+
+  /* ================= 01 failure stats ================= */
+  (function(){
+    const el=$("failstats"), G=groupsOf(D.baseline);
+    if(!G){ el.innerHTML='<div style="grid-column:1/-1">'+pend("baseline run pending — inject with scripts/build_deck_data.py")+'</div>'; return; }
+    const picks=[
+      ["1h|trend_down|nwe_direct","1h · trend-down · NWE"],
+      ["1h|trend_up|nwe_direct","1h · trend-up · NWE"],
+      ["4h|ranging|nwe_direct","4h · ranging · NWE"]
+    ];
+    let html="";
+    picks.forEach(function(pk){
+      const g=G[pk[0]];
+      if(!g){ html+='<div class="stat"><div class="sk">'+esc(pk[1])+'</div><div style="margin-top:10px">'+pend("group missing")+'</div></div>'; return; }
+      const p=g.tb_precision, cls=p<0.30?"bad":(p<0.40?"warn":"good");
+      html+='<div class="stat"><div class="sk">'+esc(pk[1])+'</div>'
+        +'<div class="sv '+cls+'">'+pct(p)+'</div>'
+        +'<div class="sci">TB precision · CI '+ciTxt(g.tb_precision_ci)+'</div>'
+        +'<div class="sm">n <b>'+ints(g.n)+'</b> · fixed-horizon said <b>'+pct(g.fixed_hit_rate)+'</b> · exp <b>'+r3(g.expectancy_r)+'R</b></div></div>';
+    });
+    /* path-blind flattery across all 1h NWE groups */
+    let n=0, hits=0, tp=0, res=0;
+    Object.keys(G).forEach(function(k){
+      const P=parseKey(k);
+      if(P.tf==="1h" && P.trigger==="nwe_direct"){
+        const g=G[k]; n+=g.n; hits+=g.n*(g.fixed_hit_rate||0); tp+=g.tp; res+=g.tp+g.sl;
+      }
+    });
+    if(n>0&&res>0){
+      const fh=hits/n, tb=tp/res, d=(fh-tb)*100;
+      html+='<div class="stat"><div class="sk">path-blind flattery · all 1h NWE</div>'
+        +'<div class="sv warn">+'+d.toFixed(1)+' pts</div>'
+        +'<div class="sci">fixed-horizon '+pct(fh)+' → triple-barrier '+pct(tb)+'</div>'
+        +'<div class="sm">across <b>'+ints(n)+'</b> emissions — endpoint grading hid the stop-outs</div></div>';
+    }
+    el.innerHTML=html;
+  })();
+
+  /* ================= 05 evidence ================= */
+  const BASE=D.baseline||null, CAND=D.candidate||null;
+
+  /* run meta chips */
+  (function(){
+    const el=$("runmeta");
+    function chip(rep,cls,label){
+      if(!rep||!rep.meta) return '<span class="rm '+cls+'"><b>'+label+'</b> — pending</span>';
+      const m=rep.meta, em=rep.summary?ints(rep.summary.total_emissions):"—";
+      return '<span class="rm '+cls+'"><b>'+esc(m.label||label)+'</b> · gate '+esc(m.gate||"?")
+        +' · '+(m.pairs?m.pairs.length:"?")+' pairs · '+(m.tfs?esc(m.tfs.join("/")):"?")
+        +' · '+esc(m.start||"?")+' → '+esc(m.end||"live")
+        +' · '+ints(m.bars)+' bars · '+em+' emissions · replay '+hours(m.elapsed_s)+'</span>';
+    }
+    el.innerHTML = chip(BASE,"","baseline") + chip(CAND,"cd","candidate");
+  })();
+
+  /* side-by-side table */
+  (function(){
+    const mount=$("cmptable");
+    const bg=groupsOf(BASE)||{}, cg=groupsOf(CAND)||{};
+    const keys={}; Object.keys(bg).forEach(function(k){ if(isTrigger(k)) keys[k]=1; });
+    Object.keys(cg).forEach(function(k){ if(isTrigger(k)) keys[k]=1; });
+    const list=Object.keys(keys).sort(keySort);
+    if(!list.length){
+      mount.innerHTML='<div style="padding:22px">'+pend("no trigger groups yet — inject with scripts/build_deck_data.py")+'</div>';
+      return;
+    }
+    if(!CAND){
+      $("cmp-pending").innerHTML=pend("gate-v2 candidate pending — run: python scripts/build_deck_data.py --candidate logs/backtest/gate-v2/report.json");
+    }
+    const cmp=(CAND&&CAND.comparison&&CAND.comparison.groups)||{};
+    function cells(g, sep){
+      const c1=sep?' class="sep"':'', c1d=sep?' class="sep dim"':' class="dim"';
+      if(!g) return '<td'+c1d+'>—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td>';
+      const e=g.expectancy_r;
+      return '<td'+c1+'>'+ints(g.n)+'</td>'
+        +'<td><span>'+pct(g.tb_precision)+'</span><span class="cin">'+ciTxt(g.tb_precision_ci)+'</span></td>'
+        +'<td class="'+(e>=0?"pos":"neg")+'">'+r3(e)+'</td>'
+        +'<td class="dim">'+pct(g.timeout_share,0)+'</td>';
+    }
+    let rows="";
+    list.forEach(function(k){
+      const P=parseKey(k), b=bg[k], c=cg[k], d=cmp[k];
+      let delta='<td class="sep dim">—</td>';
+      if(d && d.tb_precision_delta!=null){
+        const v=d.tb_precision_delta*100;
+        delta='<td class="sep '+(v>=0?"pos":"neg")+'" title="z = '+(d.z!=null?Number(d.z).toFixed(2):"?")
+          +' · ΔR '+(d.expectancy_r_delta!=null?r3(d.expectancy_r_delta):"—")
+          +' · Δn '+(d.n_delta!=null?ints(d.n_delta):"—")+'">'
+          +(v>=0?"+":"")+v.toFixed(1)+' pts'+(d.significant_95?' <span class="star">★</span>':"")+'</td>';
+      } else if(b&&c&&b.tb_precision!=null&&c.tb_precision!=null){
+        const v=(c.tb_precision-b.tb_precision)*100;
+        delta='<td class="sep '+(v>=0?"pos":"neg")+'">'+(v>=0?"+":"")+v.toFixed(1)+' pts</td>';
+      }
+      rows+='<tr><td class="g"><span class="tfp">'+esc(P.tf)+'</span> <span class="rgp">'+esc(regimeTxt(P.regime))+'</span>'
+        +(P.trigger!=="nwe_direct"?' <span class="trg">· '+esc(P.trigger)+'</span>':' <span class="trg">· nwe</span>')
+        +'</td>'+cells(b,false)+cells(c,true)+delta+'</tr>';
+    });
+    mount.innerHTML='<table class="cmp">'
+      +'<thead><tr class="gh"><th class="g"></th><th colspan="4" class="bl">baseline · gate v1</th>'
+      +'<th colspan="4" class="cd sep">candidate · gate v2'+(CAND?"":" · pending")+'</th><th class="sep">Δ</th></tr>'
+      +'<tr><th class="g">group</th><th>n</th><th>tb precision</th><th>exp R</th><th>timeout</th>'
+      +'<th class="sep">n</th><th>tb precision</th><th>exp R</th><th>timeout</th><th class="sep">tb prec Δ</th></tr></thead>'
+      +'<tbody>'+rows+'</tbody></table>';
+  })();
+
+  /* grouped bar chart */
+  (function(){
+    const mount=$("barchart"), leg=$("barlegend");
+    const bg=groupsOf(BASE)||{}, cg=groupsOf(CAND)||{};
+    const keys={}; Object.keys(bg).forEach(function(k){ if(isTrigger(k)) keys[k]=1; });
+    Object.keys(cg).forEach(function(k){ if(isTrigger(k)) keys[k]=1; });
+    const list=Object.keys(keys).sort(keySort);
+    if(!list.length){ mount.innerHTML=pend("waiting for report data"); return; }
+
+    let maxV=0.5;
+    list.forEach(function(k){
+      [bg[k],cg[k]].forEach(function(g){ if(g&&g.tb_precision!=null) maxV=Math.max(maxV,g.tb_precision*1.18); });
+    });
+    const ymax=Math.min(1,Math.ceil(maxV*20)/20);
+    const slot=66, padL=52, padR=14, padT=16, padB=72, plotH=210;
+    const W=padL+padR+list.length*slot, H=padT+plotH+padB;
+    const y=function(v){ return padT+plotH*(1-v/ymax); };
+    let s='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;min-width:'+Math.min(W,860)+'px" role="img" aria-label="TB precision per group, baseline vs candidate">';
+    s+='<defs><linearGradient id="gbar" x1="0" y1="1" x2="0" y2="0">'
+      +'<stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff4d8d"/></linearGradient></defs>';
+    for(let gv=0; gv<=ymax+1e-9; gv+=0.1){
+      const yy=y(gv);
+      s+='<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="rgba(140,150,210,.12)" stroke-width="1"/>'
+        +'<text x="'+(padL-8)+'" y="'+(yy+3.5)+'" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#646a96">'+Math.round(gv*100)+'%</text>';
+    }
+    const yBE=y(0.4);
+    s+='<line x1="'+padL+'" y1="'+yBE+'" x2="'+(W-padR)+'" y2="'+yBE+'" stroke="#ffcf5c" stroke-width="1.3" stroke-dasharray="5 6" opacity=".8"/>'
+      +'<text x="'+(padL+6)+'" y="'+(yBE-6)+'" text-anchor="start" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#ffcf5c">breakeven 40% @ 1.5R</text>';
+    list.forEach(function(k,i){
+      const P=parseKey(k), cx0=padL+i*slot+slot/2;
+      const bars=CAND?[[bg[k],"#22d3ee",.85,-1],[cg[k],"url(#gbar)",1,1]]:[[bg[k],"#22d3ee",.85,0]];
+      const bw=CAND?16:22, gap=CAND?3:0;
+      bars.forEach(function(spec){
+        const g=spec[0]; if(!g||g.tb_precision==null) return;
+        const x=cx0+(spec[3]===0?-bw/2:(spec[3]<0?-(bw+gap):gap));
+        const v=g.tb_precision, yy=y(v);
+        s+='<rect x="'+x+'" y="'+yy+'" width="'+bw+'" height="'+(padT+plotH-yy)+'" rx="3" fill="'+spec[1]+'" opacity="'+spec[2]+'">'
+          +'<title>'+esc(k)+' — '+pct(v)+' CI '+ciTxt(g.tb_precision_ci)+' · n '+ints(g.n)+'</title></rect>';
+        if(g.tb_precision_ci){
+          const lo=Math.max(0,g.tb_precision_ci[0]), hi=Math.min(ymax,g.tb_precision_ci[1]);
+          const cxm=x+bw/2, clip=g.tb_precision_ci[1]>ymax;
+          s+='<line x1="'+cxm+'" y1="'+y(lo)+'" x2="'+cxm+'" y2="'+y(hi)+'" stroke="#e8eaf6" stroke-width="1" opacity=".5"/>';
+          s+='<line x1="'+(cxm-3.5)+'" y1="'+y(lo)+'" x2="'+(cxm+3.5)+'" y2="'+y(lo)+'" stroke="#e8eaf6" stroke-width="1" opacity=".5"/>';
+          s+= clip ? '<text x="'+cxm+'" y="'+(y(ymax)-2)+'" text-anchor="middle" font-size="8" fill="#e8eaf6" opacity=".6">▲</text>'
+                   : '<line x1="'+(cxm-3.5)+'" y1="'+y(hi)+'" x2="'+(cxm+3.5)+'" y2="'+y(hi)+'" stroke="#e8eaf6" stroke-width="1" opacity=".5"/>';
+        }
+        s+='<text x="'+(x+bw/2)+'" y="'+(yy-4)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#9499c4">'+(v*100).toFixed(1)+'</text>';
+      });
+      const lx=cx0, ly=padT+plotH+14;
+      const lbl=P.tf+" "+regimeTxt(P.regime)+(P.trigger!=="nwe_direct"?" · "+P.trigger:"");
+      s+='<text x="'+lx+'" y="'+ly+'" transform="rotate(-34 '+lx+' '+ly+')" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="9.5" fill="#9499c4">'+esc(lbl)+'</text>';
+    });
+    s+='<line x1="'+padL+'" y1="'+(padT+plotH)+'" x2="'+(W-padR)+'" y2="'+(padT+plotH)+'" stroke="rgba(140,150,210,.3)" stroke-width="1"/></svg>';
+    mount.innerHTML=s;
+    leg.innerHTML='<span><span class="sw" style="background:#22d3ee;opacity:.85"></span>baseline · gate v1</span>'
+      +(CAND?'<span><span class="sw" style="background:linear-gradient(180deg,#ff4d8d,#7c5cff)"></span>candidate · gate v2</span>'
+            :pend("candidate bars pending — gate-v2 report not injected yet"))
+      +'<span><span class="sw" style="background:transparent;border-bottom:2px dashed #ffcf5c;height:2px;border-radius:0"></span>1.5R breakeven</span>';
+  })();
+
+  /* funnels */
+  function funnel(mount, rep, msg){
+    const el=$(mount);
+    if(!rep||!rep.funnel){ el.innerHTML=pend(msg); return; }
+    const f=rep.funnel, ks=Object.keys(f);
+    let total=0, mx=1;
+    ks.forEach(function(k){ total+=f[k]; mx=Math.max(mx,f[k]); });
+    ks.sort(function(a,b){
+      const sa=a.indexOf("suppressed:")===0?1:0, sb=b.indexOf("suppressed:")===0?1:0;
+      return sa!==sb ? sa-sb : f[b]-f[a];
+    });
+    let html="";
+    ks.forEach(function(k){
+      const sup=k.indexOf("suppressed:")===0;
+      const label=sup ? "⊘ "+k.slice(11) : "◆ "+k;
+      const w=Math.max(0.8,(f[k]/mx)*100);
+      html+='<div class="frow"><span class="flabel" title="'+esc(k)+'">'+esc(label)+'</span>'
+        +'<div class="fbar"><i class="'+(sup?"sup":"emit")+'" style="width:'+w.toFixed(2)+'%"></i></div>'
+        +'<span class="fnum">'+ints(f[k])+' · '+pct(f[k]/total)+'</span></div>';
+    });
+    html+='<div class="ftot">'+ints(total)+' evaluated · '
+      +ints(rep.summary?rep.summary.total_emissions:null)+' emitted</div>';
+    el.innerHTML=html;
+  }
+  funnel("funnelB", BASE, "baseline funnel pending — inject with scripts/build_deck_data.py");
+  funnel("funnelC", CAND, "gate-v2 run pending — inject with scripts/build_deck_data.py --candidate …/gate-v2/report.json");
+
+  /* smoke line */
+  (function(){
+    const el=$("smokeline"), s=D.smoke;
+    if(!s||!s.meta){ el.innerHTML=pend("harness smoke run pending"); return; }
+    el.textContent="Harness sanity — smoke replay: "+(s.meta.pairs?s.meta.pairs.length:"?")+" pairs · "
+      +(s.meta.tfs?s.meta.tfs.join("/"):"?")+" · "+ints(s.summary?s.summary.total_emissions:null)
+      +" emissions in "+hours(s.meta.elapsed_s)+" — trigger, gate and TB grader exercised end-to-end (logs/backtest/smoke/report.json).";
+  })();
+
+  /* ================= 06 self-learning data ================= */
+  (function(){
+    const el=$("metastats"), m=D.meta_metrics;
+    if(!m){ el.innerHTML=pend("trainer has not produced logs/meta_metrics.json yet — needs ≥ 500 graded rows"); return; }
+    let html='<div class="kv">';
+    Object.keys(m).forEach(function(k){
+      const v=m[k]; let txt;
+      if(typeof v==="number") txt=(v>0&&v<1)?v.toFixed(3):ints(v);
+      else if(typeof v==="object"&&v!==null) txt=esc(JSON.stringify(v)).slice(0,60);
+      else txt=esc(String(v));
+      html+='<span class="k2">'+esc(k)+' <b>'+txt+'</b></span>';
+    });
+    el.innerHTML=html+"</div>";
+  })();
+  (function(){
+    const el=$("shadowstats"), s=D.shadow;
+    if(!s){ el.innerHTML=pend("no live DB found — shadow columns appear once the runtime writes predictions"); return; }
+    let html='<div class="kv">'
+      +'<span class="k2">predictions <b>'+ints(s.predictions)+'</b></span>'
+      +'<span class="k2">graded <b>'+ints(s.graded)+'</b></span>'
+      +'<span class="k2">with meta_p <b>'+ints(s.with_meta)+'</b></span>'
+      +'<span class="k2">with regime <b>'+ints(s.with_regime)+'</b></span></div>';
+    const mix=s.regime_mix||{};
+    const ks=Object.keys(mix); let tot=0, mx=1;
+    ks.forEach(function(k){ tot+=mix[k]; mx=Math.max(mx,mix[k]); });
+    if(ks.length){
+      const col={trend_up:"#34f5c5",trend_down:"#ff4d8d",ranging:"#22d3ee",mixed:"#7c5cff",none:"#646a96"};
+      html+='<div style="margin-top:16px">';
+      ks.sort(function(a,b){ return mix[b]-mix[a]; }).forEach(function(k){
+        html+='<div class="mixrow"><span class="ml">'+esc(k)+'</span>'
+          +'<div class="fbar"><i style="width:'+Math.max(1,(mix[k]/mx)*100).toFixed(1)+'%;background:'+(col[k]||"#8c96d2")+';opacity:.75"></i></div>'
+          +'<span class="fnum">'+ints(mix[k])+' · '+pct(tot?mix[k]/tot:null,0)+'</span></div>';
+      });
+      html+="</div>";
+    }
+    el.innerHTML=html;
+  })();
+
+  /* ================= decorative behaviours (match sibling deck) ================= */
+  var reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  /* ---- scroll reveal ---- */
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target);} });
+  }, {threshold:.12});
+  document.querySelectorAll(".reveal").forEach(function(el,i){
+    el.style.transitionDelay = Math.min(i%4*0.06,0.24)+"s";
+    io.observe(el);
+  });
+
+  /* ---- scroll-spy nav ---- */
+  var links = [].slice.call(document.querySelectorAll("#nav a"));
+  var spy = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(l){ l.classList.toggle("active", l.getAttribute("href")==="#"+e.target.id); });
+      }
+    });
+  }, {rootMargin:"-45% 0px -50% 0px"});
+  document.querySelectorAll("section[id]").forEach(function(s){ spy.observe(s); });
+
+  /* ---- 3D card tilt ---- */
+  if(!reduce && window.matchMedia("(pointer:fine)").matches){
+    document.querySelectorAll(".card").forEach(function(c){
+      c.addEventListener("mousemove", function(ev){
+        var r=c.getBoundingClientRect(), px=(ev.clientX-r.left)/r.width-.5, py=(ev.clientY-r.top)/r.height-.5;
+        c.style.transform="perspective(900px) rotateY("+(px*6)+"deg) rotateX("+(-py*6)+"deg) translateZ(6px)";
+      });
+      c.addEventListener("mouseleave", function(){ c.style.transform=""; });
+    });
+  }
+
+  /* ---- hero 3D constellation ---- */
+  var cv = document.getElementById("constellation"), ctx = cv.getContext("2d");
+  var W,H,DPR=Math.min(window.devicePixelRatio||1,2), pts=[], cx, cy, mx=0, my=0, t=0;
+  var PAL=["#22d3ee","#7c5cff","#ff4d8d","#34f5c5"];
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    var N = W<700?42:78, R=Math.min(W,H)*0.42;
+    pts=[];
+    for(var i=0;i<N;i++){
+      var phi=Math.acos(1-2*(i+.5)/N), th=Math.PI*(1+Math.sqrt(5))*i;
+      pts.push({
+        x:Math.cos(th)*Math.sin(phi)*R, y:Math.sin(th)*Math.sin(phi)*R, z:Math.cos(phi)*R,
+        c:PAL[i%4], core:i<5
+      });
+    }
+  }
+  function frame(){
+    t+=0.0016;
+    ctx.clearRect(0,0,W,H);
+    var ay=t + mx*0.5, ax=my*0.35, f=560;
+    var sy=Math.sin(ay),cyy=Math.cos(ay), sx=Math.sin(ax),cxx=Math.cos(ax);
+    var proj=[];
+    for(var i=0;i<pts.length;i++){
+      var p=pts[i];
+      var x1=p.x*cyy - p.z*sy, z1=p.x*sy + p.z*cyy;
+      var y2=p.y*cxx - z1*sx,  z2=p.y*sx + z1*cxx;
+      var s=f/(f+z2+R0());
+      proj.push({x:cx+x1*s, y:cy+y2*s, s:s, z:z2, c:p.c, core:p.core});
+    }
+    for(var a=0;a<proj.length;a++){
+      for(var b=a+1;b<proj.length;b++){
+        var dx=proj[a].x-proj[b].x, dy=proj[a].y-proj[b].y, d=dx*dx+dy*dy;
+        if(d<13000){
+          var al=(1-d/13000)*0.22*Math.min(proj[a].s,proj[b].s);
+          ctx.strokeStyle="rgba(124,140,230,"+al+")"; ctx.lineWidth=0.6;
+          ctx.beginPath(); ctx.moveTo(proj[a].x,proj[a].y); ctx.lineTo(proj[b].x,proj[b].y); ctx.stroke();
+        }
+      }
+    }
+    for(var i=0;i<proj.length;i++){
+      var q=proj[i], rad=(q.core?3.4:1.7)*q.s, op=Math.max(0.12,Math.min(1,q.s*0.9));
+      ctx.beginPath(); ctx.arc(q.x,q.y,rad,0,6.2832);
+      ctx.fillStyle=q.c; ctx.globalAlpha=op;
+      if(q.core){ ctx.shadowColor=q.c; ctx.shadowBlur=16; } else { ctx.shadowBlur=0; }
+      ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1;
+    }
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  var _R=0; function R0(){ return _R || (_R=Math.min(W,H)*0.42); }
+  window.addEventListener("resize", function(){ _R=0; resize(); });
+  window.addEventListener("mousemove", function(e){ mx=(e.clientX/window.innerWidth-.5); my=(e.clientY/window.innerHeight-.5); });
+  resize();
+  if(reduce){ frame(); } else { requestAnimationFrame(frame); }
+})();
+</script>
+</body>
+</html>
