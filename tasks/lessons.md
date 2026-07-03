@@ -31,3 +31,17 @@
    omitted from the CLI. The report header (`gate: v1`) exposed it. Every run's
    meta must be read back against the intended configuration. (The accident was
    kept as `trigger-ablation/` — it cleanly isolates the trigger-set effect.)
+
+7. **Lesson-1 pattern recurred in NewsAgent.** Unit tests exercised `NewsRL()`
+   (10-dim default) while the live agent ctor pinned `NewsRL(n_features=5)` —
+   the 5→10 migration machinery was dead in production and `_pad()` silently
+   truncated the event dims. Guard: a wiring test now asserts the AGENT's
+   bandit width equals `N_FEATURES`. Rule: when a module constant drives a
+   shape/roster, cover the live ctor path, not just the class.
+
+8. **Tests mutated real logs/ artifacts.** Any test constructing an agent
+   without monkeypatching its POLICY_PATH rewrote logs/*.json (twice caused
+   dirty-tree noise; post-migration it would have rewritten the live news
+   policy). Durable fix: `tests/conftest.py` autouse fixture redirects every
+   artifact path (policies + nightly outputs) to tmp_path. Rule: the moment an
+   artifact path is added to config, add it to that fixture.

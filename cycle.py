@@ -162,12 +162,16 @@ async def run_cycle(
                                                  conf=conf, reason=reason, decision=res)
                     summary["emitted"] += 1
 
-                store.record_prediction(
+                pid = store.record_prediction(
                     res, cycle_id=cycle_id, candle_close_ts=close_ts, entry_price=entry,
                     horizon_k=k, grade_due_ts=grade_due, emitted=emit, session_id=session_id,
                     atr=atr, tp_price=tp_price, sl_price=sl_price,
                     trigger_source=reason if emit else None,
                     meta_p=meta_p, calibrated_conf=calibrated)
+                if session_id and pid:
+                    # session was created pre-record (keyboard needs its id);
+                    # link back so REWARD buttons can find the prediction.
+                    store.link_session_prediction(session_id, pid)
 
         await asyncio.gather(*(analyze(s) for s in symbols))
 

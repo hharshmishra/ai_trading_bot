@@ -441,6 +441,18 @@ class Store:
             self.conn.commit()
         return sid
 
+    def link_session_prediction(self, session_id: str, prediction_id: str) -> None:
+        """Back-fill sessions.prediction_id once the prediction row exists.
+
+        The broadcaster creates the session BEFORE cycle records the prediction
+        (the keyboard needs a session id), so the link can only be written here.
+        Without it, manual REWARD buttons resolve to unknown_prediction.
+        """
+        with self._lock:
+            self.conn.execute("UPDATE sessions SET prediction_id = ? WHERE id = ?",
+                              (prediction_id, session_id))
+            self.conn.commit()
+
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             cur = self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))

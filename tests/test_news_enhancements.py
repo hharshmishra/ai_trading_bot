@@ -88,6 +88,17 @@ class TestRlMigration:
         assert all(rl.policy.weights[a][j] == 0.0 for a in range(3) for j in range(5, 10))
 
 
+class TestAgentWiring:
+    def test_agent_bandit_width_follows_n_features(self):
+        """Unit tests construct NewsRL() directly; the AGENT ctor is the live
+        wiring. It once pinned n_features=5 while features_from_jsons returns
+        10 dims — _pad silently truncated event features and the 5->10 policy
+        migration never ran in production."""
+        import agents.news_agent as na
+        ag = na.NewsAgent()
+        assert ag._rl.n_features == na.N_FEATURES
+
+
 class TestEventsPromptFlag:
     def test_flag_off_prompt_unchanged(self, monkeypatch):
         import agents.news_agent as na

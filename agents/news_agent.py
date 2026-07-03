@@ -380,7 +380,7 @@ class NewsAgent:
         agent.learn(result["action"], reward=+1 or -4)
     """
     def __init__(self):
-        self._rl = NewsRL(n_features=5)
+        self._rl = NewsRL()   # width follows N_FEATURES; old 5-dim policies zero-pad up
         self._last_features: List[float] | None = None
         self._last_action: int | None = None
         self._last_pair: str | None = None

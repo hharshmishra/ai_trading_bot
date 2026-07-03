@@ -102,3 +102,11 @@ NWE event mode SHIPPED (-25-36% duplicate 1h emissions, precision +0.8-1.1pp);
 divergences HELD (deltas ~0, fire too rarely); EB conf self-arms on live data.
 Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
 (46-pair universe silently) -> LTC/TRX in. 167 tests green.
+
+## 2026-07-04 — deck-audit fixes (found by dev-deck verification agent)
+- [x] sessions.prediction_id back-filled after record_prediction (cycle.py) —
+      manual REWARD buttons were silent unknown_prediction no-ops since Phase 4
+- [x] NewsAgent ctor NewsRL() (was pinned n_features=5; 10-dim features were
+      truncated, 5->10 policy migration never ran live)
+- [x] tests/conftest.py: autouse isolation of ALL logs/ artifact paths
+- [x] 169 tests green; logs/ clean after full suite

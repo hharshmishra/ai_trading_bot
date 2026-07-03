@@ -121,6 +121,38 @@ def test_run_cycle_records_and_gates(tmp_path):
     store.close()
 
 
+def test_run_cycle_links_session_to_prediction(tmp_path):
+    """REWARD buttons resolve sessions.prediction_id -> predictions.id. The
+    broadcaster creates the session BEFORE cycle records the prediction (the
+    dev keyboard needs a session id), so cycle must back-fill the link after
+    record_prediction. Unlinked sessions made every manual feedback press a
+    silent unknown_prediction no-op."""
+    from persistence import Store
+    from cycle import run_cycle
+
+    store = Store(str(tmp_path / "c.db"))
+    df = pd.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=10, freq="4h"),
+                       "open": 1.0, "high": 1.0, "low": 1.0, "close": 100.0, "volume": 1.0})
+    fetcher = SimpleNamespace(get_ohlcv=lambda s, tf, limit=500: df.copy())
+    dm = SimpleNamespace(indicator=None, news=None, research=None,
+                         decide=lambda sym, tf, ua, ctx: make_decision(sym, tf, "buy", 0.9))
+
+    async def fake_broadcast(**kw):
+        # mirror the production Broadcaster: a REAL session row, no pid yet
+        return store.create_session(pair=kw["pair"], tf=kw["tf"])
+
+    asyncio.run(run_cycle(["4h"], dm=dm, data_fetcher=fetcher, broadcast=fake_broadcast,
+                          symbols=["AUSDT"], store=store, build_context=lambda *a, **k: None))
+
+    with store._lock:
+        sess = dict(store.conn.execute("SELECT id, prediction_id FROM sessions").fetchone())
+        pred = dict(store.conn.execute("SELECT id, session_id FROM predictions").fetchone())
+    assert sess["prediction_id"] == pred["id"]          # buttons can find the row
+    assert pred["session_id"] == sess["id"]             # and the reverse link holds
+    assert store.get_prediction(sess["prediction_id"]) is not None
+    store.close()
+
+
 # ------------------- broadcaster + callback (fake bot) -------------------- #
 class FakeMsg:
     def __init__(self, mid):
