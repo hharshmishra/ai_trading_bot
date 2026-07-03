@@ -128,7 +128,12 @@ def main() -> int:
     lines = [f"# Indicator redundancy & standalone win rates — {args.tf}, {len(all_sig)} pairs", ""]
     lines.append("## Spearman correlation (|rho| > 0.75 = redundant pair)")
     lines.append("")
-    lines.append(corr.to_markdown())
+    # hand-rolled markdown table (tabulate not installed; keep deps minimal)
+    cols = list(corr.columns)
+    lines.append("| | " + " | ".join(cols) + " |")
+    lines.append("|" + "---|" * (len(cols) + 1))
+    for idx in corr.index:
+        lines.append(f"| {idx} | " + " | ".join(str(corr.loc[idx, c]) for c in cols) + " |")
     lines.append("")
     flagged = [(a, b, corr.loc[a, b]) for a in corr.index for b in corr.columns
                if a < b and abs(corr.loc[a, b]) > 0.75]
