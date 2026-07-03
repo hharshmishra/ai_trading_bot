@@ -276,7 +276,7 @@
     <a href="#runbook"><span class="dot"></span><span class="n">14</span>Runbook / gotchas</a>
     <a href="#pending"><span class="dot"></span><span class="n">15</span>What's pending</a>
   </nav>
-  <div class="pulse"><i></i><span>main @ 2a1747c · 169 tests</span></div>
+  <div class="pulse"><i></i><span>main @ v3.1 · 194 tests</span></div>
 </aside>
 
 <div class="wrap">
@@ -291,7 +291,7 @@
       <p class="sub">One long-lived Python process analyses 48 Binance pairs every hour with four reinforcement-learning voters, gates what is worth sending by market regime, grades every prediction against the realized price path, and re-trains itself nightly on its own track record. This page is the whole machine — every module, every flow, every env var, and the honest numbers behind every enabled flag.</p>
       <div class="chips">
         <div class="chip"><b class="grad">main @ f0d9822</b><span>this snapshot</span></div>
-        <div class="chip"><b>169</b><span>tests green</span></div>
+        <div class="chip"><b>194</b><span>tests green</span></div>
         <div class="chip"><b>48</b><span>USDT pairs</span></div>
         <div class="chip"><b>$0<span style="font-size:14px;color:var(--faint)">/mo</span></b><span>data cost</span></div>
         <div class="chip"><b style="color:var(--magenta)">advisory</b><span>only — no orders</span></div>
@@ -426,7 +426,7 @@
           <tr><td class="file">scripts/experiments/lorentzian_knn.py</td><td>Experiment only (D5): Lorentzian-distance kNN, walk-forward 70/30. Adopt only if holdout precision &gt; 40% with n ≥ 100 — else documented and dropped.</td><td class="fns">run_pair() · lorentzian_dist()</td></tr>
           <tr><td class="file">deploy/</td><td>bitreinforcex.service (systemd), backup.sh (WAL-safe sqlite3 .backup, keeps 14), litestream.yml (continuous replication).</td><td class="fns">systemctl enable --now bitreinforcex · journalctl -u bitreinforcex -f</td></tr>
           <tr><td class="file">vendor/pandas-ta</td><td>Vendored pandas_ta 0.3.14b0 — upstream deleted from PyPI/GitHub; the reason for the numpy&lt;2 pin.</td><td class="fns">installed by requirements.txt (./vendor/pandas-ta)</td></tr>
-          <tr><td class="file">tests/ · 17 files</td><td>169 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 169 passed</td></tr>
+          <tr><td class="file">tests/ · 18 files</td><td>194 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 194 passed</td></tr>
         </tbody>
       </table>
     </div>
@@ -771,7 +771,7 @@ cp .env.example .env
 python <span class="p">scripts/preflight.py</span>
 
 <span class="c"># tests need no network and no keys</span>
-pytest -q                        <span class="c"># → 169 passed</span>
+pytest -q                        <span class="c"># → 194 passed</span>
 
 <span class="c"># run everything — scheduler + grader + nightly in ONE process</span>
 python <span class="p">telegram_app.py</span></div>
@@ -898,7 +898,7 @@ python <span class="p">scripts/run_training.py</span>                           
         <p>From monolith to the current shape in 6 phases: shared market context (measured 488 → 85 LLM calls/cycle at the time), stateless <code>apply_reward</code> (the feature-race fix), SQLite WAL persistence replacing unbounded JSONL state, the auto-grader, the single-process Telegram runtime (scheduler cascade bug #8, policy write race #10 fixed), RSS ingestion + RAG.</p></div>
       <div class="card"><h3>v2 — accuracy<small>docs/accuracy-upgrade.html · 111 tests · merged 734ec4c</small></h3>
         <p>Measure first: the backtest harness quantified the NWE band-walk failure, then shipped the regime classifier + gate v2 (with two evidence amendments), triple-barrier grading + reward map v2, the derivatives voter, and nightly meta/calibration training. decide() optimized 487 → 258 ms (supertrend numpy port, NWE weight cache, alpha_trend arrays).</p></div>
-      <div class="card"><h3>v3 — correctness<small>tasks/todo.md review · 169 tests · this snapshot</small></h3>
+      <div class="card"><h3>v3 — correctness<small>tasks/todo.md review · 194 tests · this snapshot</small></h3>
         <p>An 11-defect audit (5 critical) plus per-agent enhancements: real SPX/DXY trends, money-flow v2, ecosystem auto-refresh, typed news events (logit-preserving 5→10 RL migration), tiered headlines, model2vec embedder option, divergences (held), EB confidences, the D3 redundancy report, and the Lorentzian experiment. Universe: preflight's new freshness check caught LRC (dead 93 d) and MKR (dead 291 d) → LTC/TRX in.</p></div>
     </div>
 
@@ -965,6 +965,7 @@ python <span class="p">scripts/run_training.py</span>                           
         <h3 style="color:var(--amber)">Deck-audit notes — two verified quirks in this snapshot<small>found while sourcing this page against f0d9822; both are latent, neither affects today's enabled config</small></h3>
         <p><b>1 · Manual REWARD path couldn't find its prediction.</b> <code>Broadcaster.broadcast()</code> creates the session <i>before</i> the prediction row exists (telegram_app.py:101) and nothing back-fills <code>sessions.prediction_id</code> afterwards — so <code>handle_callback</code>'s REWARD branch (telegram_app.py:184) calls <code>apply_manual_feedback(None)</code>, which returns <code>unknown_prediction</code>: the buttons answer and close the session, but <b>no manual grade is applied</b>. (Tests pass because they create sessions with an explicit prediction_id.) <b>FIXED in <code>2a1747c</code></b>: cycle.py back-fills <code>sessions.prediction_id</code> via <code>Store.link_session_prediction()</code> right after <code>record_prediction()</code>; an end-to-end wiring test guards the link.</p>
         <p><b>2 · News bandit was constructed 5-dim.</b> <code>NewsAgent.__init__</code> builds <code>NewsRL(n_features=5)</code> (news_agent.py:383) while <code>features_from_jsons()</code> emits 10-dim vectors; <code>_pad()</code> truncates them, so the 5 event dims are recorded in the DB but not trained by the live instance. Harmless while <code>NEWS_EVENTS_ENABLED=false</code> (those dims are all 0.0) — <b>FIXED in <code>2a1747c</code></b>: the constructor is now <code>NewsRL()</code> (follows N_FEATURES=10; the logit-preserving migration runs on first live load, <code>.bak-5dim</code> backup) and a wiring test asserts the agent's bandit width equals N_FEATURES.</p>
+        <p><b>v3.1 post-audit pass (2026-07-04).</b> A 47-agent full-code review (6 module-group finders, adversarial verifier per finding) surfaced 27 verified findings; 21 were fixed, 4 refuted on manual re-verification. Highlights: <b>manual grades now train with the active reward map</b> — every manual/correction path hardcoded the legacy ±1/−4 map while auto grading used the v2 TB map, so human feedback computed wrong policy deltas; a process-wide reward lock serializes the grader thread and Telegram callbacks; crashed grades revert to pending; REWARD presses inside the record window answer "try again" instead of burning the session (legacy sessions back-filled by migration); RSS timestamps are parsed as UTC (were 5.5&nbsp;h early on IST hosts) with bounded feed timeouts; switching <code>RAG_EMBEDDER</code> no longer breaks the corpus; malformed LLM scan output falls back to truthful-neutral instead of losing the news agent's learning row. Refuted as bugs: the NWE repaint default (the measured production variant — parity by construction), alpha_trend's <code>shift(2)</code> (faithful to the source indicator). 194 tests.</p>
       </div>
     </div>
   </section>

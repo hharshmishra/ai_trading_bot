@@ -45,3 +45,12 @@
    policy). Durable fix: `tests/conftest.py` autouse fixture redirects every
    artifact path (policies + nightly outputs) to tmp_path. Rule: the moment an
    artifact path is added to config, add it to that fixture.
+
+9. **A flag-forked function must be selected in ONE place.** Auto grading chose
+   `reward_for_v2` when TB_GRADING_ENABLED, but the manual-feedback and
+   correction paths hardcoded legacy `reward_for` at five call sites — every
+   human grade computed wrong deltas (confirming a timeout auto-grade swung
+   the policy by -2.5 instead of 0). Fix: `active_reward_fn()` is the only
+   place that picks the map; every caller goes through it. Rule: when adding
+   a v2 variant behind a flag, grep every call site of the v1 function and
+   route them through one selector.

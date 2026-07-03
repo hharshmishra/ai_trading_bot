@@ -110,3 +110,28 @@ Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
       truncated, 5->10 policy migration never ran live)
 - [x] tests/conftest.py: autouse isolation of ALL logs/ artifact paths
 - [x] 169 tests green; logs/ clean after full suite
+
+## 2026-07-04 — v3.1 post-audit fix pass (47-agent review -> 27 findings -> 21 fixed, 4 refuted)
+- [x] A grader: active_reward_fn() unifies reward map across auto/manual/correction
+      (was: manual paths used v1 map while auto used v2 -> wrong correction deltas)
+- [x] B grader: _reward_lock serializes policy updates (grader thread vs callback);
+      manual mid-grade now reads complete prior_auto; callback via to_thread
+- [x] C grader: crash after claim -> revert to pending when zero rewards applied
+- [x] D telegram: REWARD with NULL prediction_id answers "try again" (session kept);
+      _migrate back-fills legacy sessions from predictions.session_id
+- [x] E ingestion: calendar.timegm (UTC, was mktime=local -> 5.5h skew on IST);
+      fetch_rss bounded 10s timeout via requests (feedparser could hang forever)
+- [x] F rag: embedder-width filter — switching RAG_EMBEDDER no longer breaks
+      ingest/query on old stored embeddings
+- [x] G macro_fetcher: failures negative-cached 5min (was: dead API re-hit every call)
+- [x] H news: scan validation retry-once -> neutral fallback (RL row survives
+      malformed LLM output); headlines-are-data injection guard in prompt
+- [x] I backtest/data: drop last candle only if actually open (was: always, and
+      never when len==1); loud COVERAGE GAP warnings on silent range shrink
+- [x] J config: BARRIER_MULTS entry validation -> per-TF default + warning
+- [x] K cycle: error_pairs in summary + logger.exception (was: silent counter)
+- [x] L indicators: flat-window osc -> neutral 50; squeeze no-scale strength 0;
+      .ffill(); NWE repaint + alpha_trend shift(2) comments corrected
+- Refuted from review: NWE "lookahead" (parity by construction), correction brain
+  feedback (documented design), alpha_trend shift(2) (faithful port), _loads
+  leniency (by design). 194 tests green.
