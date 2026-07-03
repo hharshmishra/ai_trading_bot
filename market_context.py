@@ -49,14 +49,30 @@ class _SharedOverallNews:
 
     Passed to Research's news-driven logics (SPX/DXY) and to the driver loop, so
     the market-wide overall scan is computed once, not once per news call.
+    Per-pair scans are grounded in stored headlines when available (A4).
     """
 
-    def __init__(self, news_agent: Any, overall_json: Dict[str, Any]):
+    def __init__(self, news_agent: Any, overall_json: Dict[str, Any], store: Any = None):
         self._news = news_agent
         self._overall = overall_json
+        self._store = store
+
+    def _headlines(self, pair: str):
+        import config as _cfg
+        if self._store is None or not _cfg.NEWS_RAG_ENABLED:
+            return None
+        try:
+            import time as _t
+            rows = self._store.recent_news_for_asset(
+                _strip_suffix(pair), since_ts=_t.time() - 48 * 3600, limit=5)
+            titles = [r.get("title") for r in rows if r.get("title")]
+            return titles or None
+        except Exception:
+            return None
 
     def run(self, pair: str) -> Dict[str, Any]:
-        return self._news.run(pair, overall_json=self._overall)
+        return self._news.run(pair, overall_json=self._overall,
+                              headlines=self._headlines(pair))
 
 
 def _drivers_for_symbols(symbols: List[str]) -> List[str]:
@@ -113,6 +129,7 @@ def build_market_context(
     indicator_agent: Any,
     news_agent: Any,
     research_agent: Any,
+    store: Any = None,
 ) -> MarketContext:
     """Compute the shared market context once for ``timeframe`` and ``symbols``.
 
@@ -121,9 +138,27 @@ def build_market_context(
     ``research_agent`` is used only to invoke its pure market-logic helpers, so
     the resulting values match the per-coin path exactly.
     """
-    # 1) One shared market-wide overall scan (1 LLM call).
-    overall_json = news_agent.scan_overall().model_dump()
-    shared_news = _SharedOverallNews(news_agent, overall_json)
+    # 0) RAG store for headline grounding (A4) — optional, never fatal.
+    import config as _cfg
+    if store is None and _cfg.NEWS_RAG_ENABLED:
+        try:
+            from persistence import get_store
+            store = get_store()
+        except Exception:
+            store = None
+
+    # 1) One shared market-wide overall scan (1 LLM call), grounded in the
+    #    freshest stored headlines when the corpus has any.
+    market_headlines = None
+    if store is not None and _cfg.NEWS_RAG_ENABLED:
+        try:
+            import time as _t
+            rows = store.recent_news(since_ts=_t.time() - 48 * 3600, limit=8)
+            market_headlines = [r.get("title") for r in rows if r.get("title")] or None
+        except Exception:
+            market_headlines = None
+    overall_json = news_agent.scan_overall(headlines=market_headlines).model_dump()
+    shared_news = _SharedOverallNews(news_agent, overall_json, store=store)
 
     # 2) Global news-driven signals (1 LLM each), via Research's own logic.
     spx_score, spx_details = research_agent._logic2_spx(shared_news)

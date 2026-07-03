@@ -187,6 +187,17 @@ Only return JSON. No extra text.
 """
 )
 
+def _no_news_guard() -> str:
+    """Hallucination guard (correctness v3, A4): when NO retrieved headlines
+    ground the prompt, the model must not invent current events."""
+    import config
+    if not config.NEWS_RAG_ENABLED:
+        return ""  # legacy behavior: no guard, no headlines
+    return ("\n\nNo verified recent headlines were retrieved. If you lack "
+            "reliable knowledge of current events, output Neutral with "
+            "confidence <= 0.4 and do not invent headlines.")
+
+
 def _chat_json(prompt: str) -> Dict[str, Any]:
     """Call the shared provider-agnostic LLM client (JSON-only output).
 
@@ -288,6 +299,8 @@ class NewsAgent:
         if headlines:
             prompt += ("\n\nRecent market headlines (ground your analysis in these):\n"
                        + "\n".join(f"- {h}" for h in headlines))
+        else:
+            prompt += _no_news_guard()
         return OverallScanJSON.model_validate(_chat_json(prompt))
 
     def scan_pair(self, pair: str, headlines: Optional[List[str]] = None) -> PairScanJSON:
@@ -297,6 +310,8 @@ class NewsAgent:
         if headlines:
             prompt += ("\n\nRecent headlines for this pair (ground your analysis in these):\n"
                        + "\n".join(f"- {h}" for h in headlines))
+        else:
+            prompt += _no_news_guard()
         return PairScanJSON.model_validate(_chat_json(prompt))
 
     def run(self, pair: str, overall_json: Optional[Dict[str, Any]] = None,

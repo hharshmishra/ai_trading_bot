@@ -80,10 +80,13 @@ def _save_policy(pol: Dict[str, Any]):
 
 
 class DecisionMaker:
-    def __init__(self, prefer_csv: bool = False):
+    def __init__(self, prefer_csv: bool = False, store=None):
         self.indicator = IndicatorAgent(prefer_csv=prefer_csv)
         self.research = ResearchAgent(prefer_csv=prefer_csv)
         self.news = NewsAgent()
+        # RAG store for headline grounding (correctness v3, A4). Lazy default:
+        # resolved on first use so tests with mocked agents pay nothing.
+        self._store = store
         # 4th voter (Phase 4): no-LLM positioning agent; brain calls it only
         # when DERIVATIVES_ENABLED, but the attribute always exists so the
         # grader can replay rewards on rows that carry deriv snapshots.
@@ -110,6 +113,23 @@ class DecisionMaker:
         self.policy["scores"] = scores
         self.policy["weights"] = weights
         _save_policy(self.policy)
+
+    def _headlines_for(self, symbol: str) -> Optional[list]:
+        """Fresh stored headline titles for a symbol's base asset (48h, top 5),
+        or None — never raises, never blocks a decision."""
+        if not config.NEWS_RAG_ENABLED:
+            return None
+        try:
+            if self._store is None:
+                from persistence import get_store
+                self._store = get_store()
+            from agents.research_agent import _strip_suffix
+            rows = self._store.recent_news_for_asset(
+                _strip_suffix(symbol), since_ts=time.time() - 48 * 3600, limit=5)
+            titles = [r.get("title") for r in rows if r.get("title")]
+            return titles or None
+        except Exception:
+            return None
 
     @staticmethod
     def _normalize_action(a: Any) -> str:
@@ -210,12 +230,14 @@ class DecisionMaker:
                 res_out = None
         agent_results["research"] = self._coerce_agent_out(res_out, "research")
 
-        # call news agent (reuse the shared overall scan when a context is given)
+        # call news agent (reuse the shared overall scan when a context is given;
+        # ground the pair scan in stored headlines — correctness v3, A4)
         news_out = None
         if "news" in use_agents:
             try:
                 shared_overall = market_context.overall_json if market_context is not None else None
-                news_out = self.news.run(symbol, overall_json=shared_overall)
+                news_out = self.news.run(symbol, overall_json=shared_overall,
+                                         headlines=self._headlines_for(symbol))
             except Exception as e:
                 news_out = None
         agent_results["news"] = self._coerce_agent_out(news_out, "news")

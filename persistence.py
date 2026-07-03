@@ -512,6 +512,26 @@ class Store:
         d["assets"] = _loads(d.get("assets"))
         return d
 
+    def recent_news(self, since_ts: Optional[float] = None,
+                    limit: int = 10) -> List[Dict[str, Any]]:
+        """Most recent headlines market-wide (any asset) — grounds the shared
+        overall scan (correctness v3, A4)."""
+        q = "SELECT * FROM news_items"
+        args: list = []
+        if since_ts is not None:
+            q += " WHERE published_ts >= ?"
+            args.append(since_ts)
+        q += " ORDER BY published_ts DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self.conn.execute(q, tuple(args)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["assets"] = _loads(d.get("assets"))
+            out.append(d)
+        return out
+
     def recent_news_for_asset(self, asset: str, since_ts: Optional[float] = None,
                               limit: int = 5) -> List[Dict[str, Any]]:
         like = f'%"{asset.upper()}"%'

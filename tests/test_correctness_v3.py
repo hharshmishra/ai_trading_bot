@@ -93,6 +93,59 @@ class _FakeStore:
     pass
 
 
+class TestNewsRagWiring:
+    def test_headlines_flow_from_store_to_news_run(self, tmp_path, monkeypatch):
+        """A4: decide() must pass stored headline titles into news.run."""
+        import time as _time
+        import brain.decision_maker as bdm
+        from persistence import Store
+
+        store = Store(str(tmp_path / "rag.db"))
+        store.add_news_item(item_id="n1", source="coindesk", title="BTC ETF inflows surge",
+                            body="", url="u1", published_ts=_time.time() - 3600, assets=["BTC"])
+        store.add_news_item(item_id="n2", source="theblock", title="Bitcoin funding flips negative",
+                            body="", url="u2", published_ts=_time.time() - 7200, assets=["BTC"])
+
+        monkeypatch.setattr(bdm, "POLICY_PATH", str(tmp_path / "brain.json"))
+        dm = bdm.DecisionMaker(store=store)
+        monkeypatch.setattr(dm.indicator, "decide",
+                            lambda s, tf, **k: {"action": "skip", "confidence": 0.5})
+        monkeypatch.setattr(dm.research, "decide",
+                            lambda *a, **k: {"action": "skip", "confidence": 0.5})
+        seen = {}
+
+        def fake_run(pair, overall_json=None, headlines=None):
+            seen["headlines"] = headlines
+            return {"action": "SKIP", "confidence": 0.5}
+
+        monkeypatch.setattr(dm.news, "run", fake_run)
+        dm.decide("BTCUSDT", "4h", use_agents=("news",))
+        assert seen["headlines"] == ["BTC ETF inflows surge", "Bitcoin funding flips negative"]
+        store.close()
+
+    def test_empty_corpus_appends_guard(self, monkeypatch):
+        """A4: no headlines -> prompts carry the no-hallucination guard."""
+        import agents.news_agent as na
+        prompts = []
+        monkeypatch.setattr(na, "_chat_json", lambda p: (prompts.append(p) or {
+            "has_panic": False, "sentiment": "neutral", "confidence": 0.5,
+            "top_headlines": []}))
+        agent = na.NewsAgent()
+        agent.scan_overall(headlines=None)
+        assert "No verified recent headlines" in prompts[-1]
+
+    def test_headlines_suppress_guard(self, monkeypatch):
+        import agents.news_agent as na
+        prompts = []
+        monkeypatch.setattr(na, "_chat_json", lambda p: (prompts.append(p) or {
+            "has_panic": False, "sentiment": "neutral", "confidence": 0.5,
+            "top_headlines": []}))
+        agent = na.NewsAgent()
+        agent.scan_overall(headlines=["Real headline"])
+        assert "No verified recent headlines" not in prompts[-1]
+        assert "Real headline" in prompts[-1]
+
+
 class TestNweEventMode:
     def _df_beyond_band(self):
         # noisy flat price (constant would NaN-out RSI/StochRSI), then a hard
