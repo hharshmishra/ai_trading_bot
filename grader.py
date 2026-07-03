@@ -88,8 +88,16 @@ class Grader:
     # ------------------------------------------------------------------ #
     def _path_after(self, pair: str, tf: str, candle_close_ts: Optional[float],
                     k: int) -> Optional[pd.DataFrame]:
-        """OHLC candles STRICTLY after candle_close_ts (chronological), or None
-        until at least k of them have printed. Shared by the fixed-horizon and
+        """Post-entry OHLC path, or None until at least k closed candles printed.
+
+        Convention (correctness v3): ``candle_close_ts`` is the CLOSE epoch of
+        the entry candle, and ccxt row timestamps are candle OPEN times — so
+        the first path candle is the one whose open time EQUALS
+        candle_close_ts (hence ``>=``). The fetcher's CLOSED_CANDLES_ONLY drop
+        guarantees ``len(after) >= k`` counts only closed candles. (Old rows'
+        stored values are numerically identical under both conventions — the
+        open of the then-partial candle == the close of the last closed one —
+        so no migration is needed.) Shared by the fixed-horizon and
         triple-barrier graders so both see the same path."""
         if self.data is None or candle_close_ts is None:
             return None
@@ -101,7 +109,7 @@ class Grader:
             return None
         ts = pd.to_datetime(df["timestamp"])
         close_dt = pd.to_datetime(candle_close_ts, unit="s")
-        after = df[ts > close_dt].reset_index(drop=True)
+        after = df[ts >= close_dt].reset_index(drop=True)
         if len(after) < k:
             return None
         return after

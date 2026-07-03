@@ -63,6 +63,15 @@ META_SHADOW = _env_bool("META_SHADOW", True)                # stamp meta_p/calib
 META_GATE_ENABLED = _env_bool("META_GATE_ENABLED", False)   # gate on meta_p
 
 # --------------------------------------------------------------------------
+# Correctness v3 (Phase A)
+# --------------------------------------------------------------------------
+CLOSED_CANDLES_ONLY = _env_bool("CLOSED_CANDLES_ONLY", True)  # drop in-progress candle in live fetches
+NWE_EVENT_MODE = _env_bool("NWE_EVENT_MODE", False)           # NWE fires on band CROSSING, not state
+NEWS_RAG_ENABLED = _env_bool("NEWS_RAG_ENABLED", True)        # inject stored headlines into news prompts
+BRAIN_DEADZONE_V2 = _env_bool("BRAIN_DEADZONE_V2", False)     # directional final needs conf floor
+BRAIN_MIN_CONF = _env_float("BRAIN_MIN_CONF", 0.25)
+
+# --------------------------------------------------------------------------
 # Signal gate
 # --------------------------------------------------------------------------
 CONFIDENCE_GATE = _env_float("CONFIDENCE_GATE", 0.80)

@@ -42,11 +42,32 @@ def make_decision(pair="BTCUSDT", tf="4h", action="buy", conf=0.9, nwe=None):
 
 # --------------------------- signals (pure) ------------------------------- #
 def test_timeframes_due_cascade():
+    """timeframes_due speaks UTC (correctness v3): Binance closes 4h candles at
+    UTC 0/4/8/12/16/20, 1d at UTC 00:00, 1w Monday UTC 00:00."""
     from signals import timeframes_due
-    assert timeframes_due(datetime(2024, 1, 2, 3, 30)) == ["1h"]                  # Tue, hour 3
-    assert timeframes_due(datetime(2024, 1, 2, 4, 30)) == ["4h", "1h"]           # Tue, hour 4
-    assert timeframes_due(datetime(2024, 1, 2, 0, 30)) == ["1d", "4h", "1h"]     # Tue, hour 0
-    assert timeframes_due(datetime(2024, 1, 1, 0, 30)) == ["1w", "1d", "4h", "1h"]  # Mon, hour 0
+    assert timeframes_due(datetime(2024, 1, 2, 3, 0)) == ["1h"]                    # Tue 03:00 UTC
+    assert timeframes_due(datetime(2024, 1, 2, 4, 0)) == ["4h", "1h"]              # Tue 04:00 UTC
+    assert timeframes_due(datetime(2024, 1, 2, 0, 0)) == ["1d", "4h", "1h"]        # Tue 00:00 UTC
+    assert timeframes_due(datetime(2024, 1, 1, 0, 0)) == ["1w", "1d", "4h", "1h"]  # Mon 00:00 UTC
+
+
+def test_timeframes_due_ist_to_utc_mapping():
+    """Scheduler tick is IST :30 == the UTC :00 boundary: IST 09:30 -> UTC 04:00
+    (4h due); Monday IST 05:30 -> Monday UTC 00:00 (full cascade); IST 00:30 ->
+    UTC 19:00 (1h only — the old IST-hour cascade wrongly fired 4h+1d here)."""
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    from signals import timeframes_due
+    ist = ZoneInfo("Asia/Kolkata")
+
+    dt = datetime(2024, 1, 2, 9, 30, tzinfo=ist).astimezone(timezone.utc)
+    assert timeframes_due(dt) == ["4h", "1h"]
+
+    dt = datetime(2024, 1, 1, 5, 30, tzinfo=ist).astimezone(timezone.utc)   # Monday
+    assert timeframes_due(dt) == ["1w", "1d", "4h", "1h"]
+
+    dt = datetime(2024, 1, 2, 0, 30, tzinfo=ist).astimezone(timezone.utc)
+    assert timeframes_due(dt) == ["1h"]
 
 
 def test_signal_gate_rules():

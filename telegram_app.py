@@ -264,7 +264,11 @@ async def scheduler_loop(application) -> None:
             dt = datetime.now(tz=IST).replace(second=0, microsecond=0)
             if is_candle_close_minute(dt) and dt != last_run:
                 last_run = dt
-                tfs = timeframes_due(dt)
+                # timeframes_due speaks UTC (Binance candle boundaries); the
+                # IST :30 tick IS the UTC :00 boundary, so only the hour
+                # cascade needed the conversion (correctness v3, A1).
+                from datetime import timezone as _tz
+                tfs = timeframes_due(dt.astimezone(_tz.utc))
                 logger.info("cycle at %s for %s", dt.strftime("%Y-%m-%d %H:%M"), tfs)
                 # Hourly ingestion BEFORE the cycle so the news agent's RAG
                 # grounding includes this hour's headlines.

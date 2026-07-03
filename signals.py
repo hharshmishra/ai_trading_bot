@@ -17,26 +17,29 @@ CONFIDENCE_GATE = 0.80
 
 
 def is_candle_close_minute(dt: datetime) -> bool:
-    """India candle close: every :30 of the hour (Binance candles are UTC, but
-    the operator schedules on IST :30)."""
+    """The scheduler ticks at IST :30 — which is exactly the UTC :00 candle
+    boundary (IST = UTC+5:30), so every tick sits on a real 1h close."""
     return dt.minute == 30
 
 
-def timeframes_due(dt: datetime) -> list[str]:
-    """Which timeframes to analyse at this candle close.
+def timeframes_due(dt_utc: datetime) -> list[str]:
+    """Which timeframes to analyse at this UTC candle boundary.
 
-    FIX (#8): the original never scheduled 1h. Cascade:
-      hourly      -> [1h]
-      every 4h    -> [4h, 1h]
-      daily 00:30 -> [1d, 4h, 1h]
-      Monday      -> + [1w]
+    CONTRACT (correctness v3): the argument is the current time in **UTC**.
+    Binance candles close on UTC boundaries — 4h at 0/4/8/12/16/20 UTC, 1d at
+    00:00 UTC, 1w Monday 00:00 UTC. The old version cascaded off IST hours and
+    so ran every 4h/1d/1w analysis hours away from a real close. Cascade:
+      every UTC hour        -> [1h]
+      UTC hour % 4 == 0     -> [4h, 1h]
+      UTC 00:00             -> [1d, 4h, 1h]
+      Monday UTC 00:00      -> + [1w]
     """
     due: list[str] = []
-    if dt.hour == 0 and dt.weekday() == 0:
+    if dt_utc.hour == 0 and dt_utc.weekday() == 0:
         due.append(TF_1W)
-    if dt.hour == 0:
+    if dt_utc.hour == 0:
         due.append(TF_1D)
-    if dt.hour % 4 == 0:
+    if dt_utc.hour % 4 == 0:
         due.append(TF_4H)
     due.append(TF_1H)
     return due

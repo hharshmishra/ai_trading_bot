@@ -66,7 +66,9 @@ def make_path_fetcher(entry_close, path_rows, tf="4h"):
         highs.append(h); lows.append(l); closes.append(c)
     df = pd.DataFrame({"timestamp": ts, "open": closes, "high": highs,
                        "low": lows, "close": closes, "volume": [1.0] * n})
-    close_ts = int((ts[5] - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
+    # correctness v3 convention: candle_close_ts = entry candle CLOSE epoch
+    # (= open of the next candle); grader filters path rows with ts >= close_ts
+    close_ts = int((ts[6] - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
 
     class _F:
         def get_ohlcv(self, pair, tf_, limit=500):

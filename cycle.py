@@ -30,14 +30,20 @@ SYMBOLS = [s + "USDT" for s in [
     "SHIB", "SNX", "SOL", "STORJ", "THETA", "UNI", "WLD", "XRP"]]
 
 
-def _entry_from_df(df) -> tuple[Optional[float], Optional[int]]:
-    """(entry_price, candle_close_ts_epoch) from the latest closed candle."""
+def _entry_from_df(df, tf: str) -> tuple[Optional[float], Optional[int]]:
+    """(entry_price, candle_close_ts_epoch) from the latest CLOSED candle.
+
+    Convention (correctness v3): ``candle_close_ts`` is the CLOSE epoch of the
+    entry candle = its open timestamp + the timeframe duration. The fetcher
+    already drops the in-progress candle (CLOSED_CANDLES_ONLY), so the last
+    row here is genuinely closed and its close price is final.
+    """
     if df is None or getattr(df, "empty", True) or "timestamp" not in df.columns:
         return None, None
     last = df.iloc[-1]
     ts = pd.Timestamp(pd.to_datetime(last["timestamp"]))
-    epoch = int((ts - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
-    return float(last["close"]), epoch
+    open_epoch = int((ts - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
+    return float(last["close"]), open_epoch + TF_SECONDS.get(tf, 3600)
 
 
 async def run_cycle(
@@ -82,7 +88,7 @@ async def run_cycle(
                     df = await asyncio.to_thread(data_fetcher.get_ohlcv, sym, tf, 500)
                 except Exception:
                     df = None
-                entry, close_ts = _entry_from_df(df)
+                entry, close_ts = _entry_from_df(df, tf)
                 k = HORIZON_K.get(tf, 1)
                 grade_due = (close_ts + k * TF_SECONDS.get(tf, 3600)) if close_ts else None
 

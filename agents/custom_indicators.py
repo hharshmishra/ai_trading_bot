@@ -219,12 +219,16 @@ def direct_signal_from_nwe(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     return {"signal": signal, "confidence": conf}
 
 
-def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]: #Old without repainting
-    """
-    Inspect the LAST CLOSED BAR and return a discrete signal if an event occurred:
+def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    """EVENT-based NWE signal (used when config.NWE_EVENT_MODE is on).
+
+    Inspect the LAST CLOSED BAR and return a discrete signal only if a band
+    CROSSING occurred on that bar:
       - BUY  if crossunder(close, lower)
       - SELL if crossover(close, upper)
-    Confidence is based on how far the close finished outside the band relative to the band width.
+    Confidence scales with how far the close finished outside the band relative
+    to the band width. Re-firing requires price to re-enter the band first —
+    an inherent cooldown the state-based variant lacks.
     """
     cols = {"nwe_out","nwe_mae","nwe_upper","nwe_lower","close"}
     if not cols.issubset(set(df.columns)):

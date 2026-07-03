@@ -380,7 +380,12 @@ class IndicatorAgent:
         if not trending:
             # Ensure indicator columns exist
             df = ci.apply_nadaraya_watson_envelope(df, h=self.nwe_h, mult=self.nwe_mult)
-            sig = ci.direct_signal_from_nwe(df)
+            # NWE_EVENT_MODE (correctness v3, A3): crossing-triggered signal —
+            # fires once when price crosses out of the band instead of every
+            # bar it stays outside (state mode re-fires for hours).
+            nwe_fn = (ci.direct_signal_from_nwee if config.NWE_EVENT_MODE
+                      else ci.direct_signal_from_nwe)
+            sig = nwe_fn(df)
             if sig:
                 sig["name"] = "nwe"
                 signals.append(sig)

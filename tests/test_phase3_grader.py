@@ -66,7 +66,8 @@ def make_fetcher(entry_close=100.0, horizon_close=105.0, tf="4h", k=2):
     closes[close_idx + k] = horizon_close
     df = pd.DataFrame({"timestamp": ts, "open": closes, "high": closes,
                        "low": closes, "close": closes, "volume": [1.0] * n})
-    close_ts = int((ts[close_idx] - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
+    # correctness v3 convention: candle_close_ts = entry candle CLOSE epoch
+    close_ts = int((ts[close_idx + 1] - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s"))
 
     class _F:
         def get_ohlcv(self, pair, tf_, limit=500):

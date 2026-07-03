@@ -22,10 +22,33 @@ _OHLCV_TTL = float(os.getenv("OHLCV_TTL", "300"))  # seconds; one cycle << TTL
 _OHLCV_CACHE: Dict[Tuple[str, str, int], Tuple[float, pd.DataFrame]] = {}
 _EXCHANGES: Dict[str, Any] = {}
 
+# candle durations for the closed-candle discipline (correctness v3, A2)
+_TF_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+               "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800}
+
 
 def clear_ohlcv_cache() -> None:
     """Drop all cached OHLCV. Call at the start of each cycle for freshness."""
     _OHLCV_CACHE.clear()
+
+
+def _drop_partial_candle(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+    """Drop the trailing IN-PROGRESS candle, if present.
+
+    ccxt returns the currently-forming candle as the last row (timestamps are
+    candle OPEN times). Live decisions must only ever see closed bars — the
+    backtest already guarantees this (backtest/data.py), so this is what keeps
+    live and backtest looking at the same world. Unknown timeframes pass
+    through untouched.
+    """
+    tf_s = _TF_SECONDS.get(timeframe)
+    if tf_s is None or df is None or len(df) == 0 or "timestamp" not in df.columns:
+        return df
+    last_open = pd.Timestamp(pd.to_datetime(df["timestamp"].iloc[-1]))
+    open_epoch = (last_open - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")
+    if float(open_epoch) + tf_s > time.time():
+        return df.iloc[:-1].reset_index(drop=True)
+    return df
 
 
 def _get_exchange(exchange_name: str = "binance"):
@@ -107,7 +130,14 @@ class DataFetcher:
     #     # If prefer_csv = False → always fetch live
     #     return self.fetch_ccxt(symbol, timeframe, limit=limit)
 
-    def get_ohlcv(self, symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+    def get_ohlcv(self, symbol: str, timeframe: str, limit: int = 500,
+                  drop_partial: Optional[bool] = None) -> pd.DataFrame:
+        """Fetch OHLCV. ``drop_partial=None`` defers to config.CLOSED_CANDLES_ONLY
+        (default True): the in-progress candle is removed so callers only ever
+        analyse closed bars (correctness v3, A2)."""
+        if drop_partial is None:
+            import config
+            drop_partial = config.CLOSED_CANDLES_ONLY
         path = self._csv_path(symbol, timeframe)
 
         if self.prefer_csv:
@@ -135,12 +165,18 @@ class DataFetcher:
         # If prefer_csv = False → always fetch live, cached per (symbol, tf, limit)
         # within the TTL so repeated intra-cycle fetches of the same pair are free.
         # We hand out copies so callers that mutate the frame (e.g. add MA columns)
-        # never corrupt the cached original.
+        # never corrupt the cached original. The partial-candle drop happens on
+        # the copy AFTER the cache, so the cache stays raw and both
+        # drop_partial modes share one cached fetch.
         key = (symbol, timeframe, limit)
         now = time.time()
         hit = _OHLCV_CACHE.get(key)
         if hit is not None and (now - hit[0]) < _OHLCV_TTL:
-            return hit[1].copy()
-        df = self.fetch_ccxt(symbol, timeframe, limit=limit)
-        _OHLCV_CACHE[key] = (now, df)
-        return df.copy()
+            df = hit[1].copy()
+        else:
+            df = self.fetch_ccxt(symbol, timeframe, limit=limit)
+            _OHLCV_CACHE[key] = (now, df)
+            df = df.copy()
+        if drop_partial:
+            df = _drop_partial_candle(df, timeframe)
+        return df
