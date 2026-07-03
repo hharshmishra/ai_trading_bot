@@ -38,15 +38,15 @@ PRED_LOG    = "logs/research_predictions.jsonl"
 
 # Ecosystem map (editable). Symbols should be BASE asset tickers (no /USDT).
 ECOSYSTEMS: Dict[str, List[str]] = {
-    'ethereum': ['ETH', 'ETC', 'LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'LRC', 'POL'],
+    'ethereum': ['ETH', 'ETC', 'LINK', 'UNI', 'AAVE', 'COMP', 'SNX', 'POL'],
     'binance_smart_chain': ['BNB', 'CAKE', 'AUTO', 'BUNNY', 'BIFI'],
     'solana': ['SOL', 'RAY', 'SRM', 'FIDA', 'ROPE'],
     'cardano': ['ADA', 'COTI'],
     'polkadot': ['DOT', 'KSM', 'OCEAN', 'AKRO'],
     'avalanche': ['AVAX', 'PNG', 'JOE'],
     'cosmos': ['ATOM', 'OSMO', 'JUNO', 'SCRT'],
-    'defi': ['LINK', 'UNI', 'AAVE', 'COMP', 'MKR', 'SNX', 'CRV', 'BAL', '1INCH', 'PENDLE', 'DYDX'],
-    'layer2': ['POL', 'LRC', 'IMX', 'METIS', 'ARB', 'OP', 'POL', 'MANTA'],
+    'defi': ['LINK', 'UNI', 'AAVE', 'COMP', 'SNX', 'CRV', 'BAL', '1INCH', 'PENDLE', 'DYDX'],
+    'layer2': ['POL', 'IMX', 'METIS', 'ARB', 'OP', 'MANTA'],
     'gaming': ['AXS', 'SLP', 'SAND', 'MANA', 'ENJ', 'ALICE', 'GALA'],
     'nft': ['FLOW', 'ENJ', 'SAND', 'MANA', 'THETA'],
     'oracle': ['LINK', 'BAND', 'TRB', 'PYTH'],
@@ -57,7 +57,7 @@ ECOSYSTEMS: Dict[str, List[str]] = {
     'storage': ['FIL', 'AR', 'STORJ'],
     'social': ['GMT', 'ARKM'],
     'iot': ['HNT'],
-    'payments': ['XRP', 'WAVES']
+    'payments': ['XRP', 'LTC', 'TRX']
 }
 
 def load_ecosystems_cache(path: Optional[str] = None) -> bool:
