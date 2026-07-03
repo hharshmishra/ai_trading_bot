@@ -146,6 +146,67 @@ class TestNewsRagWiring:
         assert "Real headline" in prompts[-1]
 
 
+class TestLogic4Dominance:
+    def _agent(self):
+        from agents.research_agent import ResearchAgent
+        return ResearchAgent()
+
+    def test_roc_drives_score(self, monkeypatch):
+        a = self._agent()
+        score, details = a._logic4_btcdominance("4h", None, None,
+                                                dom_level=55.0, dom_roc=0.03)
+        # dom rising hard -> dom_score +1 -> alt-unfavorable tilt
+        assert details["source"] == "dominance_roc"
+        assert details["btcdom_score"] == 1.0
+        assert score < 0
+
+    def test_level_extreme_fallback(self):
+        a = self._agent()
+        _, d_hi = a._logic4_btcdominance("4h", None, None, dom_level=65.0, dom_roc=None)
+        _, d_lo = a._logic4_btcdominance("4h", None, None, dom_level=35.0, dom_roc=None)
+        assert d_hi["source"] == "dominance_level" and d_hi["btcdom_score"] == 0.3
+        assert d_lo["btcdom_score"] == -0.3
+
+    def test_news_fallback_then_unavailable(self, monkeypatch):
+        import utils.macro_fetcher as mf
+        monkeypatch.setattr(mf, "fetch_btc_dominance", lambda **k: None)
+        a = self._agent()
+
+        class _News:
+            def run(self, pair):
+                return {"pair_json": {"sentiment": "bullish", "confidence": 0.8}}
+
+        _, d = a._logic4_btcdominance("4h", None, _News(), dom_level=None, dom_roc=None)
+        assert d["source"] == "news_fallback" and d["btcdom_score"] > 0
+        _, d2 = a._logic4_btcdominance("4h", None, None, dom_level=None, dom_roc=None)
+        assert d2["source"] == "unavailable" and d2["btcdom_score"] == 0.0
+
+    def test_no_btcdomusdt_fetch_remains(self):
+        import inspect
+        from agents.research_agent import ResearchAgent
+        src = inspect.getsource(ResearchAgent._logic4_btcdominance)
+        assert 'decide("BTCDOMUSDT"' not in src  # the dead spot fetch is gone
+
+
+class TestMacroSnapshots:
+    def test_snapshot_roc_roundtrip(self, tmp_path):
+        from persistence import Store
+        s = Store(str(tmp_path / "m.db"))
+        s.add_macro_snapshot(1000.0, 50.0, 40.0)
+        s.add_macro_snapshot(90000.0, 55.0, 60.0)
+        prev = s.macro_snapshot_before(89999.0)
+        assert prev["btc_dominance"] == 50.0
+        assert s.macro_snapshot_before(500.0) is None
+        s.close()
+
+
+class TestUniverse:
+    def test_symbols_swap(self):
+        from cycle import SYMBOLS
+        assert "SUIUSDT" in SYMBOLS and "LUNAUSDT" not in SYMBOLS
+        assert len(SYMBOLS) == 48
+
+
 class TestNweEventMode:
     def _df_beyond_band(self):
         # noisy flat price (constant would NaN-out RSI/StochRSI), then a hard

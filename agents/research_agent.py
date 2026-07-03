@@ -53,7 +53,7 @@ ECOSYSTEMS: Dict[str, List[str]] = {
     'exchange_tokens': ['BNB', 'FTT', 'KCS', 'GT', 'HT'],
     'ai': ['FET', 'RNDR', 'INJ', 'GRT', 'WLD'],
     'meme': ['DOGE', 'SHIB'],
-    'layer1': ['BTC', 'BCH', 'LUNA', 'NEAR', 'ICP', 'APT'],
+    'layer1': ['BTC', 'BCH', 'SUI', 'NEAR', 'ICP', 'APT'],
     'storage': ['FIL', 'AR', 'STORJ'],
     'social': ['GMT', 'ARKM'],
     'iot': ['HNT'],
@@ -515,37 +515,66 @@ class ResearchAgent:
         }
 
     # ---------- Logic 4: Bitcoin dominance ----------
-    def _logic4_btcdominance(self, timeframe: str, indicator_agent: Optional[Any], news_agent: Optional[Any]) -> Tuple[float, Dict[str, Any]]:
+    def _logic4_btcdominance(self, timeframe: str, indicator_agent: Optional[Any],
+                             news_agent: Optional[Any],
+                             dom_level: Optional[float] = None,
+                             dom_roc: Optional[float] = None) -> Tuple[float, Dict[str, Any]]:
         """
         If BTC up and BTCDOM up → ALTs fall (negative for alts).
         If BTC down and BTCDOM down → ALTs rise (positive for alts).
-        Score positive means favorable to ALT longs; negative means unfavorable to ALT longs.
+        Score positive means favorable to ALT longs; negative means unfavorable.
+
+        Correctness v3 (A5): the old implementation fetched "BTCDOMUSDT" via
+        spot ccxt — a USDM futures index symbol that does not exist on spot —
+        so the fetch always raised and dom_score was silently 0.0. Dominance
+        now comes from CoinGecko: rate-of-change when history exists (2%/24h
+        saturates), else a level-extreme tilt, else a news fallback.
         """
         btc_score = 0.0
-        dom_score = 0.0
-        details = {}
+        details: Dict[str, Any] = {}
 
         if indicator_agent is not None:
             try:
                 b = indicator_agent.decide("BTCUSDT", timeframe)
-                btc_score = _action_to_score(getattr(b,'action', None), getattr(b,'confidence', 0.6))
-            except Exception as e:
-                print(e)
-            try:
-                d = indicator_agent.decide("BTCDOMUSDT", timeframe)
-                dom_score = _action_to_score(getattr(d,'action', None), getattr(d,'confidence', 0.6))
+                btc_score = _action_to_score(getattr(b, 'action', None), getattr(b, 'confidence', 0.6))
             except Exception as e:
                 print(e)
 
+        if dom_level is None:
+            try:
+                from utils.macro_fetcher import fetch_btc_dominance
+                dom_level = fetch_btc_dominance()
+            except Exception:
+                dom_level = None
+
+        if dom_roc is not None:
+            dom_score = float(np.clip(dom_roc / 0.02, -1, 1))
+            details["source"] = "dominance_roc"
+        elif dom_level is not None:
+            dom_score = 0.3 if dom_level >= 60 else (-0.3 if dom_level <= 40 else 0.0)
+            details["source"] = "dominance_level"
+        elif news_agent is not None:
+            try:
+                r = news_agent.run(pair="BTC dominance")
+                pj = r.get("pair_json", {})
+                dom_score = _sent_to_score(pj.get("sentiment"), pj.get("confidence"))
+                details["source"] = "news_fallback"
+            except Exception:
+                dom_score = 0.0
+                details["source"] = "unavailable"
+        else:
+            dom_score = 0.0
+            details["source"] = "unavailable"
+
         # Convert to ALT favorability per your rule
-        alt_favor = 0.0
         if btc_score > 0 and dom_score > 0:
             alt_favor = -0.7
         elif btc_score < 0 and dom_score < 0:
             alt_favor = 0.7
         else:
-            alt_favor = 0.2*(-btc_score) + 0.2*(-dom_score)
-        details.update({"btc_score": btc_score, "btcdom_score": dom_score})
+            alt_favor = 0.2 * (-btc_score) + 0.2 * (-dom_score)
+        details.update({"btc_score": btc_score, "btcdom_score": dom_score,
+                        "dom_level": dom_level, "dom_roc": dom_roc})
 
         return float(np.clip(alt_favor, -1, 1)), details
 

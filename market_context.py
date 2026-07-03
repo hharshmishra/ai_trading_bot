@@ -112,6 +112,7 @@ class MarketContext:
     # Free macro context (Phase 4); None when the feeds are unreachable.
     fear_greed: Optional[float] = None      # 0..100
     btc_dominance: Optional[float] = None   # percent
+    btc_dom_roc: Optional[float] = None     # ~24h fractional change (A5)
 
     def eco_scores(self, base: str, eco: str) -> tuple[List[float], List[float]]:
         """Return (indicator_scores, news_scores) for an ecosystem's drivers,
@@ -164,9 +165,31 @@ def build_market_context(
     spx_score, spx_details = research_agent._logic2_spx(shared_news)
     dxy_score, dxy_details = research_agent._logic5_dxy(shared_news)
 
-    # 3) Global indicator-driven signals (no LLM; OHLCV cached).
+    # 3) Global indicator-driven signals (no LLM; OHLCV cached). Dominance
+    #    (A5): CoinGecko level + ~24h rate-of-change from stored snapshots —
+    #    the old BTCDOMUSDT spot fetch never existed and always scored 0.0.
+    fear_greed = btc_dominance = btc_dom_roc = None
+    try:
+        from utils.macro_fetcher import fetch_btc_dominance, fetch_fear_greed
+        fear_greed = fetch_fear_greed()
+        btc_dominance = fetch_btc_dominance()
+    except Exception:
+        pass
+    if store is not None and btc_dominance is not None:
+        try:
+            import time as _t
+            now = _t.time()
+            prev = store.macro_snapshot_before(now - 20 * 3600)  # ~24h back
+            if prev and prev.get("btc_dominance"):
+                btc_dom_roc = (btc_dominance - prev["btc_dominance"]) / prev["btc_dominance"]
+            store.add_macro_snapshot(now, btc_dominance, fear_greed)
+        except Exception:
+            btc_dom_roc = None
+
     money_flow, mf_details = research_agent._logic3_money_flow(timeframe, indicator_agent, None)
-    btdom, btd_details = research_agent._logic4_btcdominance(timeframe, indicator_agent, None)
+    btdom, btd_details = research_agent._logic4_btcdominance(
+        timeframe, indicator_agent, None,
+        dom_level=btc_dominance, dom_roc=btc_dom_roc)
 
     # 4) Per-distinct-driver indicator trend + news sentiment (1 LLM per driver).
     driver_ind_score: Dict[str, float] = {}
@@ -190,14 +213,6 @@ def build_market_context(
         except Exception as e:
             driver_raw.setdefault(base, {})["news_error"] = str(e)
 
-    # 5) Free macro context (Phase 4) — best-effort, never sinks a cycle.
-    try:
-        from utils.macro_fetcher import fetch_btc_dominance, fetch_fear_greed
-        fear_greed = fetch_fear_greed()
-        btc_dominance = fetch_btc_dominance()
-    except Exception:
-        fear_greed = btc_dominance = None
-
     return MarketContext(
         timeframe=timeframe,
         overall_json=overall_json,
@@ -214,4 +229,5 @@ def build_market_context(
         },
         fear_greed=fear_greed,
         btc_dominance=btc_dominance,
+        btc_dom_roc=btc_dom_roc,
     )

@@ -27,8 +27,8 @@ DEFAULT_RSS = [
 # Base tickers we track (trading universe + macro proxies).
 KNOWN_TICKERS = set((
     "AAVE ADA ALGO AR ARB ATOM AVAX AXS BCH BNB BTC CAKE COMP CRV DOGE DOT DYDX "
-    "ENJ ETC ETH FET FIL FLOW GALA GMT GRT ICP IMX INJ LINK LRC LUNA MANA MKR "
-    "NEAR OP POL PYTH RENDER SAND SHIB SNX SOL STORJ THETA UNI WLD XRP SPX DXY"
+    "ENJ ETC ETH FET FIL FLOW GALA GMT GRT ICP IMX INJ LINK LRC MANA MKR "
+    "NEAR OP POL PYTH RENDER SAND SHIB SNX SOL STORJ SUI THETA UNI WLD XRP SPX DXY"
 ).split())
 
 # Common name -> ticker, for tagging headlines that use full names.
@@ -38,6 +38,7 @@ ALIASES = {
     "polkadot": "DOT", "polygon": "POL", "shiba": "SHIB", "render": "RENDER",
     "arbitrum": "ARB", "optimism": "OP", "cosmos": "ATOM", "aave": "AAVE",
     "uniswap": "UNI", "litecoin": "LTC", "near protocol": "NEAR",
+    "sui network": "SUI",   # bare "sui" would substring-match "lawsuit" etc.
 }
 
 

@@ -76,11 +76,35 @@ def _env():
     return f"required set; channels: {chans or 'NONE (no signals will send)'}"
 
 
+def _universe():
+    """Every SYMBOLS pair must have a fresh 1h candle — delisted/halted pairs
+    (the LUNA/TON class of rot) fail loudly here instead of silently skipping
+    every cycle. Network check; skipped with PREFLIGHT_SKIP_NETWORK=1."""
+    if os.getenv("PREFLIGHT_SKIP_NETWORK"):
+        return "skipped (PREFLIGHT_SKIP_NETWORK)"
+    import time as _t
+    from cycle import SYMBOLS
+    from utils.data_fetcher import _get_exchange
+    ex = _get_exchange("binance")
+    stale = []
+    for sym in SYMBOLS:
+        try:
+            k = ex.fetch_ohlcv(sym, timeframe="1h", limit=2)
+            if not k or (_t.time() * 1000 - k[-1][0]) > 2 * 3600 * 1000:
+                stale.append(sym)
+        except Exception:
+            stale.append(sym)
+    if stale:
+        raise RuntimeError(f"stale/dead pairs: {stale}")
+    return f"{len(SYMBOLS)} pairs fresh on Binance spot"
+
+
 check("imports", _imports)
 check("sklearn", _sklearn)
 check("database", _db)
 check("rag embedder", _embedder)
 check("env vars", _env)
+check("universe", _universe)
 
 print("\n" + ("READY" if ok else "NOT READY — fix the XX items above"))
 sys.exit(0 if ok else 1)

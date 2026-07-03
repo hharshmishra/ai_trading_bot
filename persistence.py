@@ -105,6 +105,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(active);
 CREATE INDEX IF NOT EXISTS idx_sessions_pairtf ON sessions(pair, tf, active);
 
+CREATE TABLE IF NOT EXISTS macro_snapshots (
+    ts             REAL PRIMARY KEY,
+    btc_dominance  REAL,
+    fear_greed     REAL
+);
+
 CREATE TABLE IF NOT EXISTS news_items (
     id               TEXT PRIMARY KEY,    -- stable hash of url/title
     source           TEXT,
@@ -472,6 +478,25 @@ class Store:
                 "UPDATE sessions SET active = 0 WHERE active = 1 AND created_ts < ?", (cutoff_ts,))
             self.conn.commit()
         return stale
+
+    # ------------------------------------------------------------------ #
+    # Macro snapshots (BTC dominance / fear&greed history for ROC features)
+    # ------------------------------------------------------------------ #
+    def add_macro_snapshot(self, ts: float, btc_dominance: Optional[float],
+                           fear_greed: Optional[float]) -> None:
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO macro_snapshots (ts, btc_dominance, fear_greed) "
+                "VALUES (?,?,?)", (float(ts), btc_dominance, fear_greed))
+            self.conn.commit()
+
+    def macro_snapshot_before(self, ts: float) -> Optional[Dict[str, Any]]:
+        """Latest snapshot at or before ``ts`` (for ~24h rate-of-change)."""
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT * FROM macro_snapshots WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
+                (float(ts),)).fetchone()
+        return dict(r) if r else None
 
     # ------------------------------------------------------------------ #
     # News items (RAG corpus)

@@ -22,12 +22,14 @@ from persistence import get_store
 from signals import TF_SECONDS, should_emit_signal, should_emit_signal_v2
 
 # Default pair universe (48 USDT pairs).
+# LUNA -> SUI (correctness v3, A6): stale-universe prevention. preflight now
+# verifies every pair has a fresh 1h candle, so future delistings fail loudly.
 SYMBOLS = [s + "USDT" for s in [
     "AAVE", "ADA", "ALGO", "AR", "ARB", "ATOM", "AVAX", "AXS", "BCH", "BNB",
     "BTC", "CAKE", "COMP", "CRV", "DOGE", "DOT", "DYDX", "ENJ", "ETC", "ETH",
     "FET", "FIL", "FLOW", "GALA", "GMT", "GRT", "ICP", "IMX", "INJ", "LINK",
-    "LRC", "LUNA", "MANA", "MKR", "NEAR", "OP", "POL", "PYTH", "RENDER", "SAND",
-    "SHIB", "SNX", "SOL", "STORJ", "THETA", "UNI", "WLD", "XRP"]]
+    "LRC", "MANA", "MKR", "NEAR", "OP", "POL", "PYTH", "RENDER", "SAND",
+    "SHIB", "SNX", "SOL", "STORJ", "SUI", "THETA", "UNI", "WLD", "XRP"]]
 
 
 def _entry_from_df(df, tf: str) -> tuple[Optional[float], Optional[int]]:
