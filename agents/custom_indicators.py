@@ -276,6 +276,58 @@ def direct_signal_from_nwee(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
 
     return {"signal": signal, "confidence": conf}
 
+def pivot_divergence(price: pd.Series, osc: pd.Series, pivot_w: int = 3,
+                     lookback: int = 60, recency: int = 12) -> int:
+    """Classic two-pivot divergence (enhancement D1/D2): +1 bullish (price
+    lower-low, oscillator higher-low), -1 bearish (price higher-high,
+    oscillator lower-high), 0 otherwise.
+
+    A pivot needs ``pivot_w`` bars on EACH side, so it confirms ``pivot_w``
+    bars late — no lookahead by construction. Only fires when the newest
+    confirming pivot lies within the last ``recency`` bars (stale divergences
+    are noise). O(n) single pass over the last ``lookback`` bars.
+    """
+    n = len(price)
+    need = 2 * pivot_w + 1
+    if n < need + 2 or len(osc) != n:
+        return 0
+    p = price.astype(float).to_numpy()[-lookback:]
+    o = osc.astype(float).to_numpy()[-lookback:]
+    m = len(p)
+
+    # Prominence floor: a pivot must stand out from its window by a multiple
+    # of the series' robust noise scale (1.4826*MAD), else every micro-wiggle
+    # counts as a pivot and shadows the real swing points.
+    med = float(np.nanmedian(p))
+    mad = float(np.nanmedian(np.abs(p - med))) or 1e-9
+    min_prom = 3.0 * 1.4826 * mad
+
+    lows, highs = [], []          # (index, price, osc) of confirmed pivots
+    for i in range(pivot_w, m - pivot_w):
+        win_p = p[i - pivot_w: i + pivot_w + 1]
+        if np.isnan(win_p).any() or np.isnan(o[i]):
+            continue
+        if p[i] == win_p.min() and (win_p > p[i]).sum() >= 2 * pivot_w - 1:
+            if (win_p.max() - p[i]) >= min_prom:
+                lows.append((i, p[i], o[i]))
+        if p[i] == win_p.max() and (win_p < p[i]).sum() >= 2 * pivot_w - 1:
+            if (p[i] - win_p.min()) >= min_prom:
+                highs.append((i, p[i], o[i]))
+
+    def _recent(pivots):
+        return len(pivots) >= 2 and pivots[-1][0] >= m - pivot_w - recency
+
+    if _recent(lows):
+        (i1, p1, o1), (i2, p2, o2) = lows[-2], lows[-1]
+        if p2 < p1 and o2 > o1:
+            return 1
+    if _recent(highs):
+        (i1, p1, o1), (i2, p2, o2) = highs[-2], highs[-1]
+        if p2 > p1 and o2 < o1:
+            return -1
+    return 0
+
+
 def supertrend_fast(high: pd.Series, low: pd.Series, close: pd.Series,
                     length: int = 10, multiplier: float = 3.0) -> pd.DataFrame:
     """Drop-in replacement for the vendored ``pandas_ta.supertrend``.

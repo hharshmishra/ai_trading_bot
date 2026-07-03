@@ -137,10 +137,58 @@ def fit_calibration(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return payload
 
 
+def fit_direct_conf(rows: List[Dict[str, Any]], m: int = 20,
+                    min_n: int = 30) -> Dict[str, Any]:
+    """Empirical-Bayes per-direct-indicator confidence (enhancement D4).
+
+    Groups graded rows by which direct signal fired (blend.fired_direct), wins
+    = indicator_action matched the realized label, shrunk toward the global
+    directional win rate: p̂ = (wins + m·p̄) / (n + m). Confidence mapping
+    conf = 0.5 + 0.45·p̂ keeps the [0.5, 0.95] range the merge code expects.
+    Indicators with n < min_n get no entry (callers keep their default).
+    Writes config.INDICATOR_CONF_PATH.
+    """
+    directional = [r for r in rows
+                   if (r.get("indicator_action") or "").lower() in ("buy", "sell")
+                   and isinstance(r.get("indicator_blend"), dict)
+                   and r["indicator_blend"].get("fired_direct")]
+    total = len(directional)
+    if total:
+        global_wins = sum(1 for r in directional
+                          if (r["indicator_action"] or "").lower() == (r.get("realized_label") or "").lower())
+        p_bar = global_wins / total
+    else:
+        p_bar = 0.5
+
+    by_name: Dict[str, List[int]] = {}
+    for r in directional:
+        name = r["indicator_blend"]["fired_direct"]
+        win = int((r["indicator_action"] or "").lower() == (r.get("realized_label") or "").lower())
+        by_name.setdefault(name, []).append(win)
+
+    conf: Dict[str, Any] = {}
+    for name, wins in by_name.items():
+        n = len(wins)
+        if n < min_n:
+            continue
+        shrunk = (sum(wins) + m * p_bar) / (n + m)
+        conf[name] = {"n": n, "win_rate": sum(wins) / n,
+                      "shrunk": shrunk, "conf": round(0.5 + 0.45 * shrunk, 4)}
+
+    payload = {"fitted_ts": time.time(), "global_win_rate": p_bar,
+               "n_directional": total, "conf": conf}
+    with open(config.INDICATOR_CONF_PATH, "w") as f:
+        json.dump(payload, f, indent=2)
+    logger.info("direct-conf: fitted for %s (global p=%.3f, n=%d)",
+                sorted(conf), p_bar, total)
+    return payload
+
+
 def run_nightly_training(store) -> Dict[str, Any]:
     rows = store.training_rows()
     meta = train_meta_model(rows)
     calib = fit_calibration(rows)
+    direct_conf = fit_direct_conf(rows)
 
     # Ecosystem refresh (B4): best-effort — network failures keep the current
     # (cached or hardcoded) lists; reload applies the new cache in-process.
@@ -156,6 +204,7 @@ def run_nightly_training(store) -> Dict[str, Any]:
 
     return {"rows": len(rows), "meta": meta,
             "calibrated_tfs": sorted((calib or {}).get("knots", {})),
+            "direct_conf_indicators": sorted((direct_conf or {}).get("conf", {})),
             "ecosystems_refreshed": ecosystems_refreshed}
 
 

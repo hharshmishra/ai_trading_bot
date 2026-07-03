@@ -72,6 +72,13 @@ BRAIN_DEADZONE_V2 = _env_bool("BRAIN_DEADZONE_V2", False)     # directional fina
 BRAIN_MIN_CONF = _env_float("BRAIN_MIN_CONF", 0.25)
 
 # --------------------------------------------------------------------------
+# Indicator agent enhancements (Phase D)
+# --------------------------------------------------------------------------
+DIVERGENCE_VOTES = _env_bool("DIVERGENCE_VOTES", False)          # RSI/OBV divergence type-2 votes (4h/1d)
+EMPIRICAL_DIRECT_CONF = _env_bool("EMPIRICAL_DIRECT_CONF", False)  # EB win-rate confidences for direct signals
+INDICATOR_CONF_PATH = os.getenv("INDICATOR_CONF_PATH", "logs/indicator_conf.json")
+
+# --------------------------------------------------------------------------
 # News agent enhancements (Phase C)
 # --------------------------------------------------------------------------
 NEWS_EVENTS_ENABLED = _env_bool("NEWS_EVENTS_ENABLED", False)   # typed event extraction

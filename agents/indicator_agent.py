@@ -17,6 +17,28 @@ from agents.regime_agent import classify_regime
 POLICY_PATH = "logs/indicator_agent_policy.json"
 PRED_LOG = "logs/indicator_predictions.jsonl"
 
+_DIRECT_CONF_CACHE = {"mtime": None, "conf": {}}
+
+
+def _direct_conf(name: str, default: float) -> float:
+    """Empirical-Bayes confidence for a direct signal (enhancement D4), from
+    the nightly artifact — replaces the hardcoded 0.9s that treated every
+    Chandelier/AlphaTrend flip as near-certain regardless of track record.
+    mtime-cached; missing artifact / flag off / unknown name -> default."""
+    if not config.EMPIRICAL_DIRECT_CONF:
+        return default
+    path = config.INDICATOR_CONF_PATH
+    try:
+        mtime = os.path.getmtime(path)
+        if _DIRECT_CONF_CACHE["mtime"] != mtime:
+            with open(path) as f:
+                _DIRECT_CONF_CACHE["conf"] = (json.load(f).get("conf") or {})
+            _DIRECT_CONF_CACHE["mtime"] = mtime
+        entry = _DIRECT_CONF_CACHE["conf"].get(name)
+        return float(entry["conf"]) if entry else default
+    except Exception:
+        return default
+
 
 def supertrend_flip_from_raw(raw: pd.DataFrame) -> Optional[Dict[str, Any]]:
     """Trend trigger: SuperTrend direction flip on the last closed bar.
@@ -147,7 +169,7 @@ class IndicatorAgent:
         vol_ok = self._vol_ok(df)
 
         # Compute raw indicators needed for Type2
-        raw = self._compute_raw_indicators(df)
+        raw = self._compute_raw_indicators(df, timeframe)
         type2 = self._type2_rules(raw)
 
         # Collect Type1 direct signals from custom indicator plugins
@@ -258,7 +280,7 @@ class IndicatorAgent:
         df = df.dropna(subset=["timestamp"]).sort_values("timestamp")
         return df[["timestamp","open","high","low","close","volume"]]
 
-    def _compute_raw_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _compute_raw_indicators(self, df: pd.DataFrame, tf: Optional[str] = None) -> pd.DataFrame:
         out = df.copy()
         close = out["close"]
 
@@ -284,6 +306,17 @@ class IndicatorAgent:
         st = ci.supertrend_fast(out["high"], out["low"], out["close"], length=10, multiplier=3)
         out["supertrend"] = st["SUPERT_10_3.0"]
         out["supertrend_dir"] = st["SUPERTd_10_3.0"]   # 1 = bullish, -1 = bearish
+
+        # RSI + OBV divergences (enhancement D1/D2): 4h/1d only — sub-4h
+        # divergences are routinely faded; columns 0-filled (never NaN — the
+        # type-2 dropna would eat the whole frame otherwise).
+        if config.DIVERGENCE_VOTES and tf in ("4h", "1d"):
+            out["rsi_div"] = float(ci.pivot_divergence(out["close"], out["rsi14"]))
+            try:
+                obv = ta.obv(out["close"], out["volume"])
+                out["obv_div"] = float(ci.pivot_divergence(out["close"], obv))
+            except Exception:
+                out["obv_div"] = 0.0
 
         return out
 
@@ -326,6 +359,19 @@ class IndicatorAgent:
             votes["bull"] += 2
         elif r["supertrend_dir"] == -1:
             votes["bear"] += 2
+
+        # RSI / OBV divergence votes (D1/D2; columns exist only when
+        # DIVERGENCE_VOTES is on and tf is 4h/1d)
+        if "rsi_div" in r.index:
+            if r["rsi_div"] > 0:
+                votes["bull"] += 1
+            elif r["rsi_div"] < 0:
+                votes["bear"] += 1
+        if "obv_div" in r.index:
+            if r["obv_div"] > 0:
+                votes["bull"] += 1
+            elif r["obv_div"] < 0:
+                votes["bear"] += 1
 
         if votes["bull"] > votes["bear"]:
             action = "buy"
@@ -396,7 +442,7 @@ class IndicatorAgent:
         if latest['ce_signal'] in ["buy", "sell"]:
             signals.append({
                 "signal": latest['ce_signal'],
-                "confidence": 0.9,  # you can adjust logic to give partial confidence
+                "confidence": _direct_conf("chandelier_exit", 0.9),
                 "name": "chandelier_exit"
             })
 
@@ -405,7 +451,7 @@ class IndicatorAgent:
         if latest['alpha_signal'] in ["buy", "sell"]:
             signals.append({
                 "signal": latest['alpha_signal'],
-                "confidence": 0.9,
+                "confidence": _direct_conf("alpha_trend", 0.9),
                 "name": "alpha_trend"
             })
 
