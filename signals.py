@@ -185,7 +185,11 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
             if trend_action == trend_dir:
                 return out(True, trend_action, "trend_continuation")
             if "supertrend_flip" in trend_names:
-                return out(True, trend_action, "trend_reversal")
+                # Backtest amendment: flip-against-trend graded 0/6 decided —
+                # emits only when explicitly re-enabled.
+                if _cfg.GATE_TREND_REVERSAL:
+                    return out(True, trend_action, "trend_reversal")
+                return out(False, final_action, "reversal_disabled")
             return out(False, final_action, "counter_trend_no_flip")
         if conf_hit:
             if final_action == trend_dir:
@@ -195,11 +199,16 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
                    "nwe_trend_suppressed" if nwe_hit else "")
 
     # ranging / mixed
-    if nwe_hit and vol_ok and (regime != "mixed" or final_action == nwe_action):
+    # Backtest amendment: NWE on higher TFs graded 12.5% (4h ranging) — NWE
+    # emissions stay 1h-only unless explicitly re-enabled; conf path remains.
+    nwe_allowed = _cfg.GATE_NWE_HIGHER_TF
+    if nwe_allowed and nwe_hit and vol_ok and (regime != "mixed" or final_action == nwe_action):
         return out(True, nwe_action,
                    "nwe_mixed" if regime == "mixed" else "nwe_ranging")
     if conf_hit:
         return out(True, final_action, "conf_over_80")
+    if nwe_hit and not nwe_allowed:
+        return out(False, final_action, "nwe_higher_tf_disabled")
     if nwe_hit and not vol_ok:
         return out(False, final_action, "low_volume")
     if nwe_hit:
@@ -261,9 +270,14 @@ def fmt_brain_dump(res: Dict[str, Any], outcome: Optional[Dict[str, Any]] = None
     final = res.get("final", {})
     lines = [f"<b>🧠 BRAIN DUMP — {res.get('chartName')} {res.get('timeframe')}</b>",
              f"final: <b>{final.get('action','?').upper()}</b> conf={final.get('confidence')} score={final.get('score')}"]
-    for name in ("indicator", "research", "news"):
-        a = agents.get(name, {})
+    for name in ("indicator", "research", "news", "derivatives"):
+        a = agents.get(name)
+        if a is None:
+            continue  # e.g. derivatives absent on legacy decisions
         lines.append(f"• {name}: {str(a.get('action','?')).upper()} (conf {a.get('confidence')})")
+    meta = res.get("meta") or {}
+    if meta.get("meta_p") is not None:
+        lines.append(f"• meta p(correct): {round(float(meta['meta_p']), 3)}")
     nwe = pick_nwe_signal(agents.get("indicator", {}))
     if nwe:
         lines.append(f"• NWE direct: {nwe.upper()}")

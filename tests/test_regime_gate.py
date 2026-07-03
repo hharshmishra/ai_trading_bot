@@ -192,9 +192,19 @@ class TestGateV2TruthTable:
         assert not self.gate(r)[0]  # GATE_1H_TREND defaults false
 
     # --- 4h/1d/1w ---
-    def test_4h_ranging_nwe_emits(self):
+    def test_4h_ranging_nwe_emits_when_higher_tf_enabled(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_HIGHER_TF", True)
         emit, overall, nwe, conf, reason = self.gate(_res(nwe="sell", final_action="buy"))
         assert emit and overall == "sell" and reason == "nwe_ranging"  # NWE overrides conf
+
+    def test_4h_ranging_nwe_disabled_by_default(self):
+        # Backtest amendment: 4h ranging NWE graded 12.5% TB precision
+        emit, *_, reason = self.gate(_res(nwe="sell", final_action="skip", final_conf=0.5))
+        assert not emit and reason == "nwe_higher_tf_disabled"
+
+    def test_4h_ranging_nwe_disabled_conf_path_still_works(self):
+        emit, overall, *_, reason = self.gate(_res(nwe="sell", final_action="buy", final_conf=0.9))
+        assert emit and overall == "buy" and reason == "conf_over_80"
 
     def test_4h_ranging_conf_emits_without_nwe(self):
         emit, overall, *_ , reason = self.gate(_res(final_conf=0.85))
@@ -215,11 +225,19 @@ class TestGateV2TruthTable:
         emit, *_ , reason = self.gate(r)
         assert not emit and reason == "counter_trend_no_flip"
 
-    def test_4h_trending_supertrend_flip_reversal_emits(self):
+    def test_4h_trending_supertrend_flip_reversal_emits_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_TREND_REVERSAL", True)
         r = _res(regime="trend_up", final_conf=0.5,
                  trend_fired=[("supertrend_flip", "sell"), ("donchian_breakout", "sell")])
         emit, overall, *_ , reason = self.gate(r)
         assert emit and overall == "sell" and reason == "trend_reversal"
+
+    def test_4h_trending_reversal_disabled_by_default(self):
+        # Backtest amendment: flip-against-trend graded 0/6 decided
+        r = _res(regime="trend_up", final_conf=0.5,
+                 trend_fired=[("supertrend_flip", "sell"), ("donchian_breakout", "sell")])
+        emit, *_ , reason = self.gate(r)
+        assert not emit and reason == "reversal_disabled"
 
     def test_4h_trending_nwe_suppressed_even_with_conf(self):
         r = _res(regime="trend_down", nwe="buy", final_action="buy", final_conf=0.9)
@@ -237,7 +255,8 @@ class TestGateV2TruthTable:
         emit, *_ , reason = self.gate(r)
         assert not emit and reason == "counter_trend_conf"
 
-    def test_4h_mixed_nwe_needs_agreement(self):
+    def test_4h_mixed_nwe_needs_agreement(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_HIGHER_TF", True)
         r = _res(regime="mixed", nwe="buy", final_action="buy", final_conf=0.5)
         assert self.gate(r)[0]
         r2 = _res(regime="mixed", nwe="buy", final_action="sell", final_conf=0.5)

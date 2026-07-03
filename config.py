@@ -53,6 +53,10 @@ def _env_json(name: str, default: Any) -> Any:
 # --------------------------------------------------------------------------
 GATE_V2_ENABLED = _env_bool("GATE_V2_ENABLED", False)       # regime-gated signal gate
 GATE_1H_TREND = _env_bool("GATE_1H_TREND", False)           # allow trend triggers on 1h
+# Backtest-driven amendments (12-pair, 2y, exact-path evidence):
+#   trend_reversal graded 0/6 decided; 4h ranging NWE graded 12.5% TB precision.
+GATE_TREND_REVERSAL = _env_bool("GATE_TREND_REVERSAL", False)   # supertrend-flip-against-trend emissions
+GATE_NWE_HIGHER_TF = _env_bool("GATE_NWE_HIGHER_TF", False)     # NWE emissions on 4h/1d/1w (1h keeps NWE)
 TB_GRADING_ENABLED = _env_bool("TB_GRADING_ENABLED", False)  # triple-barrier rewards
 DERIVATIVES_ENABLED = _env_bool("DERIVATIVES_ENABLED", False)  # 4th voter
 META_SHADOW = _env_bool("META_SHADOW", True)                # stamp meta_p/calibrated_conf
