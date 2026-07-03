@@ -84,4 +84,21 @@ brain conf) — ship decisions use NWE/trend trigger groups; caveat printed in e
 - [ ] Review section below
 
 ## Review
-(fill at end)
+
+### v2 accuracy upgrade (2026-07-03, merged 734ec4c)
+Shipped: backtest harness, regime-gated gate v2 (+2 evidence amendments), TB grading,
+DerivativesAgent, nightly meta/calibration, evidence deck. 111 tests.
+
+### v3 correctness + agent enhancements (2026-07-04, branch feature/correctness-v3)
+11 audited defects fixed (5 critical): UTC schedule alignment, closed-candle
+discipline, NWE event mode, news RAG wiring + hallucination guard, dominance
+logic revival, brain deadzone-v2 shadow, grading claim race, hygiene batch.
+Enhancements: FRED/stooq SPX-DXY trends, money-flow v2, ecosystem auto-refresh,
+event-typed news (RL 5->10 logit-preserving migration), tiered headlines,
+model2vec embedder option, RSI/OBV divergences, EB direct confidences,
+D3 redundancy report, Lorentzian experiment.
+Evidence: regression guard reproduced amended baseline (max drift 0.14pp);
+NWE event mode SHIPPED (-25-36% duplicate 1h emissions, precision +0.8-1.1pp);
+divergences HELD (deltas ~0, fire too rarely); EB conf self-arms on live data.
+Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
+(46-pair universe silently) -> LTC/TRX in. 167 tests green.
