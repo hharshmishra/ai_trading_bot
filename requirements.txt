@@ -30,7 +30,12 @@ joblib==1.5.3
 # --- dev ---
 pytest==9.1.1
 
-# --- optional: RAG semantic embeddings (MiniLM) ------------------------------
+# --- optional: RAG semantic embeddings ---------------------------------------
+# RECOMMENDED (verified numpy<2-safe, no torch): static embeddings via
+#   pip install model2vec==0.8.2      # then set RAG_EMBEDDER=model2vec
+# (~30MB one-time model download, pure-numpy inference, 256-dim.)
+#
+# Alternative (MiniLM) below — heavier and pin-conflicted:
 # Phase 5 RAG works out of the box with the built-in HashingEmbedder (no extra
 # deps). For real semantic similarity install sentence-transformers + sqlite-vec.
 # NOTE: modern sentence-transformers wants numpy>=1.26 / torch, which conflicts

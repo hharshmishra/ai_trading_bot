@@ -54,6 +54,25 @@ class HashingEmbedder(Embedder):
         return out / norms
 
 
+class Model2VecEmbedder(Embedder):
+    """Static-embedding model (enhancement C4): real semantic vectors WITHOUT
+    torch — model2vec 0.8.2 installs cleanly against the numpy<2 pin (verified
+    2026-07). ~30MB one-time download (potion-base-8M), then pure numpy
+    inference. Select with RAG_EMBEDDER=model2vec."""
+
+    def __init__(self, model: str = "minishlab/potion-base-8M"):
+        from model2vec import StaticModel
+        self._m = StaticModel.from_pretrained(model)
+        probe = np.asarray(self._m.encode(["probe"]))
+        self.dim = int(probe.shape[1])
+
+    def embed(self, texts: Sequence[str]) -> np.ndarray:
+        v = np.asarray(self._m.encode(list(texts)), dtype=np.float32)
+        n = np.linalg.norm(v, axis=1, keepdims=True)
+        n[n == 0] = 1.0
+        return v / n
+
+
 class MiniLMEmbedder(Embedder):
     def __init__(self, model: str = "sentence-transformers/all-MiniLM-L6-v2"):
         from sentence_transformers import SentenceTransformer
@@ -67,6 +86,8 @@ class MiniLMEmbedder(Embedder):
 
 def get_embedder() -> Embedder:
     pref = os.getenv("RAG_EMBEDDER", "auto").lower()
+    if pref == "model2vec":
+        return Model2VecEmbedder()   # explicit opt-in: raise loudly on failure
     if pref in ("auto", "minilm"):
         try:
             return MiniLMEmbedder()

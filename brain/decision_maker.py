@@ -124,9 +124,10 @@ class DecisionMaker:
                 from persistence import get_store
                 self._store = get_store()
             from agents.research_agent import _strip_suffix
+            from ingestion import format_headline
             rows = self._store.recent_news_for_asset(
                 _strip_suffix(symbol), since_ts=time.time() - 48 * 3600, limit=5)
-            titles = [r.get("title") for r in rows if r.get("title")]
+            titles = [format_headline(r) for r in rows if r.get("title")]
             return titles or None
         except Exception:
             return None

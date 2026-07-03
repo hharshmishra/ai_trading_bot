@@ -34,11 +34,24 @@ class PanicHeadline(BaseModel):
     impact: str = Field(..., description="Impact direction: Bullish, Bearish, or Neutral")
     reason: str = Field(..., description="Why it could move markets")
 
+EVENT_TYPES = ("hack", "regulatory", "etf_flow", "listing", "delisting",
+               "unlock", "partnership", "macro")
+
+class NewsEvent(BaseModel):
+    """Typed market event (enhancement C1) — richer than bare sentiment:
+    a hack and an ETF inflow are both 'bearish/bullish' but move price very
+    differently. Defaults keep old LLM outputs valid."""
+    type: str = Field(..., description="one of: " + "|".join(EVENT_TYPES))
+    direction: str = Field("Neutral", description="Bullish|Bearish|Neutral")
+    surprise: float = Field(0.5, ge=0, le=1, description="1 = total surprise vs consensus")
+    source_tier: int = Field(2, ge=1, le=3, description="1 = most credible source")
+
 class OverallScanJSON(BaseModel):
     has_panic: bool = Field(..., description="True if any panic-worthy headlines found")
     sentiment: str = Field(..., description="Overall sentiment: Bullish/Bearish/Neutral")
     confidence: float = Field(..., ge=0, le=1, description="Confidence for overall sentiment 0..1")
     top_headlines: List[PanicHeadline] = Field(default_factory=list)
+    events: List[NewsEvent] = Field(default_factory=list)
 
 class PairHeadline(BaseModel):
     title: str
@@ -50,6 +63,7 @@ class PairScanJSON(BaseModel):
     sentiment: str = Field(..., description="Pair-specific sentiment")
     confidence: float = Field(..., ge=0, le=1)
     top_headlines: List[PairHeadline] = Field(default_factory=list)
+    events: List[NewsEvent] = Field(default_factory=list)
 
 
 # =========================
@@ -82,37 +96,67 @@ def softmax(logits: List[float]) -> List[float]:
     return [e/s for e in exps]
 
 
+N_FEATURES = 10   # 5 legacy + 5 event features (C1); old policies zero-pad up
+
+
 class NewsRL:
     """
     Minimal contextual bandit:
-      - Features: [overall_score, pair_score, panic_flag, bias_overall, bias_pair]
+      - Features: [overall_score, pair_score, panic_flag, bias_overall, bias_pair,
+                   ev_bull, ev_bear, ev_hack_reg, ev_etf_listing, ev_unlock]
       - Actions: 0=SELL, 1=SKIP, 2=BUY
       - Policy: linear logits + softmax, epsilon-greedy pick
       - Update: REINFORCE-like gradient step proportional to reward
+
+    Feature-vector migration (C1): stored 5-dim rows and 5-dim policy files
+    predate the event features. Zero-padding preserves the old logits EXACTLY
+    (extra weights start at 0, extra features contribute 0), so old rows keep
+    replaying correctly and behavior with NEWS_EVENTS_ENABLED=false is
+    bit-identical to the 5-dim bandit.
     """
-    def __init__(self, n_features: int = 5, lr: float = 0.1):
+    def __init__(self, n_features: int = N_FEATURES, lr: float = 0.1):
         self.n_features = n_features
         self.lr = lr
         self.policy = self._load_policy()
+
+    def _pad(self, vec: List[float]) -> List[float]:
+        if len(vec) < self.n_features:
+            return list(vec) + [0.0] * (self.n_features - len(vec))
+        return list(vec[: self.n_features])
 
     def _load_policy(self) -> BanditPolicy:
         if os.path.exists(POLICY_PATH):
             try:
                 with open(POLICY_PATH, "r") as f:
                     data = json.load(f)
-                return BanditPolicy(weights=data["weights"], epsilon=data.get("epsilon", 0.1))
+                weights = data["weights"]
+                if weights and len(weights[0]) < self.n_features:
+                    # one-time width migration: back up, then zero-pad rows
+                    try:
+                        with open(POLICY_PATH + f".bak-{len(weights[0])}dim", "w") as b:
+                            json.dump(data, b)
+                    except Exception:
+                        pass
+                    weights = [self._pad(row) for row in weights]
+                pol = BanditPolicy(weights=weights, epsilon=data.get("epsilon", 0.1))
+                if data.get("n_features") != self.n_features:
+                    self.policy = pol
+                    self._save_policy()
+                return pol
             except Exception:
                 pass
         return BanditPolicy.default(self.n_features)
 
     def _save_policy(self):
         with open(POLICY_PATH, "w") as f:
-            json.dump({"weights": self.policy.weights, "epsilon": self.policy.epsilon}, f)
+            json.dump({"weights": self.policy.weights, "epsilon": self.policy.epsilon,
+                       "n_features": self.n_features}, f)
 
     def _logits(self, features: List[float]) -> List[float]:
         return [dot(w, features) for w in self.policy.weights]
 
     def select_action(self, features: List[float]) -> int:
+        features = self._pad(features)
         # epsilon-greedy
         if random.random() < self.policy.epsilon:
             return random.choice([0, 1, 2])
@@ -128,6 +172,9 @@ class NewsRL:
         return 2  # fallback BUY
 
     def update(self, features: List[float], action: int, reward: float):
+        # Stored rows may be 5-dim (pre-event era) — pad so the gradient loop
+        # never IndexErrors and old rows train the legacy weight slots only.
+        features = self._pad(features)
         # Policy gradient step (simple)
         logits = self._logits(features)
         probs = softmax(logits)
@@ -186,6 +233,30 @@ Return a strict JSON object:
 Only return JSON. No extra text.
 """
 )
+
+def _events_block() -> str:
+    """Event-extraction request (C1). Empty when NEWS_EVENTS_ENABLED is off —
+    prompts stay byte-identical to the pre-event era."""
+    import config
+    if not config.NEWS_EVENTS_ENABLED:
+        return ""
+    return (
+        '\n\nAdditionally include an "events" array in the SAME JSON object: '
+        'typed market events found in the headlines, each as\n'
+        '{ "type": "hack"|"regulatory"|"etf_flow"|"listing"|"delisting"|"unlock"|"partnership"|"macro", '
+        '"direction": "Bullish"|"Bearish"|"Neutral", '
+        '"surprise": number 0..1 (1 = total surprise vs consensus), '
+        '"source_tier": 1|2|3 (1 = most credible source) }.\n'
+        "Only include events actually supported by the headlines; else use []."
+    )
+
+
+def _headline_weighting_note(headlines_present: bool) -> str:
+    if not headlines_present:
+        return ""
+    return ("\nWeight recent and [tier-1] headlines most heavily; treat [tier-3] "
+            "as weak evidence. Collapse duplicate narratives into one judgement.")
+
 
 def _no_news_guard() -> str:
     """Hallucination guard (correctness v3, A4): when NO retrieved headlines
@@ -252,13 +323,42 @@ def score_from_sentiment(sentiment: str, confidence: float) -> float:
     return IMPACT_MAP.get(sentiment, 0) * float(confidence)
 
 
+_TIER_W = {1: 1.0, 2: 0.7, 3: 0.4}
+
+
+def _event_features(events: List[NewsEvent]) -> List[float]:
+    """5 event features (C1), all 0.0 when no events (flag off / none found):
+    [strongest bullish (surprise*tier_w), strongest bearish, hack_or_regulatory,
+     etf_or_listing_signed, unlock_flag]"""
+    bull = bear = hack_reg = etf_listing = unlock = 0.0
+    for e in events or []:
+        w = float(e.surprise) * _TIER_W.get(int(e.source_tier), 0.7)
+        d = (e.direction or "").lower()
+        if d.startswith("bull"):
+            bull = max(bull, w)
+        elif d.startswith("bear"):
+            bear = max(bear, w)
+        t = (e.type or "").lower()
+        if t in ("hack", "regulatory"):
+            hack_reg = 1.0
+        if t in ("etf_flow", "listing", "delisting"):
+            signed = w if d.startswith("bull") else (-w if d.startswith("bear") else 0.0)
+            if abs(signed) > abs(etf_listing):
+                etf_listing = signed
+        if t == "unlock":
+            unlock = 1.0
+    return [bull, bear, hack_reg, etf_listing, unlock]
+
+
 def features_from_jsons(overall: OverallScanJSON, pairj: PairScanJSON) -> List[float]:
     overall_score = score_from_sentiment(overall.sentiment, overall.confidence)
     pair_score = score_from_sentiment(pairj.sentiment, pairj.confidence)
     panic_flag = 1.0 if overall.has_panic else 0.0
     bias_overall = IMPACT_MAP.get(overall.sentiment, 0)
     bias_pair = IMPACT_MAP.get(pairj.sentiment, 0)
-    return [overall_score, pair_score, panic_flag, float(bias_overall), float(bias_pair)]
+    base = [overall_score, pair_score, panic_flag, float(bias_overall), float(bias_pair)]
+    # pair events take precedence; fall back to market-wide events
+    return base + _event_features(pairj.events or overall.events)
 
 
 def action_to_label(action: int) -> str:
@@ -295,10 +395,11 @@ class NewsAgent:
         When ``headlines`` (retrieved via RAG) are passed, they ground the model
         in real news instead of stale training data.
         """
-        prompt = OVERALL_PROMPT.format()
+        prompt = OVERALL_PROMPT.format() + _events_block()
         if headlines:
             prompt += ("\n\nRecent market headlines (ground your analysis in these):\n"
-                       + "\n".join(f"- {h}" for h in headlines))
+                       + "\n".join(f"- {h}" for h in headlines)
+                       + _headline_weighting_note(True))
         else:
             prompt += _no_news_guard()
         return OverallScanJSON.model_validate(_chat_json(prompt))
@@ -306,10 +407,11 @@ class NewsAgent:
     def scan_pair(self, pair: str, headlines: Optional[List[str]] = None) -> PairScanJSON:
         """Run ONLY the pair-specific scan (1 LLM call), optionally grounded in
         RAG-retrieved headlines for the pair."""
-        prompt = PAIR_PROMPT.format(pair=pair)
+        prompt = PAIR_PROMPT.format(pair=pair) + _events_block()
         if headlines:
             prompt += ("\n\nRecent headlines for this pair (ground your analysis in these):\n"
-                       + "\n".join(f"- {h}" for h in headlines))
+                       + "\n".join(f"- {h}" for h in headlines)
+                       + _headline_weighting_note(True))
         else:
             prompt += _no_news_guard()
         return PairScanJSON.model_validate(_chat_json(prompt))

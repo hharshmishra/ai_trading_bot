@@ -72,6 +72,11 @@ BRAIN_DEADZONE_V2 = _env_bool("BRAIN_DEADZONE_V2", False)     # directional fina
 BRAIN_MIN_CONF = _env_float("BRAIN_MIN_CONF", 0.25)
 
 # --------------------------------------------------------------------------
+# News agent enhancements (Phase C)
+# --------------------------------------------------------------------------
+NEWS_EVENTS_ENABLED = _env_bool("NEWS_EVENTS_ENABLED", False)   # typed event extraction
+
+# --------------------------------------------------------------------------
 # Research agent enhancements (Phase B)
 # --------------------------------------------------------------------------
 MACRO_PRICES_ENABLED = _env_bool("MACRO_PRICES_ENABLED", False)  # real SPX/DXY trends into logics 2/5

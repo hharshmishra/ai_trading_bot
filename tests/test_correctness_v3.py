@@ -120,7 +120,12 @@ class TestNewsRagWiring:
 
         monkeypatch.setattr(dm.news, "run", fake_run)
         dm.decide("BTCUSDT", "4h", use_agents=("news",))
-        assert seen["headlines"] == ["BTC ETF inflows surge", "Bitcoin funding flips negative"]
+        # formatted with age + source tier (C2): "[1h ago] [tier-1] <title>"
+        assert len(seen["headlines"]) == 2
+        assert seen["headlines"][0].endswith("BTC ETF inflows surge")
+        assert "[tier-1]" in seen["headlines"][0]      # coindesk = tier 1
+        assert "[tier-1]" in seen["headlines"][1]      # theblock = tier 1
+        assert "ago]" in seen["headlines"][0]
         store.close()
 
     def test_empty_corpus_appends_guard(self, monkeypatch):

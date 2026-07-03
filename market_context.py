@@ -63,9 +63,10 @@ class _SharedOverallNews:
             return None
         try:
             import time as _t
+            from ingestion import format_headline
             rows = self._store.recent_news_for_asset(
                 _strip_suffix(pair), since_ts=_t.time() - 48 * 3600, limit=5)
-            titles = [r.get("title") for r in rows if r.get("title")]
+            titles = [format_headline(r) for r in rows if r.get("title")]
             return titles or None
         except Exception:
             return None
@@ -154,8 +155,9 @@ def build_market_context(
     if store is not None and _cfg.NEWS_RAG_ENABLED:
         try:
             import time as _t
+            from ingestion import format_headline
             rows = store.recent_news(since_ts=_t.time() - 48 * 3600, limit=8)
-            market_headlines = [r.get("title") for r in rows if r.get("title")] or None
+            market_headlines = [format_headline(r) for r in rows if r.get("title")] or None
         except Exception:
             market_headlines = None
     overall_json = news_agent.scan_overall(headlines=market_headlines).model_dump()

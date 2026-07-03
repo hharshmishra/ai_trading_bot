@@ -42,6 +42,33 @@ ALIASES = {
 }
 
 
+# Source credibility tiers (enhancement C2) — 1 = most credible. Unknown
+# sources default to tier 2.
+SOURCE_TIERS = {
+    "coindesk": 1, "theblock": 1, "blockworks": 1,
+    "cointelegraph": 2, "decrypt": 2, "cryptoslate": 2,
+    "newsbtc": 3, "bitcoinmagazine": 3,
+}
+
+
+def source_tier(source: str) -> int:
+    return SOURCE_TIERS.get((source or "").lower(), 2)
+
+
+def format_headline(row: Dict[str, Any], now: Optional[float] = None) -> str:
+    """'[3h ago] [tier-1] Title' — the age/tier prefix lets the LLM weight
+    recency and credibility (C2)."""
+    now = now if now is not None else time.time()
+    title = row.get("title") or ""
+    pub = row.get("published_ts")
+    if pub:
+        age_h = max(0, int((now - float(pub)) // 3600))
+        age = f"{age_h}h ago" if age_h < 48 else f"{age_h // 24}d ago"
+    else:
+        age = "undated"
+    return f"[{age}] [tier-{source_tier(row.get('source'))}] {title}"
+
+
 def _id_for(url: str, title: str) -> str:
     return hashlib.sha256(((url or "") + "|" + (title or "")).encode()).hexdigest()[:32]
 
