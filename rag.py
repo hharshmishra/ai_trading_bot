@@ -15,6 +15,7 @@ sqlite-vec can replace the search behind this same interface later.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional, Sequence
@@ -22,6 +23,8 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 
 from persistence import Store, get_store
+
+logger = logging.getLogger("rag")
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -111,12 +114,38 @@ class RagIndex:
         self.store = store or get_store()
         self.embedder = embedder or get_embedder()
         self.dedup_threshold = dedup_threshold
+        self._dim: Optional[int] = None
+        self._dim_warned = False
+
+    def _embed_dim(self) -> int:
+        """Vector width of the ACTIVE embedder (probed once per instance).
+        Stored blobs carry no metadata, so width is the only way to tell rows
+        written by a different RAG_EMBEDDER apart — mixing them in one matrix
+        makes vstack/matmul throw and kills ingestion until the table is
+        cleared. Mismatched rows are simply ignored; the corpus refills over
+        the dedup window."""
+        if self._dim is None:
+            self._dim = int(len(self.embedder.embed(["dimension probe"])[0]))
+        return self._dim
+
+    def _same_dim(self, pairs):
+        """(id, vec) pairs whose width matches the active embedder; warn once."""
+        dim = self._embed_dim()
+        keep = [(rid, v) for rid, v in pairs if v.shape[0] == dim]
+        dropped = len(pairs) - len(keep)
+        if dropped and not self._dim_warned:
+            self._dim_warned = True
+            logger.warning("%d stored embeddings have a different width than the "
+                           "active embedder (RAG_EMBEDDER changed?) — ignoring them", dropped)
+        return keep
 
     def ingest(self, items: List[Dict[str, Any]], dedup_window_ts: Optional[float] = None) -> Dict[str, int]:
         """Embed + store new items, skipping ids we already have and near-duplicates
         (cosine >= dedup_threshold against the recent corpus and within the batch)."""
         stats = {"added": 0, "deduped": 0, "skipped": 0}
-        existing = [_from_bytes(b) for _id, b in self.store.news_embeddings(since_ts=dedup_window_ts)]
+        pairs = self._same_dim([( _id, _from_bytes(b))
+                                for _id, b in self.store.news_embeddings(since_ts=dedup_window_ts)])
+        existing = [v for _id, v in pairs]
         mat = np.vstack(existing) if existing else None
         for it in items:
             iid = it["id"]
@@ -141,12 +170,14 @@ class RagIndex:
         return [r["title"] for r in self.store.recent_news_for_asset(asset, since_ts=since_ts, limit=k)]
 
     def query(self, text: str, k: int = 5, since_ts: Optional[float] = None) -> List[Dict[str, Any]]:
-        """Semantic top-k over the corpus."""
-        rows = self.store.news_embeddings(since_ts=since_ts)
-        if not rows:
+        """Semantic top-k over the corpus (rows from a different embedder width
+        are ignored — see _same_dim)."""
+        pairs = self._same_dim([(r[0], _from_bytes(r[1]))
+                                for r in self.store.news_embeddings(since_ts=since_ts)])
+        if not pairs:
             return []
-        ids = [r[0] for r in rows]
-        mat = np.vstack([_from_bytes(r[1]) for r in rows])
+        ids = [rid for rid, _ in pairs]
+        mat = np.vstack([v for _, v in pairs])
         sims = mat @ self.embedder.embed([text])[0]
         order = np.argsort(-sims)[:k]
         return [{**self.store.get_news_item(ids[i]), "score": float(sims[i])} for i in order]

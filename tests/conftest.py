@@ -30,6 +30,7 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
     import config
 
     monkeypatch.setattr(na, "POLICY_PATH", str(tmp_path / "news_agent_policy.json"))
+    monkeypatch.setattr(na, "PREDICTIONS_LOG_PATH", str(tmp_path / "predictions_log.json"))
     monkeypatch.setattr(ra, "POLICY_PATH", str(tmp_path / "research_agent_policy.json"))
     monkeypatch.setattr(ia, "POLICY_PATH", str(tmp_path / "indicator_agent_policy.json"))
     monkeypatch.setattr(dmm, "POLICY_PATH", str(tmp_path / "brain_policy.json"))

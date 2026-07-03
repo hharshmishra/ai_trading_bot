@@ -7,11 +7,15 @@ fetcher remains for anyone with a paid token).
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
+import logging
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from rag import RagIndex
+
+logger = logging.getLogger("ingestion")
 
 DEFAULT_RSS = [
     ("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
@@ -99,16 +103,31 @@ def normalize_rss(entries: List[Dict[str, Any]], source: str) -> List[Dict[str, 
         body = e.get("summary") or e.get("description") or ""
         url = e.get("link") or ""
         pub = e.get("published_parsed")
-        published_ts = time.mktime(pub) if pub else None
+        # feedparser normalizes published_parsed to UTC; timegm reads it as UTC
+        # (mktime would read it as LOCAL — on an IST box every headline landed
+        # 5.5h early, skewing ages and the 48h/7d windows).
+        published_ts = calendar.timegm(pub) if pub else None
         items.append({
             "id": _id_for(url, title), "source": source, "title": title, "body": body,
             "url": url, "published_ts": published_ts, "assets": tag_assets(title + " " + body)})
     return items
 
 
-def fetch_rss(url: str) -> List[Dict[str, Any]]:
+def fetch_rss(url: str, timeout: float = 10.0) -> List[Dict[str, Any]]:
+    """Fetch the feed body with a bounded timeout, then hand BYTES to
+    feedparser. feedparser.parse(url) does its own unbounded urllib fetch — one
+    dead feed host could pin an ingest thread forever and, over enough cycles,
+    exhaust the to_thread pool and stall the scheduler."""
     import feedparser
-    return [dict(e) for e in feedparser.parse(url).entries]
+    import requests
+    try:
+        r = requests.get(url, timeout=timeout,
+                         headers={"User-Agent": "BitReinforceX/1.0 (+rss ingest)"})
+        r.raise_for_status()
+        return [dict(e) for e in feedparser.parse(r.content).entries]
+    except Exception as e:
+        logger.warning("rss fetch failed for %s: %s", url, e)
+        return []
 
 
 def fetch_cryptopanic(token: str, kind: str = "news") -> List[Dict[str, Any]]:
