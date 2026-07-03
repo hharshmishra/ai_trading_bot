@@ -8,10 +8,13 @@ emitted signals (Telegram). The grader (Phase 3) closes the loop later.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import pandas as pd
+
+logger = logging.getLogger("cycle")
 
 import config
 from grader import HORIZON_K
@@ -76,7 +79,8 @@ async def run_cycle(
     except Exception:
         pass
     sem = asyncio.Semaphore(concurrency)
-    summary = {"cycle_id": cycle_id, "analyzed": 0, "emitted": 0, "errors": 0}
+    summary = {"cycle_id": cycle_id, "analyzed": 0, "emitted": 0, "errors": 0,
+               "error_pairs": []}
 
     for tf in timeframes:
         # Phase 1: build the shared market context once for this timeframe.
@@ -93,6 +97,8 @@ async def run_cycle(
                     res = await asyncio.to_thread(dm.decide, sym, tf, None, ctx)
                 except Exception:
                     summary["errors"] += 1
+                    summary["error_pairs"].append(f"{sym}:{tf}")
+                    logger.exception("decide failed for %s %s", sym, tf)
                     return
                 summary["analyzed"] += 1
 

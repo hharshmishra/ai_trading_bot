@@ -7,6 +7,7 @@ convention. Re-runs top up incrementally from the last cached candle.
 from __future__ import annotations
 
 import os
+import sys
 import time
 from typing import Optional
 
@@ -98,7 +99,29 @@ def load_or_fetch(symbol: str, tf: str, start: str, end: Optional[str] = None,
     if end_ms:
         df = df[df["timestamp"] < end_ms]
     df = df.copy().reset_index(drop=True)
-    if len(df) > 1:
-        df = df.iloc[:-1].reset_index(drop=True)  # drop the (possibly open) last candle
+    # Drop the last candle ONLY if it is actually still open — the same rule
+    # the live fetcher applies (_drop_partial_candle). The old unconditional
+    # drop discarded a legitimately closed final bar on historical ranges and,
+    # via its len>1 guard, leaked a possibly-open bar when exactly one row
+    # remained.
+    now_ms = int(time.time() * 1000)
+    if len(df) and int(df["timestamp"].iloc[-1]) + TF_MS[tf] > now_ms:
+        df = df.iloc[:-1].reset_index(drop=True)
+    if df.empty:
+        raise RuntimeError(f"{symbol} {tf}: no closed candles in requested range "
+                           f"{start}..{end or 'now'}")
+    # Loud coverage check: empty backfill/top-up fetches (exchange returned no
+    # data — e.g. the pair listed after --start, or a transient gap) must never
+    # SILENTLY shrink the replay window. Legit for late listings, so warn.
+    first_ms, last_ms = int(df["timestamp"].iloc[0]), int(df["timestamp"].iloc[-1])
+    if first_ms > start_ms + TF_MS[tf]:
+        print(f"[backtest.data] COVERAGE GAP {symbol} {tf}: requested start "
+              f"{pd.to_datetime(start_ms, unit='ms')} but history begins "
+              f"{pd.to_datetime(first_ms, unit='ms')} (late listing or fetch gap)",
+              file=sys.stderr)
+    if end_ms and last_ms + 2 * TF_MS[tf] < min(end_ms, now_ms):
+        print(f"[backtest.data] COVERAGE GAP {symbol} {tf}: requested end "
+              f"{pd.to_datetime(end_ms, unit='ms')} but history stops "
+              f"{pd.to_datetime(last_ms, unit='ms')}", file=sys.stderr)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     return df

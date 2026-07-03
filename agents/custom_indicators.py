@@ -85,7 +85,12 @@ def apply_nadaraya_watson_envelope(
     mult: float = 3.0,
     src: str = "close",
     window: int = 500,
-    repaint: bool = True  # kept for signature parity; we implement non-repainting endpoint
+    repaint: bool = True  # True (LuxAlgo repaint variant) IS the production path —
+                          # the whole backtest evidence base was measured on it.
+                          # No lookahead at decision time: the window ends at the
+                          # newest closed bar, and the backtest replays this exact
+                          # windowed call per bar (sim/live parity by construction).
+                          # repaint=False = endpoint/non-repainting variant, unused.
 ) -> pd.DataFrame:
     if src not in df.columns:
         raise ValueError(f"Column '{src}' not found in DataFrame.")
@@ -461,7 +466,10 @@ def squeeze_release_signal(df: pd.DataFrame, bb_len: int = 20, bb_std: float = 2
     if pd.isna(m) or m == 0:
         return None
     scale = mom.abs().rolling(bb_len).max().iloc[-1]
-    strength = float(min(abs(m) / scale, 1.0)) if pd.notna(scale) and scale > 0 else 0.5
+    # no valid momentum range -> NO strength evidence (0.0), not "moderate";
+    # only reachable on very short frames (<2*bb_len bars), never at the
+    # production window of 500
+    strength = float(min(abs(m) / scale, 1.0)) if pd.notna(scale) and scale > 0 else 0.0
     return {"signal": "buy" if m > 0 else "sell",
             "confidence": float(np.clip(0.55 + 0.35 * strength, 0.5, 0.9)),
             "name": "squeeze_release"}
@@ -518,7 +526,7 @@ def chandelier_exit(df: pd.DataFrame, atr_period: int = 22, atr_mult: float = 3.
 
     # --- Direction ---
     dir_val = np.where(close > short_stop_prev, 1, np.where(close < long_stop_prev, -1, np.nan))
-    dir_val = pd.Series(dir_val).fillna(method='ffill')  # forward-fill direction
+    dir_val = pd.Series(dir_val).ffill()  # forward-fill direction (pandas 2.1+ dropped the old method kwarg)
 
     # --- Signals ---
     buy_signal = (dir_val == 1) & (pd.Series(dir_val).shift(1) == -1)
@@ -563,14 +571,19 @@ def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volu
         mf = typical_price * df['volume']
         positive_mf = mf.where(typical_price > typical_price.shift(), 0.0)
         negative_mf = mf.where(typical_price < typical_price.shift(), 0.0)
-        mfi_ratio = positive_mf.rolling(period).sum() / negative_mf.rolling(period).sum()
-        df['osc'] = 100 - (100 / (1 + mfi_ratio))
+        pos_sum = positive_mf.rolling(period).sum()
+        neg_sum = negative_mf.rolling(period).sum()
+        df['osc'] = 100 - (100 / (1 + pos_sum / neg_sum))
+        # dead-flat window: 0/0 -> NaN, which the ratchet below reads as
+        # "downtrend" (NaN >= 50 is False). A market that has not moved at
+        # all is neutral, not bearish.
+        df.loc[(pos_sum == 0) & (neg_sum == 0), 'osc'] = 50.0
     else:
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-        rs = gain / loss
-        df['osc'] = 100 - (100 / (1 + rs))
+        df['osc'] = 100 - (100 / (1 + gain / loss))
+        df.loc[(gain == 0) & (loss == 0), 'osc'] = 50.0
 
     # AlphaTrend core calculation
     upT = df['low'] - df['atr'] * coeff
@@ -595,6 +608,9 @@ def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volu
             alpha[i] = prev
 
     df['alpha_trend'] = alpha
+    # shift(2) is FAITHFUL to the original AlphaTrend (Pine:
+    # ta.crossover(AlphaTrend, AlphaTrend[2])) — 2-bar comparison is the
+    # indicator's designed flip detection, not an off-by-one.
     df['alpha_trend_prev'] = df['alpha_trend'].shift(2)
 
     # Signals

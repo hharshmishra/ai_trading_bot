@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Any, Dict, Tuple
 
 
@@ -115,11 +116,34 @@ REGIME_WALK_BARS = _env_int("REGIME_WALK_BARS", 50)          # state-machine wal
 # --------------------------------------------------------------------------
 ATR_LEN = _env_int("ATR_LEN", 14)
 # per-TF (tp_mult, sl_mult) in ATR units
-BARRIER_MULTS: Dict[str, Tuple[float, float]] = {
-    tf: tuple(v) for tf, v in _env_json("BARRIER_MULTS", {
-        "1h": (1.5, 1.0), "4h": (1.5, 1.0), "1d": (1.5, 1.0), "1w": (2.0, 1.25),
-    }).items()
+_BARRIER_DEFAULTS: Dict[str, Tuple[float, float]] = {
+    "1h": (1.5, 1.0), "4h": (1.5, 1.0), "1d": (1.5, 1.0), "1w": (2.0, 1.25),
 }
+
+
+def _parse_barrier_mults(raw: dict) -> Dict[str, Tuple[float, float]]:
+    """Validate BARRIER_MULTS entries: each must be a 2-sequence of numbers.
+    A JSON string like "1.5,1.0" would otherwise become a tuple of CHARACTERS
+    and blow up as a TypeError deep inside barrier_prices — fall back to the
+    per-TF default with a loud warning instead."""
+    out: Dict[str, Tuple[float, float]] = {}
+    for tf in set(raw) | set(_BARRIER_DEFAULTS):
+        v = raw.get(tf, _BARRIER_DEFAULTS.get(tf))
+        try:
+            if isinstance(v, (str, bytes)) or len(v) != 2:
+                raise ValueError("need a [tp_mult, sl_mult] pair")
+            out[tf] = (float(v[0]), float(v[1]))
+        except Exception:
+            default = _BARRIER_DEFAULTS.get(tf)
+            print(f"[config] BARRIER_MULTS[{tf!r}]={v!r} invalid; "
+                  f"using default {default}", file=sys.stderr)
+            if default is not None:
+                out[tf] = default
+    return out
+
+
+BARRIER_MULTS: Dict[str, Tuple[float, float]] = _parse_barrier_mults(
+    _env_json("BARRIER_MULTS", _BARRIER_DEFAULTS))
 # Reward map v2 (used when TB_GRADING_ENABLED)
 REWARD_CORRECT = _env_float("REWARD_CORRECT", 1.0)
 REWARD_WRONG = _env_float("REWARD_WRONG", -4.0)
