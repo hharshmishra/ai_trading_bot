@@ -93,6 +93,14 @@ DIVERGENCE_VOTES = _env_bool("DIVERGENCE_VOTES", False)          # RSI/OBV diver
 EMPIRICAL_DIRECT_CONF = _env_bool("EMPIRICAL_DIRECT_CONF", False)  # EB win-rate confidences for direct signals
 INDICATOR_CONF_PATH = os.getenv("INDICATOR_CONF_PATH", "logs/indicator_conf.json")
 
+# v3.4 extra type-2 confluence votes — csv of keys, each backtest-gated before
+# default promotion (see docs). Unknown keys are ignored.
+_T2_VOTE_KEYS = frozenset({"rsi30", "mfi", "cci", "vwap", "fib", "ichimoku"})
+T2_EXTRA_VOTES = frozenset(
+    s.strip().lower() for s in os.getenv("T2_EXTRA_VOTES", "").split(",") if s.strip()
+) & _T2_VOTE_KEYS
+T2_RULE_LEARNING = _env_bool("T2_RULE_LEARNING", False)   # per-rule learned type-2 weights
+
 # --------------------------------------------------------------------------
 # News agent enhancements (Phase C)
 # --------------------------------------------------------------------------

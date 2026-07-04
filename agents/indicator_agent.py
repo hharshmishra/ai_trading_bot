@@ -331,6 +331,26 @@ class IndicatorAgent:
             except Exception:
                 out["obv_div"] = 0.0
 
+        # v3.4 extra confluence votes — scalar broadcast columns like the
+        # divergence pattern (0-filled, never NaN). Each key is opt-in via
+        # T2_EXTRA_VOTES and stays off until it wins its backtest A/B.
+        extra = config.T2_EXTRA_VOTES
+        if extra:
+            if "rsi30" in extra:
+                out["v_rsi30"] = float(ci.rsi30_vote(close))
+            if "mfi" in extra:
+                out["v_mfi"] = float(ci.mfi_vote(out["high"], out["low"], close, out["volume"]))
+            if "cci" in extra:
+                out["v_cci"] = float(ci.cci_vote(out["high"], out["low"], close))
+            if "vwap" in extra:
+                out["v_vwap"] = float(ci.vwap_vote(out))
+            if "ichimoku" in extra:
+                out["v_ichimoku"] = float(ci.ichimoku_vote(out["high"], out["low"], close))
+            if "fib" in extra:
+                fib = ci.fib_confluence_vote(out)
+                out["v_fib"] = float(fib["vote"])
+                out["v_fib_ratio"] = float(fib["ratio"])
+
         return out
 
     def _type2_rules(self, raw: pd.DataFrame) -> Dict[str, Any]:
@@ -386,6 +406,20 @@ class IndicatorAgent:
             elif r["obv_div"] < 0:
                 votes["bear"] += 1
 
+        # v3.4 extra confluence votes (columns exist only for enabled
+        # T2_EXTRA_VOTES keys); each ±1, recorded in `extras` for details.
+        extras = {}
+        for col in ("v_rsi30", "v_mfi", "v_cci", "v_vwap", "v_ichimoku", "v_fib"):
+            if col in r.index:
+                v = float(r[col])
+                extras[col[2:]] = int(v)
+                if v > 0:
+                    votes["bull"] += 1
+                elif v < 0:
+                    votes["bear"] += 1
+        if "v_fib_ratio" in r.index and extras.get("fib"):
+            extras["fib_ratio"] = float(r["v_fib_ratio"])
+
         if votes["bull"] > votes["bear"]:
             action = "buy"
             confidence = 0.55 + 0.1*(votes["bull"] - votes["bear"])
@@ -396,7 +430,7 @@ class IndicatorAgent:
             action = "skip"
             confidence = 0.45
 
-        return {
+        out = {
             "action": action,
             "confidence": float(np.clip(confidence, 0.0, 0.98)),
             "votes": votes,
@@ -414,6 +448,9 @@ class IndicatorAgent:
                 "supertrend_dir": int(r["supertrend_dir"])
             }
         }
+        if extras:
+            out["extras"] = extras       # shape unchanged when no extra votes on
+        return out
 
     def _vol_ok(self, df: pd.DataFrame) -> bool:
         """Last closed volume above its SMA — the gate's volume confirmation."""

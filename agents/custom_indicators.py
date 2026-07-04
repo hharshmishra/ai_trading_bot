@@ -617,5 +617,215 @@ def alpha_trend(df: pd.DataFrame, coeff: float = 1.0, period: int = 14, use_volu
     df['alpha_signal'] = None
     df.loc[df['alpha_trend'] > df['alpha_trend_prev'], 'alpha_signal'] = 'buy'
     df.loc[df['alpha_trend'] < df['alpha_trend_prev'], 'alpha_signal'] = 'sell'
-    
+
     return df
+
+
+# ---------------------------------------------------------------------------
+# v3.4 extra type-2 confluence votes (config.T2_EXTRA_VOTES)
+#
+# Pure functions over the CLOSED-candle frame, each returning a vote in
+# {-1, 0, +1}. State-based like the existing type-2 rules (supertrend_dir,
+# MA ribbon) — votes are continuous context, not entry triggers. Every vote
+# ships default-OFF and must win its backtest A/B (tb_precision delta > 0,
+# significant at 95%, expectancy not degraded) before default promotion.
+# ---------------------------------------------------------------------------
+
+def _simple_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray,
+                period: int = 14) -> float:
+    """Simple-mean true range over the last ``period`` bars — same math as
+    grading.barriers.atr_from_ohlcv, inlined to keep this module layer-free."""
+    if len(close) < period + 1:
+        return 0.0
+    h, l, c = high[-(period + 1):], low[-(period + 1):], close[-(period + 1):]
+    tr = np.maximum(h[1:] - l[1:],
+                    np.maximum(np.abs(h[1:] - c[:-1]), np.abs(l[1:] - c[:-1])))
+    return float(tr.mean())
+
+
+def rsi30_vote(close: pd.Series) -> int:
+    """Slow RSI-30 extremes. Multi-period RSI variants (RSI30 alongside RSI14)
+    top the feature-importance rankings in crypto direction studies. The
+    longer period compresses the range, hence 35/65 rather than 30/70."""
+    try:
+        import pandas_ta as ta
+        r = ta.rsi(close, length=30)
+        if r is None or pd.isna(r.iloc[-1]):
+            return 0
+        v = float(r.iloc[-1])
+        return 1 if v < 35 else (-1 if v > 65 else 0)
+    except Exception:
+        return 0
+
+
+def mfi_vote(high: pd.Series, low: pd.Series, close: pd.Series,
+             volume: pd.Series) -> int:
+    """Money Flow Index 14 — volume-weighted RSI. Oversold <20 / overbought >80."""
+    try:
+        import pandas_ta as ta
+        m = ta.mfi(high, low, close, volume, length=14)
+        if m is None or pd.isna(m.iloc[-1]):
+            return 0
+        v = float(m.iloc[-1])
+        return 1 if v < 20 else (-1 if v > 80 else 0)
+    except Exception:
+        return 0
+
+
+def cci_vote(high: pd.Series, low: pd.Series, close: pd.Series) -> int:
+    """CCI-20 beyond ±100 — classic mean-reversion extreme."""
+    try:
+        import pandas_ta as ta
+        c = ta.cci(high, low, close, length=20)
+        if c is None or pd.isna(c.iloc[-1]):
+            return 0
+        v = float(c.iloc[-1])
+        return 1 if v < -100 else (-1 if v > 100 else 0)
+    except Exception:
+        return 0
+
+
+def vwap_vote(df: pd.DataFrame) -> int:
+    """Close vs BOTH the UTC-day anchored VWAP and a rolling ~24h VWAP.
+
+    Crypto trades 24/7, so the anchor is the UTC midnight reset (the accepted
+    convention). Intraday timeframes only: on 1d+ bars a daily VWAP is just the
+    bar's own typical price, so the vote abstains. Above both -> +1 (buyers own
+    the session), below both -> -1, mixed -> 0.
+    """
+    try:
+        if len(df) < 30:
+            return 0
+        ts = pd.to_datetime(df["timestamp"])
+        sec = float(ts.diff().dt.total_seconds().median())
+        if not sec or sec <= 0 or sec >= 86400:          # 1d/1w bars: abstain
+            return 0
+        bars_24h = max(int(round(86400 / sec)), 2)
+        tp = (df["high"].astype(float) + df["low"].astype(float)
+              + df["close"].astype(float)) / 3.0
+        vol = df["volume"].astype(float).clip(lower=0.0)
+        pv = tp * vol
+        day = ts.dt.floor("D")
+        anchored = pv.groupby(day).cumsum() / vol.groupby(day).cumsum().replace(0.0, np.nan)
+        rolling = pv.rolling(bars_24h).sum() / vol.rolling(bars_24h).sum().replace(0.0, np.nan)
+        a, r = anchored.iloc[-1], rolling.iloc[-1]
+        close = float(df["close"].iloc[-1])
+        if pd.isna(a) or pd.isna(r):
+            return 0
+        if close > float(a) and close > float(r):
+            return 1
+        if close < float(a) and close < float(r):
+            return -1
+        return 0
+    except Exception:
+        return 0
+
+
+def ichimoku_vote(high: pd.Series, low: pd.Series, close: pd.Series) -> int:
+    """Ichimoku trend agreement: close vs the CLOSED cloud + TK cross.
+
+    Computed manually so only information available at the bar is used: the
+    spans compared against today's close were derived 26 bars ago (standard
+    displacement) — the pandas_ta variant's forward-projected frame is never
+    touched, so there is no future leak by construction.
+    """
+    try:
+        if len(close) < 80:                               # 52 + 26 displacement
+            return 0
+        h, l = high.astype(float), low.astype(float)
+        tenkan = (h.rolling(9).max() + l.rolling(9).min()) / 2.0
+        kijun = (h.rolling(26).max() + l.rolling(26).min()) / 2.0
+        span_a = ((tenkan + kijun) / 2.0).shift(26)
+        span_b = ((h.rolling(52).max() + l.rolling(52).min()) / 2.0).shift(26)
+        c = float(close.iloc[-1])
+        sa, sb = span_a.iloc[-1], span_b.iloc[-1]
+        tk, kj = tenkan.iloc[-1], kijun.iloc[-1]
+        if any(pd.isna(x) for x in (sa, sb, tk, kj)):
+            return 0
+        top, bot = max(float(sa), float(sb)), min(float(sa), float(sb))
+        if c > top and float(tk) > float(kj):
+            return 1
+        if c < bot and float(tk) < float(kj):
+            return -1
+        return 0
+    except Exception:
+        return 0
+
+
+# --------------------------- Fibonacci confluence --------------------------
+
+def confirmed_swings(high: pd.Series, low: pd.Series, w: int = 3,
+                     lookback: int = 120):
+    """Confirmed swing pivots on high/low, same confirmation rule as
+    pivot_divergence: a pivot needs ``w`` bars on EACH side, so it exists only
+    ``w`` bars after the extreme — once confirmed it NEVER changes (repaint-safe
+    by construction; the NWE-repaint lesson). Returns (highs, lows) as lists of
+    (position, price) within the trailing ``lookback`` window."""
+    h = high.astype(float).to_numpy()[-lookback:]
+    l = low.astype(float).to_numpy()[-lookback:]
+    m = len(h)
+    highs, lows = [], []
+    for i in range(w, m - w):
+        win_h = h[i - w: i + w + 1]
+        win_l = l[i - w: i + w + 1]
+        if not (np.isnan(win_h).any() or np.isnan(win_l).any()):
+            if h[i] == win_h.max() and (win_h < h[i]).sum() >= 2 * w - 1:
+                highs.append((i, float(h[i])))
+            if l[i] == win_l.min() and (win_l > l[i]).sum() >= 2 * w - 1:
+                lows.append((i, float(l[i])))
+    return highs, lows
+
+
+FIB_RATIOS = (0.382, 0.5, 0.618, 0.65, 0.786)
+
+
+def fib_levels(swing_lo: float, swing_hi: float) -> Dict[float, float]:
+    """Retracement price at each ratio for an UP leg lo->hi (price pulls back
+    DOWN from hi). For a down leg pass the same values; the caller mirrors."""
+    rng = swing_hi - swing_lo
+    return {r: swing_hi - r * rng for r in FIB_RATIOS}
+
+
+def fib_confluence_vote(df: pd.DataFrame, w: int = 3,
+                        lookback: int = 120) -> Dict[str, Any]:
+    """Golden-pocket confluence vote (the TradingView fib usage, honest form).
+
+    Evidence says fib levels carry no standalone edge, modest edge as reversal
+    ZONES at 0.5-0.618 — so this only votes when price is INSIDE the golden
+    pocket of the last confirmed leg (+-0.25 ATR tolerance) AND the last candle
+    rejects in the pocket's direction. Returns {"vote", "ratio", "leg"}.
+    """
+    out = {"vote": 0, "ratio": 0.0, "leg": ""}
+    try:
+        if len(df) < 2 * w + 5:
+            return out
+        highs, lows = confirmed_swings(df["high"], df["low"], w=w, lookback=lookback)
+        if not highs or not lows:
+            return out
+        (hi_i, hi_p), (lo_i, lo_p) = highs[-1], lows[-1]
+        if hi_p <= lo_p:
+            return out
+        atr = _simple_atr(df["high"].astype(float).to_numpy(),
+                          df["low"].astype(float).to_numpy(),
+                          df["close"].astype(float).to_numpy())
+        tol = 0.25 * atr
+        close = float(df["close"].iloc[-1])
+        opn = float(df["open"].iloc[-1])
+        rng = hi_p - lo_p
+        if hi_i > lo_i:
+            # up leg lo->hi; pocket = prices at 0.5..0.618 retracement (below hi)
+            zone_hi = hi_p - 0.5 * rng
+            zone_lo = hi_p - 0.618 * rng
+            if zone_lo - tol <= close <= zone_hi + tol and close > opn:
+                ratio = (hi_p - close) / rng if rng > 0 else 0.0
+                return {"vote": 1, "ratio": round(float(ratio), 3), "leg": "up"}
+        else:
+            # down leg hi->lo; pocket = 0.5..0.618 bounce zone (above lo)
+            zone_lo = lo_p + 0.5 * rng
+            zone_hi = lo_p + 0.618 * rng
+            if zone_lo - tol <= close <= zone_hi + tol and close < opn:
+                ratio = (close - lo_p) / rng if rng > 0 else 0.0
+                return {"vote": -1, "ratio": round(float(ratio), 3), "leg": "down"}
+        return out
+    except Exception:
+        return out
