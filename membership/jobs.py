@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import config
 from membership.bot import activate_and_welcome, _fmt_date
@@ -21,6 +21,7 @@ logger = logging.getLogger("membership.jobs")
 
 POLL_INTERVAL_S = 30
 SWEEP_INTERVAL_S = 3600
+TRON_GRACE_S = 600      # a USDT transfer confirming this long past TTL still settles
 
 
 def _renew_keyboard(product: str):
@@ -40,41 +41,48 @@ async def poll_payments_once(bd: Dict[str, Any], bot,
     channel_id = bd.get("channel_id")
     activated = 0
 
+    # Razorpay: check status FIRST, expire only after TTL+grace and only if
+    # NOT paid — a payment confirming near the 15-min boundary must never be
+    # expired before its status is read (#9). The blocking HTTP call runs in a
+    # thread so it can never freeze the shared event loop (#2).
     rzp = bd.get("rzp")
-    if rzp is not None and rzp.configured:
-        for p in subs.pending_payments(method="razorpay"):
-            try:
-                if p["created_ts"] + LINK_TTL_S + 120 < now:
-                    subs.expire_payment(p["id"])
-                    continue
-                if not p.get("ref"):
-                    continue
-                status = rzp.link_status(p["ref"])
+    for p in subs.pending_payments(method="razorpay"):
+        try:
+            if p.get("ref") and rzp is not None and rzp.configured:
+                status = await asyncio.to_thread(rzp.link_status, p["ref"])
                 if status == "paid":
                     if await activate_and_welcome(bot, subs, p, channel_id,
                                                   ref=p["ref"], now_ts=now):
                         activated += 1
-                elif status in ("expired", "cancelled"):
+                    continue
+                if status == "cancelled":
                     subs.expire_payment(p["id"])
-            except Exception as e:
-                logger.warning("razorpay poll failed for %s: %s", p["id"], e)
-
-    tron = bd.get("tron")
-    if tron is not None and tron.configured:
-        pendings = subs.pending_payments(method="tron")
-        fresh = [p for p in pendings if p["created_ts"] + TRON_TTL_S > now]
-        for p in pendings:
-            if p["created_ts"] + TRON_TTL_S <= now:
+                    continue
+            # expire regardless of .configured, so an unconfigured/removed rail
+            # never strands pending rows (#20)
+            if p["created_ts"] + LINK_TTL_S + 120 < now:
                 subs.expire_payment(p["id"])
-        if fresh:
-            transfers = tron.incoming(min(p["created_ts"] for p in fresh) - 60)
-            for p, tx in match_transfers(fresh, transfers):
-                try:
-                    if await activate_and_welcome(bot, subs, p, channel_id,
-                                                  ref=tx, now_ts=now):
-                        activated += 1
-                except Exception as e:
-                    logger.warning("tron activation failed for %s: %s", p["id"], e)
+        except Exception as e:
+            logger.warning("razorpay poll failed for %s: %s", p["id"], e)
+
+    # TRON: match across ALL current pendings (incl. those inside the post-TTL
+    # grace window) FIRST, then expire only past TTL+grace — a transfer that
+    # confirms a little late still settles (#3). One threaded fetch per tick.
+    tron = bd.get("tron")
+    pendings = subs.pending_payments(method="tron")
+    if pendings and tron is not None and tron.configured:
+        try:
+            since = min(p["created_ts"] for p in pendings) - 60
+            transfers = await asyncio.to_thread(tron.incoming, since)
+            for p, tx in match_transfers(pendings, transfers):
+                if await activate_and_welcome(bot, subs, p, channel_id,
+                                              ref=tx, now_ts=now):
+                    activated += 1
+        except Exception as e:
+            logger.warning("tron poll failed: %s", e)
+    for p in subs.pending_payments(method="tron"):     # re-query: activated ones gone
+        if p["created_ts"] + TRON_TTL_S + TRON_GRACE_S < now:
+            subs.expire_payment(p["id"])
     return activated
 
 
@@ -85,53 +93,87 @@ async def lifecycle_sweep_once(bd: Dict[str, Any], bot,
     now = now_ts if now_ts is not None else time.time()
     subs = bd["subs"]
     channel_id = bd.get("channel_id")
-    stats = {"reminded": 0, "kicked": 0, "winback": 0}
+    stats = {"reminded": 0, "kicked": 0, "winback": 0, "removed": 0}
 
+    def _by_user(rows):
+        g: Dict[int, List[Dict[str, Any]]] = {}
+        for r in rows:
+            g.setdefault(r["user_id"], []).append(r)
+        return g
+
+    # Reminders: ONE DM per (user, stage) — a bundle buyer holds two product
+    # rows but must not get duplicate reminders (#14). Every product row is
+    # still stage-marked so it won't re-fire.
+    rem_by_user: Dict[int, Dict[int, list]] = {}
     for row, stage in subs.due_reminders(now):
-        try:
+        rem_by_user.setdefault(row["user_id"], {}).setdefault(stage, []).append(row)
+    for uid, stages in rem_by_user.items():
+        for stage, rows in stages.items():
             when = "3 days" if stage == 1 else "1 day"
-            await bot.send_message(
-                chat_id=row["user_id"],
-                text=f"⏳ Your {row['product']} plan ends in {when} "
-                     f"({_fmt_date(row['expires_ts'])}).\nRenew now and access "
-                     "continues without a gap:",
-                reply_markup=_renew_keyboard(row["product"]))
-        except Exception as e:
-            logger.debug("reminder DM failed for %s: %s", row["user_id"], e)
-        # marked even if the DM failed (user blocked the bot) — never spam-retry
-        subs.mark_reminded(row["user_id"], row["product"], stage)
-        stats["reminded"] += 1
-
-    for row in subs.due_kicks(now):
-        if row["product"] == "signals" and channel_id is not None:
+            expiry = max(r["expires_ts"] for r in rows)
             try:
-                # Telegram's "remove" idiom: ban + immediate unban, so the
-                # member is out but can rejoin the moment they renew.
-                await bot.ban_chat_member(chat_id=channel_id, user_id=row["user_id"])
-                await bot.unban_chat_member(chat_id=channel_id, user_id=row["user_id"])
+                await bot.send_message(
+                    chat_id=uid,
+                    text=f"⏳ Your subscription ends in {when} ({_fmt_date(expiry)}).\n"
+                         "Renew now and access continues without a gap:",
+                    reply_markup=_renew_keyboard(rows[0]["product"]))
             except Exception as e:
-                logger.warning("kick failed for %s: %s", row["user_id"], e)
-        subs.mark_kicked(row["user_id"], row["product"])
+                logger.debug("reminder DM failed for %s: %s", uid, e)
+            for r in rows:
+                subs.mark_reminded(uid, r["product"], stage)
+            stats["reminded"] += 1
+
+    # Natural expiry: ONE ban + ONE DM per user; mark every product row kicked.
+    for uid, rows in _by_user(subs.due_kicks(now)).items():
+        if channel_id is not None and any(r["product"] == "signals" for r in rows):
+            try:
+                await bot.ban_chat_member(chat_id=channel_id, user_id=uid)
+                await bot.unban_chat_member(chat_id=channel_id, user_id=uid)
+            except Exception as e:
+                logger.warning("kick failed for %s: %s", uid, e)
+        for r in rows:
+            subs.mark_kicked(uid, r["product"])
         stats["kicked"] += 1
         try:
             await bot.send_message(
-                chat_id=row["user_id"],
-                text=f"Your {row['product']} plan has ended — your seat is held. "
-                     "Rejoin in one tap:", reply_markup=_renew_keyboard(row["product"]))
+                chat_id=uid, text="Your subscription has ended — your seat is held. "
+                                  "Rejoin in one tap:",
+                reply_markup=_renew_keyboard(rows[0]["product"]))
         except Exception:
             pass
 
-    for row in subs.due_winbacks(now):
-        subs.mark_winback_sent(row["user_id"], row["product"])
+    # Admin /revoke removal retry: revoked signals rows whose live ban failed
+    # (#13). No DM, no winback — status stays 'revoked'.
+    for row in subs.due_channel_removals():
+        uid = row["user_id"]
+        removed = True
+        if channel_id is not None:
+            try:
+                await bot.ban_chat_member(chat_id=channel_id, user_id=uid)
+                await bot.unban_chat_member(chat_id=channel_id, user_id=uid)
+            except Exception as e:
+                removed = False
+                logger.warning("revoke removal retry failed for %s: %s", uid, e)
+        if removed:
+            subs.mark_channel_removed(uid, row["product"])
+            stats["removed"] += 1
+
+    # Winback: ONE DM per user; mark every product row.
+    for uid, rows in _by_user(subs.due_winbacks(now)).items():
+        for r in rows:
+            subs.mark_winback_sent(uid, r["product"])
         stats["winback"] += 1
         try:
             await bot.send_message(
-                chat_id=row["user_id"],
-                text="We held your seat 👀 Come back this week and I'll add "
-                     "+3 bonus days to any plan.", reply_markup=_renew_keyboard(row["product"]))
+                chat_id=uid, text="We held your seat 👀 Come back this week and I'll "
+                                  "add +3 bonus days to any plan.",
+                reply_markup=_renew_keyboard(rows[0]["product"]))
         except Exception:
             pass
 
+    g = subs.gc(now)
+    if any(g.values()):
+        logger.info("membership gc: %s", g)
     return stats
 
 

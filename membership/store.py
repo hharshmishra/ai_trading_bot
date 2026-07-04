@@ -23,6 +23,20 @@ from membership.plans import SKUS
 IST = timezone(timedelta(hours=5, minutes=30))
 DAY_S = 86400.0
 
+
+class FingerprintExhausted(Exception):
+    """No free amount suffix for this SKU right now (>99 same-priced USDT
+    orders live within the dedup window). The buyer is asked to retry."""
+
+
+# The access boundary in ONE place: a subscription grants access iff it is
+# 'active' and inside expiry + grace. is_active() and due_kicks() are exact
+# complements of this predicate, so they can never disagree — including on a
+# NULL expires_ts, which both treat as 0 (no access → kicked, no limbo row).
+# Bind params in order: (grace_seconds, now_epoch).
+_HAS_ACCESS = "status = 'active' AND COALESCE(expires_ts, 0) + ? > ?"
+_PAST_ACCESS = "status = 'active' AND COALESCE(expires_ts, 0) + ? <= ?"
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     user_id            INTEGER PRIMARY KEY,
@@ -61,7 +75,19 @@ CREATE TABLE IF NOT EXISTS usage (
     queries  INTEGER DEFAULT 0,
     PRIMARY KEY (user_id, day)
 );
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status, paid_ts);
 """
+
+# Additive migration (same discipline as persistence.Store): diff PRAGMA
+# table_info and ADD COLUMN what's missing, so an existing subscriptions.db
+# upgrades in place instead of needing a manual ALTER or a wipe.
+_MIGRATION_COLS = {
+    "subscriptions": [
+        # 1 once the member has actually been removed from the channel; lets
+        # /revoke's removal be retried by the hourly sweep if the live ban fails.
+        ("channel_removed", "INTEGER DEFAULT 0"),
+    ],
+}
 
 
 def _ist_day(now_ts: float) -> str:
@@ -80,7 +106,17 @@ class SubsStore:
             self.conn.execute("PRAGMA journal_mode=WAL;")
             self.conn.execute("PRAGMA synchronous=NORMAL;")
             self.conn.executescript(_SCHEMA)
+            self._migrate()
             self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Idempotent additive migration; caller holds the lock (init path)."""
+        for table, cols in _MIGRATION_COLS.items():
+            existing = {r["name"] for r in
+                        self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            for name, ctype in cols:
+                if name not in existing:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ctype}")
 
     def close(self) -> None:
         with self._lock:
@@ -133,9 +169,17 @@ class SubsStore:
     # ------------------------------------------------------------------ #
     def create_pending_payment(self, user_id: int, sku_code: str, currency: str,
                                method: str, now_ts: Optional[float] = None) -> Dict[str, Any]:
-        """Register a pending payment. For USDT the amount gets a unique
-        3-decimal fingerprint suffix (.101–.999) so an incoming transfer maps
-        back to exactly one order."""
+        """Register a pending payment. For USDT the TOTAL amount gets a tiny
+        unique suffix (+0.001..+0.099) so an on-chain transfer maps to exactly
+        one order.
+
+        Uniqueness is keyed on the full amount in milli-USDT — the SAME
+        quantity match_transfers compares — not on a reconstructed fractional
+        part (which collided for half-integer base prices like 2.5/3.5/4.5).
+        The dedup set spans every open pending AND any USDT payment created in
+        the last 24h (paid or expired): a just-expired order's amount must not
+        be reused while a late transfer for it could still arrive. Suffix
+        1..99 keeps the overcharge under +0.1 USDT (was up to +0.999)."""
         sku = SKUS[sku_code]
         now = now_ts if now_ts is not None else time.time()
         pid = uuid.uuid4().hex
@@ -143,11 +187,16 @@ class SubsStore:
         fingerprint = None
         with self._lock:
             if currency == "USDT":
-                taken = {round(r["fingerprint"] % 1 * 1000) for r in self.conn.execute(
-                    "SELECT fingerprint FROM payments "
-                    "WHERE status = 'pending' AND fingerprint IS NOT NULL").fetchall()}
-                suffix = next(s for s in range(101, 1000) if s not in taken)
-                fingerprint = round(float(sku.usdt) + suffix / 1000.0, 3)
+                base_millis = round(float(sku.usdt) * 1000)
+                taken = {round(r["amount"] * 1000) for r in self.conn.execute(
+                    "SELECT amount FROM payments WHERE currency = 'USDT' AND "
+                    "(status = 'pending' OR created_ts > ?)", (now - DAY_S,)).fetchall()}
+                chosen = next((base_millis + s for s in range(1, 100)
+                               if (base_millis + s) not in taken), None)
+                if chosen is None:
+                    self.conn.commit()
+                    raise FingerprintExhausted(sku_code)
+                fingerprint = round(chosen / 1000.0, 3)
                 amount = fingerprint
             self.conn.execute(
                 "INSERT INTO payments (id, user_id, sku, amount, currency, method, "
@@ -170,6 +219,18 @@ class SubsStore:
         with self._lock:
             return [dict(r) for r in self.conn.execute(q + " ORDER BY created_ts", args)]
 
+    def rescuable_tron_payments(self, user_id: int,
+                                now_ts: Optional[float] = None) -> List[Dict[str, Any]]:
+        """This user's USDT orders still settleable by /paid: pending, OR
+        expired within the last 24h (TTL lapsed before the transfer confirmed).
+        """
+        now = now_ts if now_ts is not None else time.time()
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                "SELECT * FROM payments WHERE user_id = ? AND method = 'tron' "
+                "AND (status = 'pending' OR (status = 'expired' AND created_ts > ?)) "
+                "ORDER BY created_ts", (user_id, now - DAY_S)).fetchall()]
+
     def expire_payment(self, payment_id: str) -> None:
         with self._lock:
             self.conn.execute(
@@ -178,24 +239,30 @@ class SubsStore:
             self.conn.commit()
 
     def mark_paid(self, payment_id: str, ref: Optional[str] = None,
-                  now_ts: Optional[float] = None) -> List[Dict[str, Any]]:
+                  now_ts: Optional[float] = None,
+                  allow_expired: bool = False) -> List[Dict[str, Any]]:
         """Activate a pending payment: CAS to 'paid', extend every product the
         SKU carries (renewal extends from max(now, current expiry) — no gap,
         no lost days), credit the referral bonus once on the user's FIRST paid
         payment. Returns the resulting subscription rows ([] if the payment
-        was already consumed — double-poll safe)."""
+        was already consumed — double-poll safe).
+
+        allow_expired lets the /paid rescue settle a USDT order whose TTL just
+        lapsed before its on-chain transfer confirmed (the CAS then also
+        matches status='expired')."""
         now = now_ts if now_ts is not None else time.time()
+        statuses = "('pending', 'expired')" if allow_expired else "('pending')"
         with self._lock:
             cur = self.conn.execute(
                 "UPDATE payments SET status = 'paid', ref = COALESCE(?, ref), paid_ts = ? "
-                "WHERE id = ? AND status = 'pending'", (ref, now, payment_id))
+                f"WHERE id = ? AND status IN {statuses}", (ref, now, payment_id))
             if cur.rowcount != 1:
                 self.conn.commit()
                 return []
             p = dict(self.conn.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone())
             sku = SKUS[p["sku"]]
-            rows = [self._extend_locked(p["user_id"], product, sku.days * DAY_S, now)
-                    for product in sku.products]
+            for product in sku.products:
+                self._extend_locked(p["user_id"], product, sku.days * DAY_S, now)
 
             # first-paid referral: +REFERRAL_BONUS_DAYS to both sides, once
             u = self.conn.execute("SELECT * FROM users WHERE user_id = ?",
@@ -204,14 +271,24 @@ class SubsStore:
                 bonus = config.REFERRAL_BONUS_DAYS * DAY_S
                 for product in sku.products:
                     self._extend_locked(p["user_id"], product, bonus, now)
-                # referrer gets the bonus on every product THEY currently hold
+                # referrer gets the bonus only on products they STILL hold access
+                # to (inside expiry+grace) — never resurrect a past-grace sub or
+                # reset its reminder/winback flags.
+                grace = config.MEMBERSHIP_GRACE_HOURS * 3600.0
                 for r in self.conn.execute(
-                        "SELECT product FROM subscriptions WHERE user_id = ? AND status = 'active'",
+                        "SELECT product, expires_ts FROM subscriptions "
+                        "WHERE user_id = ? AND status = 'active'",
                         (u["referred_by"],)).fetchall():
-                    self._extend_locked(u["referred_by"], r["product"], bonus, now)
+                    if (r["expires_ts"] or 0) + grace > now:
+                        self._extend_locked(u["referred_by"], r["product"], bonus, now)
                 self.conn.execute("UPDATE users SET referral_credited = 1 WHERE user_id = ?",
                                   (p["user_id"],))
             self.conn.commit()
+            # re-read AFTER the bonus so callers (welcome DM) see the true expiry
+            rows = [dict(r) for r in self.conn.execute(
+                "SELECT * FROM subscriptions WHERE user_id = ? AND product IN (%s)"
+                % ",".join("?" * len(sku.products)),
+                (p["user_id"], *sku.products)).fetchall()]
             return rows
 
     def _extend_locked(self, user_id: int, product: str, seconds: float,
@@ -246,9 +323,9 @@ class SubsStore:
         grace = config.MEMBERSHIP_GRACE_HOURS * 3600.0
         with self._lock:
             r = self.conn.execute(
-                "SELECT * FROM subscriptions WHERE user_id = ? AND product = ?",
-                (user_id, product)).fetchone()
-        return bool(r and r["status"] == "active" and (r["expires_ts"] or 0) + grace > now)
+                "SELECT 1 FROM subscriptions WHERE user_id = ? AND product = ? AND " + _HAS_ACCESS,
+                (user_id, product, grace, now)).fetchone()
+        return bool(r)
 
     def bump_usage(self, user_id: int, now_ts: Optional[float] = None) -> int:
         """Increment and return today's (IST) pro query count."""
@@ -297,15 +374,47 @@ class SubsStore:
         grace = config.MEMBERSHIP_GRACE_HOURS * 3600.0
         with self._lock:
             return [dict(r) for r in self.conn.execute(
-                "SELECT * FROM subscriptions WHERE status = 'active' AND expires_ts + ? <= ?",
+                "SELECT * FROM subscriptions WHERE " + _PAST_ACCESS,
                 (grace, now)).fetchall()]
 
     def mark_kicked(self, user_id: int, product: str) -> None:
         with self._lock:
             self.conn.execute(
-                "UPDATE subscriptions SET status = 'kicked' WHERE user_id = ? AND product = ?",
-                (user_id, product))
+                "UPDATE subscriptions SET status = 'kicked', channel_removed = 1 "
+                "WHERE user_id = ? AND product = ?", (user_id, product))
             self.conn.commit()
+
+    def due_channel_removals(self) -> List[Dict[str, Any]]:
+        """Admin-revoked signals subscriptions not yet confirmed removed from the
+        channel. /revoke tries an immediate ban; if it fails (transient Telegram
+        error) the row is left channel_removed=0 and the hourly sweep retries
+        here. Revoked rows never enter the winback flow (status stays 'revoked').
+        """
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                "SELECT * FROM subscriptions WHERE product = 'signals' "
+                "AND status = 'revoked' AND channel_removed = 0").fetchall()]
+
+    def mark_channel_removed(self, user_id: int, product: str) -> None:
+        with self._lock:
+            self.conn.execute(
+                "UPDATE subscriptions SET channel_removed = 1 "
+                "WHERE user_id = ? AND product = ?", (user_id, product))
+            self.conn.commit()
+
+    def gc(self, now_ts: Optional[float] = None) -> Dict[str, int]:
+        """Prune unbounded history: usage rows older than 45 days and terminal
+        (expired) payments older than 90 days. Paid/admin payments are kept
+        (revenue ledger). Returns row counts deleted."""
+        now = now_ts if now_ts is not None else time.time()
+        cutoff_day = _ist_day(now - 45 * DAY_S)
+        with self._lock:
+            u = self.conn.execute("DELETE FROM usage WHERE day < ?", (cutoff_day,)).rowcount
+            p = self.conn.execute(
+                "DELETE FROM payments WHERE status = 'expired' AND created_ts < ?",
+                (now - 90 * DAY_S,)).rowcount
+            self.conn.commit()
+        return {"usage": u, "payments": p}
 
     def due_winbacks(self, now_ts: Optional[float] = None) -> List[Dict[str, Any]]:
         """Kicked members 7+ days past expiry who never got the (single)
@@ -341,10 +450,15 @@ class SubsStore:
         return row
 
     def revoke(self, user_id: int, product: str) -> bool:
+        """Immediate no-access (status='revoked', expiry zeroed) + arm the
+        channel-removal retry (channel_removed=0). cmd_revoke attempts a live
+        ban; if it fails the hourly sweep finishes the job via
+        due_channel_removals()."""
         with self._lock:
             cur = self.conn.execute(
-                "UPDATE subscriptions SET status = 'revoked', expires_ts = 0 "
-                "WHERE user_id = ? AND product = ?", (user_id, product))
+                "UPDATE subscriptions SET status = 'revoked', expires_ts = 0, "
+                "channel_removed = 0 WHERE user_id = ? AND product = ?",
+                (user_id, product))
             self.conn.commit()
             return cur.rowcount == 1
 

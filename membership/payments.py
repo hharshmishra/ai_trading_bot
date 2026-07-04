@@ -61,7 +61,7 @@ class RazorpayLinks:
                   "description": description,
                   "expire_by": int(now + LINK_TTL_S),
                   "notes": {"user_id": str(user_id), "sku": sku}},
-            timeout=15)
+            timeout=8)
         r.raise_for_status()
         d = r.json()
         return d["id"], d["short_url"]
@@ -69,7 +69,7 @@ class RazorpayLinks:
     def link_status(self, link_id: str) -> str:
         """'created' | 'paid' | 'expired' | 'cancelled' (razorpay statuses)."""
         r = self.http.get(f"{RZP_BASE}/payment_links/{link_id}",
-                          auth=self._auth(), timeout=15)
+                          auth=self._auth(), timeout=8)
         r.raise_for_status()
         return r.json().get("status", "created")
 
@@ -103,22 +103,28 @@ class TronWatcher:
         try:
             r = self.http.get(
                 f"{TRONGRID_BASE}/v1/accounts/{wallet}/transactions/trc20",
-                params={"only_confirmed": "true", "only_to": "true", "limit": 50,
+                params={"only_confirmed": "true", "only_to": "true", "limit": 200,
                         "min_timestamp": int(since_ts * 1000),
                         "contract_address": USDT_TRC20},
-                headers=headers, timeout=15)
+                headers=headers, timeout=8)
             r.raise_for_status()
-            out = []
-            for tx in r.json().get("data", []):
+        except Exception as e:
+            logger.warning("trongrid fetch failed: %s", e)
+            return []
+        out = []
+        for tx in r.json().get("data", []):
+            # per-row guard: one malformed entry (an Approval event, a token
+            # transfer with no numeric 'value') must not discard the whole
+            # batch of otherwise-valid confirmed transfers.
+            try:
                 if tx.get("to") != wallet:
                     continue
                 out.append({"amount": int(tx["value"]) / 1e6,
                             "tx_id": tx.get("transaction_id"),
                             "ts": tx.get("block_timestamp", 0) / 1000.0})
-            return out
-        except Exception as e:
-            logger.warning("trongrid fetch failed: %s", e)
-            return []
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
 
 
 def match_transfers(pendings: List[Dict[str, Any]],
