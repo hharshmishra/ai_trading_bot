@@ -276,7 +276,7 @@
     <a href="#runbook"><span class="dot"></span><span class="n">14</span>Runbook / gotchas</a>
     <a href="#pending"><span class="dot"></span><span class="n">15</span>What's pending</a>
   </nav>
-  <div class="pulse"><i></i><span>main @ v3.3 · 268 tests</span></div>
+  <div class="pulse"><i></i><span>main @ v3.3 · 270 tests</span></div>
 </aside>
 
 <div class="wrap">
@@ -291,7 +291,7 @@
       <p class="sub">One long-lived Python process analyses 48 Binance pairs every hour with four reinforcement-learning voters, gates what is worth sending by market regime, grades every prediction against the realized price path, and re-trains itself nightly on its own track record. This page is the whole machine — every module, every flow, every env var, and the honest numbers behind every enabled flag.</p>
       <div class="chips">
         <div class="chip"><b class="grad">main @ f0d9822</b><span>this snapshot</span></div>
-        <div class="chip"><b>268</b><span>tests green</span></div>
+        <div class="chip"><b>270</b><span>tests green</span></div>
         <div class="chip"><b>48</b><span>USDT pairs</span></div>
         <div class="chip"><b>$0<span style="font-size:14px;color:var(--faint)">/mo</span></b><span>data cost</span></div>
         <div class="chip"><b style="color:var(--magenta)">advisory</b><span>only — no orders</span></div>
@@ -426,7 +426,7 @@
           <tr><td class="file">scripts/experiments/lorentzian_knn.py</td><td>Experiment only (D5): Lorentzian-distance kNN, walk-forward 70/30. Adopt only if holdout precision &gt; 40% with n ≥ 100 — else documented and dropped.</td><td class="fns">run_pair() · lorentzian_dist()</td></tr>
           <tr><td class="file">deploy/</td><td>bitreinforcex.service (systemd), backup.sh (WAL-safe sqlite3 .backup, keeps 14), litestream.yml (continuous replication).</td><td class="fns">systemctl enable --now bitreinforcex · journalctl -u bitreinforcex -f</td></tr>
           <tr><td class="file">vendor/pandas-ta</td><td>Vendored pandas_ta 0.3.14b0 — upstream deleted from PyPI/GitHub; the reason for the numpy&lt;2 pin.</td><td class="fns">installed by requirements.txt (./vendor/pandas-ta)</td></tr>
-          <tr><td class="file">tests/ · 23 files</td><td>268 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 268 passed</td></tr>
+          <tr><td class="file">tests/ · 23 files</td><td>270 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 270 passed</td></tr>
         </tbody>
       </table>
     </div>
@@ -771,7 +771,7 @@ cp .env.example .env
 python <span class="p">scripts/preflight.py</span>
 
 <span class="c"># tests need no network and no keys</span>
-pytest -q                        <span class="c"># → 268 passed</span>
+pytest -q                        <span class="c"># → 270 passed</span>
 
 <span class="c"># run everything — scheduler + grader + nightly in ONE process</span>
 python <span class="p">telegram_app.py</span></div>

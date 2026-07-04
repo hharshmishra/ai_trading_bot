@@ -17,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import config
 from membership import bot as mbot
-from membership.jobs import lifecycle_sweep_once, poll_payments_once
-from membership.payments import RazorpayLinks, TronWatcher
+from membership.jobs import TRON_GRACE_S, lifecycle_sweep_once, poll_payments_once
+from membership.payments import RazorpayLinks, TronWatcher, TRON_TTL_S
 from membership.store import DAY_S, SubsStore
 from membership_fakes import FakeBot, FakeJoinRequest, FakeRzpHttp, FakeTronHttp, mk_ctx
 
@@ -65,12 +65,19 @@ class TestPaymentPoller:
         asyncio.run(poll_payments_once(bd, bot, now_ts=T0 + 60))
         assert subs.pending_payments() == []
         assert not subs.is_active(101, "signals", now_ts=T0 + 60)
+        # the buyer is told, and pointed back at the storefront
+        dms = [m for m in bot.sent if m["chat_id"] == 101]
+        assert len(dms) == 1
+        assert "expired" in dms[0]["text"] and "/plans" in dms[0]["text"]
 
     def test_stale_pending_expires_by_age(self, env):
         subs, bot, bd, rzp_http, _ = env
         _rzp_pending(subs, bd["rzp"])
         asyncio.run(poll_payments_once(bd, bot, now_ts=T0 + 3600))    # > TTL+120
         assert subs.pending_payments() == []
+        dms = [m for m in bot.sent if m["chat_id"] == 101]
+        assert len(dms) == 1
+        assert "expired" in dms[0]["text"] and "/plans" in dms[0]["text"]
 
     def test_tron_transfer_activates(self, env):
         subs, bot, bd, _, tron_http = env
@@ -82,6 +89,26 @@ class TestPaymentPoller:
                                 "block_timestamp": int((T0 + 120) * 1000)}]
         assert asyncio.run(poll_payments_once(bd, bot, now_ts=T0 + 180)) == 1
         assert subs.is_active(102, "signals", now_ts=T0 + 180)
+        assert not any("expired" in m["text"] for m in bot.sent)      # welcome only
+
+    def test_tron_expiry_dm_mentions_paid_rescue(self, env):
+        subs, bot, bd, *_ = env
+        subs.touch_user(103, now_ts=T0)
+        p = subs.create_pending_payment(103, "SIG-30", "USDT", "tron", now_ts=T0)
+        asyncio.run(poll_payments_once(bd, bot, now_ts=T0 + TRON_TTL_S + TRON_GRACE_S + 60))
+        assert subs.pending_payments() == []
+        dms = [m for m in bot.sent if m["chat_id"] == 103]
+        # the late-payer rescue hatch is advertised, with the exact amount
+        assert len(dms) == 1 and "/paid" in dms[0]["text"]
+        assert str(p["amount"]) in dms[0]["text"]
+
+    def test_expiry_dm_failure_still_expires(self, env):
+        subs, bot, bd, *_ = env
+        subs.touch_user(104, now_ts=T0)
+        subs.create_pending_payment(104, "SIG-30", "USDT", "tron", now_ts=T0)
+        bot.raise_for_uids.add(104)                                   # buyer blocked the bot
+        asyncio.run(poll_payments_once(bd, bot, now_ts=T0 + TRON_TTL_S + TRON_GRACE_S + 60))
+        assert subs.pending_payments() == []                          # expiry unaffected
 
 
 class TestLifecycleSweep:

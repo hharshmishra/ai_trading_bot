@@ -33,6 +33,22 @@ def _renew_keyboard(product: str):
     ]])
 
 
+async def _notify_order_expired(bot, p: Dict[str, Any]) -> None:
+    """Best-effort DM when an unpaid order dies. The buyer pressed Start to
+    place the order, so the DM normally lands; failure must never stall the
+    poll. TRON late payments stay rescuable for 24h, hence the /paid hint."""
+    if p["method"] == "tron":
+        text = (f"⌛ Your USDT order ({p['amount']} USDT) expired.\n"
+                "Tap /plans for a fresh order — or if you already sent the "
+                "USDT, type /paid and I'll find it on-chain.")
+    else:
+        text = "⌛ Your payment link expired. Tap /plans for a fresh one."
+    try:
+        await bot.send_message(chat_id=p["user_id"], text=text)
+    except Exception as e:
+        logger.debug("expiry DM failed for %s: %s", p["user_id"], e)
+
+
 async def poll_payments_once(bd: Dict[str, Any], bot,
                              now_ts: Optional[float] = None) -> int:
     """One pass over pending payments. Returns number of activations."""
@@ -57,11 +73,13 @@ async def poll_payments_once(bd: Dict[str, Any], bot,
                     continue
                 if status in ("cancelled", "expired"):
                     subs.expire_payment(p["id"])
+                    await _notify_order_expired(bot, p)
                     continue
             # expire regardless of .configured, so an unconfigured/removed rail
             # never strands pending rows (#20)
             if p["created_ts"] + LINK_TTL_S + 120 < now:
                 subs.expire_payment(p["id"])
+                await _notify_order_expired(bot, p)
         except Exception as e:
             logger.warning("razorpay poll failed for %s: %s", p["id"], e)
 
@@ -83,6 +101,7 @@ async def poll_payments_once(bd: Dict[str, Any], bot,
     for p in subs.pending_payments(method="tron"):     # re-query: activated ones gone
         if p["created_ts"] + TRON_TTL_S + TRON_GRACE_S < now:
             subs.expire_payment(p["id"])
+            await _notify_order_expired(bot, p)
     return activated
 
 
