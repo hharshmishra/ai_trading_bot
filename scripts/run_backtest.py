@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backtest.data import load_or_fetch  # noqa: E402
 from backtest.metrics import compare, summarize  # noqa: E402
 from backtest.report import write_report  # noqa: E402
-from cycle import SYMBOLS  # noqa: E402
+from universe import SYMBOLS  # noqa: E402  — single source of truth (48 pairs + env add/remove)
 from grader import HORIZON_K, THRESHOLD  # noqa: E402
 
 
