@@ -53,7 +53,9 @@
    the policy by -2.5 instead of 0). Fix: `active_reward_fn()` is the only
    place that picks the map; every caller goes through it. Rule: when adding
    a v2 variant behind a flag, grep every call site of the v1 function and
-   route them through one selector.
+   route them through one selector. ADDENDUM (v3.2): the brain layer was a
+   missed call site — _apply_feedback_to_brain had its own inlined ±1/−4.
+   The grep must cover REIMPLEMENTATIONS of the map, not just calls to it.
 
 10. **"Offline" tests must be MADE offline, not assumed offline.** The suite
     loaded the real .env (load_dotenv at agent import), so MACRO flags were

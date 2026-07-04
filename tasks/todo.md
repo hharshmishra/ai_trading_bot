@@ -146,3 +146,16 @@ Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
 - [x] FIXED pre-existing flake: phase1 equivalence test depended on LIVE
       CoinGecko dominance + real-DB store singleton (lesson 10); conftest now
       hermetic — 246 tests deterministic, logs/ clean across double runs
+
+## 2026-07-04 — v3.2 universe + one-tap training + learning criteria
+- [x] Live audit: all 48 pairs TRADING & fresh (MATIC->POL already applied; TON
+      still halted). Zero removals.
+- [x] universe.py single source of truth; UNIVERSE_ADD/REMOVE env; KNOWN_TICKERS
+      derived; verify_phase1 stale list killed. Add a coin = one line.
+- [x] One-tap dev keyboard: BUY/SELL/FLAT verdict trains all 4 agents + brain in
+      one press (FLAT finally teachable); DISCARD replaces CLOSE; legacy
+      OUTCOME/REWARD callbacks still handled; news 1.0/-4.0 override row removed
+- [x] Criteria fixes: brain used hardcoded v1 map (lesson-9 class) + news
+      double-count -> active map, single count; indicator steps scale with
+      |reward| (mean-|r| normalized: 0.015|r| type, +0.025|r|/-0.035|r| direct)
+- [x] Deprecation notes on legacy console feedback paths. 260 tests green x2.

@@ -81,8 +81,11 @@ Tests (no network / keys needed): `pytest -q` → **246 passing**.
 2. **The grader walks the realized path**: first barrier touched decides — TP-then-crash counts
    by what happened *first*. Rewards: correct **+1**, wrong direction **−4**, directional-but-flat
    **−1.5**, missed move **−1.0**.
-3. **Manual override wins**: dev-channel buttons re-grade any signal; a claim CAS prevents the
-   auto-grader and a human racing on the same row; corrections net the policy to the human verdict.
+3. **Manual override wins — one tap**: dev-channel verdict buttons (`BUY / SELL / FLAT`)
+   re-grade any signal in a single press — every agent AND the brain are trained against your
+   verdict with the active reward map (FLAT included: skip-callers rewarded, directional calls
+   get the timeout penalty). A claim CAS prevents the auto-grader and a human racing on the
+   same row; corrections net the policy to the human verdict.
 4. **Nightly self-training**: logistic meta-model p(correct | regime, agreement, positioning, …),
    per-TF isotonic confidence calibration (runtime = `np.interp` on JSON knots — zero sklearn on
    the hot path), and shrunk win-rate confidences replacing hardcoded ones. All shadow-first.
@@ -119,6 +122,12 @@ Every report prints its honest caveat: news/research aren't backtestable (no his
 the confidence path uses indicator-only confidence as proxy; NWE/trend paths are exact.
 
 ## ⚙️ Configuration
+
+**Adding a coin is one line** — `UNIVERSE_ADD=APTUSDT` in `.env` (or one ticker in
+[`universe.py`](universe.py)). News tagging derives automatically; RL policies are global
+(per-agent, not per-pair) so the new pair is scored, graded and learned from starting with its
+first cycle; `preflight.py` fails loudly on dead/typo'd symbols. Optional polish: an
+`ingestion.ALIASES` entry and ecosystem membership.
 
 All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented) and parse in
 [`config.py`](config.py). Rollout philosophy: **ship dark → measure → enable on evidence**.

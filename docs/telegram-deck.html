@@ -245,9 +245,8 @@ footer{border-top:1px solid var(--line);padding:40px 5vw 60px;text-align:center;
     • meta p(correct): 0.564<br>
     • NWE direct: BUY
     <div class="kb">
-      <div class="row"><button>BUY</button><button>SELL</button><button>SKIP LEARNING</button></div>
-      <div class="row"><button>1.0</button><button>-4.0</button><button>Auto-Assign</button></div>
-      <div class="row"><button>CLOSE SESSION</button></div>
+      <div class="row"><button>✅ BUY</button><button>❌ SELL</button><button>➖ FLAT</button></div>
+      <div class="row"><button>🚫 DISCARD (no learning)</button></div>
     </div>
   </div>
 
@@ -321,19 +320,24 @@ footer{border-top:1px solid var(--line);padding:40px 5vw 60px;text-align:center;
 <!-- ============================== KEYBOARD ============================== -->
 <section id="keyboard">
   <span class="k">05 · The dev keyboard</span>
-  <h2>Three rows that train the system</h2>
+  <h2>One tap trains everything</h2>
   <div class="flow">
-    <div class="step"><div class="n">1</div><div><b>Row 1 — BUY / SELL / SKIP LEARNING (ground truth)</b>
-      <span class="sub">What ACTUALLY happened in the market — not what you traded. Required before row 2. SKIP LEARNING closes the session teaching nothing.</span></div></div>
-    <div class="step"><div class="n">2</div><div><b>Row 2 — 1.0 / −4.0 / Auto-Assign (apply)</b>
-      <span class="sub"><b>Auto-Assign</b> (default choice): every agent graded against your outcome with the active reward map (+1 correct / −4 wrong / −1.5 flat / −1 missed). <b>1.0 / −4.0</b> override the NEWS agent only; others still auto. Pressing on an already-auto-graded signal applies a correction netting the policy to YOUR verdict.</span></div></div>
-    <div class="step"><div class="n">3</div><div><b>Row 3 — CLOSE SESSION</b>
-      <span class="sub">Discard. Sessions also expire after 12h and are superseded by the next signal on the same pair+TF.</span></div></div>
+    <div class="step"><div class="n">1</div><div><b>Row 1 — ✅ BUY / ❌ SELL / ➖ FLAT (the verdict)</b>
+      <span class="sub">One press records what ACTUALLY happened and immediately grades <b>all four
+      agents AND the brain</b> against it with the active reward map (+1 correct / −4 wrong /
+      −1.5 directional-but-flat / −1 missed move). FLAT is a real, teachable verdict — skip-callers
+      get rewarded, directional calls get the timeout penalty. If the signal was already
+      auto-graded, your tap applies corrections that net every policy to YOUR verdict instead.</span></div></div>
+    <div class="step"><div class="n">2</div><div><b>Row 2 — 🚫 DISCARD (no learning)</b>
+      <span class="sub">Closes the session teaching nothing. Sessions also expire after 12h and are
+      superseded by the next signal on the same pair+TF.</span></div></div>
   </div>
-  <div class="callout">You never HAVE to press anything — the auto-grader labels every prediction via
-  triple-barrier within the horizon. Buttons exist to confirm or override. Answers you may see:
-  "Select BUY/SELL/SKIP first" (row order), "Prediction still recording — try again in a moment"
-  (clicked within seconds of the signal), "(news override ignored — agent absent)".</div>
+  <div class="callout">You never HAVE to press anything — the auto-grader labels every prediction
+  via triple-barrier within the horizon; buttons confirm or override. The tap answers with the
+  per-agent numbers, e.g. <i>"Trained vs FLAT (manual) news +1 · rese +1 · indi −1.5 · deri −1.5"</i>.
+  Answers you may also see: "Prediction still recording — try again in a moment" (tapped within
+  seconds of the signal — session stays alive). Old messages in the channel still carry the legacy
+  two-step keyboard (OUTCOME → REWARD); those buttons keep working.</div>
 </section>
 
 <!-- ================================ FLOWS ================================ -->
