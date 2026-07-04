@@ -161,3 +161,22 @@ def test_paid_command_matches_on_chain(env):
     asyncio.run(mbot.cmd_paid(upd, mk_ctx(bd, bot)))
     assert subs.is_active(90, "signals")
     assert bot.invites                                     # welcome flow ran
+
+
+def test_revoke_kicks_from_channel_immediately(env, monkeypatch):
+    """The hourly kicker only sweeps ACTIVE rows — /revoke must remove channel
+    access itself, or the revoked member keeps reading signals."""
+    subs, bot, bd = env
+    monkeypatch.setattr(config, "ADMIN_USER_IDS", frozenset({999}))
+    subs.grant(85, 30, "signals", now_ts=T0)
+
+    admin = mk_cmd_update(uid=999)
+    asyncio.run(mbot.cmd_revoke(admin, mk_ctx(bd, bot, args=["85", "signals"])))
+    assert not subs.is_active(85, "signals")
+    assert (CHANNEL, 85) in bot.banned and (CHANNEL, 85) in bot.unbanned
+    assert "removed" in admin.message.replies[0]["text"]
+
+    # pro revoke touches no channel
+    subs.grant(86, 30, "pro", now_ts=T0)
+    asyncio.run(mbot.cmd_revoke(mk_cmd_update(uid=999), mk_ctx(bd, bot, args=["86", "pro"])))
+    assert (CHANNEL, 86) not in bot.banned

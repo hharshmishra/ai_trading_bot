@@ -265,7 +265,17 @@ async def cmd_revoke(update, context) -> None:
         return
     subs: SubsStore = context.application.bot_data["subs"]
     ok = subs.revoke(uid, product)
-    await update.message.reply_text("Revoked." if ok else "No such subscription.")
+    # the hourly kicker only sweeps status='active' rows (natural expiry), so
+    # a revoke must remove channel access RIGHT HERE or the member stays in
+    if ok and product == "signals":
+        channel_id = context.application.bot_data.get("channel_id")
+        if channel_id is not None:
+            try:
+                await context.bot.ban_chat_member(chat_id=channel_id, user_id=uid)
+                await context.bot.unban_chat_member(chat_id=channel_id, user_id=uid)
+            except Exception as e:
+                logger.error("revoke kick failed for %s: %s", uid, e)
+    await update.message.reply_text("Revoked + removed." if ok else "No such subscription.")
 
 
 async def cmd_subs(update, context) -> None:
