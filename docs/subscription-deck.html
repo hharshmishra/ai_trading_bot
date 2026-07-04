@@ -328,7 +328,7 @@ footer{border-top:1px solid var(--line);padding:40px 5vw 60px;text-align:center;
         ▼                                            ▼
    <span class="t">SIGNALS access</span>                          <span class="v">PRO access</span>
    one-time invite link                    control bot checks store
-   (member_limit=1, 48h expiry)            before EVERY command
+   (join-request link, 48h expiry)         before EVERY command
    + join-request approval                 (@requires_pro decorator)
         │
         ▼
@@ -342,10 +342,11 @@ footer{border-top:1px solid var(--line);padding:40px 5vw 60px;text-align:center;
       <code>creates_join_request=True</code>. The membership bot (admin) receives every
       <code>chat_join_request</code> and approves <b>only if</b> the store shows an active signals
       subscription for that user id. Shared/leaked links are worthless — the gate is the database, not the link.</span></div></div>
-    <div class="step"><div class="n">2</div><div><b>Paid → personal one-time link</b>
-      <span class="sub">On payment the bot also mints <code>createChatInviteLink(member_limit=1,
-      expire_date=+48h)</code> and DMs it — instant access without waiting for a join request, and
-      each link dies after one use.</span></div></div>
+    <div class="step"><div class="n">2</div><div><b>Paid → personal join-request link</b>
+      <span class="sub">On payment the bot mints <code>createChatInviteLink(creates_join_request=True,
+      expire_date=+48h)</code> and DMs it. Every join — even via a personal link — passes the database
+      gate, so a stale link in an old DM can never re-admit a revoked or lapsed member (a member_limit
+      link would admit the first taker unchecked).</span></div></div>
     <div class="step"><div class="n">3</div><div><b>Auto-kick = ban + immediate unban</b>
       <span class="sub">Expiry job runs hourly: for each lapsed member,
       <code>ban_chat_member(channel, uid)</code> removes them, then <code>unban_chat_member</code>

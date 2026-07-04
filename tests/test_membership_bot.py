@@ -101,7 +101,11 @@ def test_activate_and_welcome_mints_invite_and_dm(env):
     p = subs.create_pending_payment(60, "BUN-30", "INR", "razorpay", now_ts=T0)
     ok = asyncio.run(mbot.activate_and_welcome(bot, subs, p, CHANNEL, now_ts=T0))
     assert ok
-    assert bot.invites[0]["chat_id"] == CHANNEL and bot.invites[0]["member_limit"] == 1
+    assert bot.invites[0]["chat_id"] == CHANNEL
+    # join-request links ONLY: a member_limit link admits the first taker
+    # WITHOUT the database gate — a stale unused link would bypass revocation
+    assert bot.invites[0]["creates_join_request"] is True
+    assert "member_limit" not in bot.invites[0]
     dm = bot.sent[0]["text"]
     assert "inv1" in dm and "referral code" in dm and "Pro commands" in dm
     # idempotent: consumed payment activates nothing
@@ -180,3 +184,25 @@ def test_revoke_kicks_from_channel_immediately(env, monkeypatch):
     subs.grant(86, 30, "pro", now_ts=T0)
     asyncio.run(mbot.cmd_revoke(mk_cmd_update(uid=999), mk_ctx(bd, bot, args=["86", "pro"])))
     assert (CHANNEL, 86) not in bot.banned
+
+
+def test_stale_invite_link_cannot_bypass_revocation(env, monkeypatch):
+    """The user's scenario: grant -> invite DM'd -> revoke. The old link still
+    sits in their DM history — tapping it must NOT re-admit them. With
+    join-request links every join re-checks the database, so the answer is a
+    decline; and the grant-minted link must never be a member_limit link
+    (those admit the first taker without any check)."""
+    subs, bot, bd = env
+    monkeypatch.setattr(config, "ADMIN_USER_IDS", frozenset({999}))
+    ctx = mk_ctx(bd, bot, args=["88", "1", "signals"])
+    asyncio.run(mbot.cmd_grant(mk_cmd_update(uid=999), ctx))
+    assert bot.invites[0]["creates_join_request"] is True
+    assert "member_limit" not in bot.invites[0]
+
+    asyncio.run(mbot.cmd_revoke(mk_cmd_update(uid=999),
+                                mk_ctx(bd, bot, args=["88", "signals"])))
+    # they tap the old link -> Telegram raises a join request -> gate declines
+    req = FakeJoinRequest(88)
+    asyncio.run(mbot.handle_join_request(
+        SimpleNamespace(chat_join_request=req), mk_ctx(bd, bot)))
+    assert req.declined and not req.approved

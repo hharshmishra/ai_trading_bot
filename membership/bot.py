@@ -66,9 +66,17 @@ async def activate_and_welcome(bot, subs: SubsStore, payment: Dict[str, Any],
     if "signals" in sku.products and channel_id is not None:
         try:
             now = now_ts if now_ts is not None else time.time()
+            # creates_join_request (NOT member_limit): a member_limit link
+            # admits whoever taps it first WITHOUT the database check — an
+            # unused link would let a revoked/lapsed user (or anyone they
+            # forwarded it to) bypass the gate for 48h. Join-request links
+            # route EVERY join through handle_join_request, which approves
+            # strictly by subscription state, so a stale link is harmless.
             invite = await bot.create_chat_invite_link(
-                chat_id=channel_id, member_limit=1, expire_date=int(now + 48 * 3600))
-            lines.append(f"Your personal invite (valid 48h, one use):\n{invite.invite_link}")
+                chat_id=channel_id, creates_join_request=True,
+                expire_date=int(now + 48 * 3600))
+            lines.append("Your invite (valid 48h — tap it and you'll be "
+                         f"approved automatically):\n{invite.invite_link}")
         except Exception as e:
             logger.error("invite mint failed for %s: %s", uid, e)
             lines.append("Invite link pending — use /start if it doesn't arrive shortly.")
@@ -244,7 +252,7 @@ async def cmd_grant(update, context) -> None:
         if channel_id is not None:
             try:
                 invite = await context.bot.create_chat_invite_link(
-                    chat_id=channel_id, member_limit=1,
+                    chat_id=channel_id, creates_join_request=True,
                     expire_date=int(time.time() + 48 * 3600))
                 await context.bot.send_message(
                     chat_id=uid, text=f"🎟 You've been granted {days} days of signals "
