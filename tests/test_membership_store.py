@@ -42,8 +42,23 @@ class TestPayments:
         b = subs.create_pending_payment(102, "SIG-30", "USDT", "tron", now_ts=T0)
         base = SKUS["SIG-30"].usdt
         for p in (a, b):
-            assert base + 0.100 < p["fingerprint"] < base + 1.0
+            # fingerprint v2: suffix 0.001..0.099 (overcharge capped under +0.1)
+            assert base + 0.0005 < p["fingerprint"] <= base + 0.099
         assert a["fingerprint"] != b["fingerprint"]
+
+    def test_usdt_fingerprint_distinct_for_half_integer_sku(self, subs):
+        # regression for the collision: base 2.5 folded its .5 into the old
+        # fractional reconstruction, minting duplicate amounts
+        a = subs.create_pending_payment(101, "SIG-7", "USDT", "tron", now_ts=T0)
+        b = subs.create_pending_payment(102, "SIG-7", "USDT", "tron", now_ts=T0)
+        assert a["amount"] != b["amount"]
+        assert 2.5 < a["amount"] <= 2.599 and 2.5 < b["amount"] <= 2.599
+
+    def test_expired_amount_not_reused_within_24h(self, subs):
+        a = subs.create_pending_payment(101, "SIG-7", "USDT", "tron", now_ts=T0)
+        subs.expire_payment(a["id"])
+        b = subs.create_pending_payment(102, "SIG-7", "USDT", "tron", now_ts=T0 + 60)
+        assert b["amount"] != a["amount"]        # a late transfer for A can't hit B
 
     def test_mark_paid_is_consume_once(self, subs):
         p, rows = _pay(subs)
@@ -144,7 +159,9 @@ class TestReferrals:
         subs.note_referral(2, a["referral_code"])
         _, rows = _pay(subs, uid=2, now=T0)                           # bob's first payment
         bonus = config.REFERRAL_BONUS_DAYS * DAY_S
-        assert rows[0]["expires_ts"] == pytest.approx(T0 + 30 * DAY_S)  # pre-bonus row
+        # rows are re-read AFTER the bonus, so the welcome DM shows the true
+        # expiry (30 + 7 days), not the pre-bonus 30 (welcome-expiry fix)
+        assert rows[0]["expires_ts"] == pytest.approx(T0 + 37 * DAY_S)
         assert subs.is_active(2, "signals", now_ts=T0 + 36 * DAY_S)     # 30+7d holds
         # alice extended too
         assert subs.is_active(1, "signals", now_ts=T0 + 30 * DAY_S + bonus - 60)

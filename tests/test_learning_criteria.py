@@ -30,7 +30,7 @@ class TestBrainRewardMap:
         dm = self._dm()
         before = dict(dm.policy["scores"])
         results = {"indicator": {"action": "buy", "confidence": 1.0}}
-        dm.apply_brain_feedback(results, "skip", news_reward=1.0)
+        dm.apply_brain_feedback(results, "skip")
         delta = dm.policy["scores"]["indicator"] - before["indicator"]
         # v2 map: directional-vs-flat = REWARD_TIMEOUT_FLAT (-1.5), not -4
         assert delta == pytest.approx(0.05 * config.REWARD_TIMEOUT_FLAT * 1.0)
@@ -39,18 +39,17 @@ class TestBrainRewardMap:
         monkeypatch.setattr(config, "TB_GRADING_ENABLED", False)
         dm = self._dm()
         before = dict(dm.policy["scores"])
-        dm.apply_brain_feedback({"indicator": {"action": "buy", "confidence": 1.0}},
-                                "skip", news_reward=1.0)
+        dm.apply_brain_feedback({"indicator": {"action": "buy", "confidence": 1.0}}, "skip")
         delta = dm.policy["scores"]["indicator"] - before["indicator"]
         assert delta == pytest.approx(0.05 * config.REWARD_WRONG)     # v1: flat wrong
 
-    def test_news_scored_exactly_once(self, monkeypatch):
+    def test_news_scored_once_no_double_count(self, monkeypatch):
         monkeypatch.setattr(config, "TB_GRADING_ENABLED", True)
         dm = self._dm()
         before = dict(dm.policy["scores"])
-        dm.apply_brain_feedback({"news": {"action": "buy", "confidence": 0.8}},
-                                "buy", news_reward=-4.0)   # override must be IGNORED
+        dm.apply_brain_feedback({"news": {"action": "buy", "confidence": 0.8}}, "buy")
         delta = dm.policy["scores"]["news"] - before["news"]
+        # scored exactly once (the old code added the news reward a second time)
         assert delta == pytest.approx(0.05 * config.REWARD_CORRECT * 0.8)
 
 
@@ -89,7 +88,7 @@ class TestIndicatorMagnitude:
         ag = self._fresh_agent()
         ag.apply_reward(self._blend(fired="nwe"), -4.0)
         w_after_big = ag.policy["direct_signals"]["nwe"]["weight"]
-        assert w_after_big == pytest.approx(0.7 - 0.035 * 4.0)    # scaled step
+        assert w_after_big == pytest.approx(0.7 - 0.07)          # wrong == historical step
         for _ in range(20):
             ag.apply_reward(self._blend(fired="nwe"), -4.0)
         assert ag.policy["direct_signals"]["nwe"]["weight"] >= 0.1  # clip holds
@@ -161,10 +160,13 @@ def test_one_tap_flat_trains_all_agents_with_map(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TB_GRADING_ENABLED", True)
     from telegram_app import handle_callback
     store, dm, grader, ctx = _harness(tmp_path)
+    # mirror the production order exactly: session created first (broadcast),
+    # prediction recorded WITH session_id, then the reverse link — so the
+    # grader (the single writer of true_outcome) can set it on p["session_id"].
+    sid = store.create_session(pair="BTCUSDT", tf="4h", dev_chat_id=222, dev_msg_id=9)
     pid = store.record_prediction(_decision(), candle_close_ts=100.0, entry_price=100.0,
-                                  horizon_k=2, grade_due_ts=1.0)
-    sid = store.create_session(pair="BTCUSDT", tf="4h", prediction_id=pid,
-                               dev_chat_id=222, dev_msg_id=9)
+                                  horizon_k=2, grade_due_ts=1.0, session_id=sid)
+    store.link_session_prediction(sid, pid)
 
     cq = CQ(f"{sid}|VERDICT|skip")
     asyncio.run(handle_callback(SimpleNamespace(callback_query=cq), ctx))

@@ -54,10 +54,11 @@ def test_cmd_plans_renders_keyboard(env):
 
 def test_sku_callback_offers_rails(env):
     subs, bot, bd = env
-    cq = FakeCQ("sub|SIG-30")
+    cq = FakeCQ("sub|SIG-30", uid=54)
     asyncio.run(mbot.handle_membership_callback(
         SimpleNamespace(callback_query=cq), mk_ctx(bd, bot)))
-    r = cq.message.replies[0]
+    # reply is DM'd (stale-keyboard-safe), not q.message.reply_text
+    r = bot.sent[-1]
     labels = [b.text for row in r["reply_markup"].inline_keyboard for b in row]
     assert any("UPI" in x for x in labels) and any("USDT" in x for x in labels)
 
@@ -69,7 +70,7 @@ def test_pay_usdt_creates_fingerprinted_pending(env):
         SimpleNamespace(callback_query=cq), mk_ctx(bd, bot)))
     p = subs.pending_payments(method="tron")[0]
     assert p["user_id"] == 55 and p["fingerprint"] is not None
-    msg = cq.message.replies[0]["text"]
+    msg = bot.sent[-1]["text"]
     assert f"{p['amount']:.3f} USDT" in msg and "TWallet" in msg
 
 
@@ -80,7 +81,17 @@ def test_pay_inr_creates_link_and_ref(env):
         SimpleNamespace(callback_query=cq), mk_ctx(bd, bot)))
     p = subs.pending_payments(method="razorpay")[0]
     assert p["ref"].startswith("plink_")
-    assert "rzp.io" in cq.message.replies[0]["text"]
+    assert "rzp.io" in bot.sent[-1]["text"]
+
+
+def test_unmatched_callback_is_answered(env):
+    """Valid-but-unrecognised callback data must still q.answer() or the client
+    shows an endless spinner."""
+    subs, bot, bd = env
+    cq = FakeCQ("pay|SIG-30")                 # wrong arity — matches nothing
+    asyncio.run(mbot.handle_membership_callback(
+        SimpleNamespace(callback_query=cq), mk_ctx(bd, bot)))
+    assert cq.answers                          # acknowledged
 
 
 def test_pay_inr_unconfigured_offers_usdt(env, monkeypatch):

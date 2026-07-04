@@ -29,8 +29,8 @@ class FakeDM:
         self.indicator = FakeAgent()
         self.brain_calls = []
 
-    def apply_brain_feedback(self, agent_results, label, news_reward):
-        self.brain_calls.append((agent_results, label, news_reward))
+    def apply_brain_feedback(self, agent_results, label):
+        self.brain_calls.append((agent_results, label))
 
 
 def make_decision(news="buy", research="buy", indicator="buy", final="buy",

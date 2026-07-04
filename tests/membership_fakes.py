@@ -67,9 +67,19 @@ def mk_ctx(bd, bot, args=None):
                            args=args or [])
 
 
-def mk_cmd_update(uid=101, username="u"):
+def mk_cmd_update(uid=101, username="u", message=None):
+    """A command update. effective_message mirrors message (None => edited-
+    message case, where handlers must fall back to a DM)."""
+    msg = FakeMessage() if message is None else message
     return SimpleNamespace(effective_user=SimpleNamespace(id=uid, username=username),
-                           message=FakeMessage())
+                           message=msg, effective_message=msg)
+
+
+def mk_edited_update(uid=101, username="u"):
+    """An edited-message update: update.message is None (PTB behaviour), so
+    handlers relying on it must guard / fall back."""
+    return SimpleNamespace(effective_user=SimpleNamespace(id=uid, username=username),
+                           message=None, effective_message=None)
 
 
 class FakeResp:
