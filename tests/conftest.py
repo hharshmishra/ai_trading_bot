@@ -63,6 +63,8 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(na, "PREDICTIONS_LOG_PATH", str(tmp_path / "predictions_log.json"))
     monkeypatch.setattr(ra, "POLICY_PATH", str(tmp_path / "research_agent_policy.json"))
     monkeypatch.setattr(ia, "POLICY_PATH", str(tmp_path / "indicator_agent_policy.json"))
+    monkeypatch.setattr(ra, "PRED_LOG", str(tmp_path / "research_predictions.jsonl"))
+    monkeypatch.setattr(ia, "PRED_LOG", str(tmp_path / "indicator_predictions.jsonl"))
     monkeypatch.setattr(dmm, "POLICY_PATH", str(tmp_path / "brain_policy.json"))
 
     # membership store (Bot D) — separate DB, same isolation rule

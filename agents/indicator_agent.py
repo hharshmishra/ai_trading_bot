@@ -253,9 +253,16 @@ class IndicatorAgent:
         """
         pol = _load_policy()
         pol["score"] = pol.get("score", 0) + reward
+        # Magnitude-scaled steps (v3.2 criteria fix): the old sign-only nudge
+        # moved weights identically for a -4 direction-wrong and a -1 missed
+        # move — the v2 map's graded severities never reached this policy.
+        # Normalized so the historical average step is preserved (mean |r|
+        # under the v2 map ~= 2): 0.015*|r| == the old flat 0.03 at |r|=2.
+        mag = min(abs(float(reward)), 4.0)
         sign = 1 if reward > 0 else -1
-        pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + sign*0.03*blend.get("type1_share", 0.5), 0.05, 0.95))
-        pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + sign*0.03*blend.get("type2_share", 0.5), 0.05, 0.95))
+        step = 0.015 * mag
+        pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + sign*step*blend.get("type1_share", 0.5), 0.05, 0.95))
+        pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + sign*step*blend.get("type2_share", 0.5), 0.05, 0.95))
         s = pol["weights"]["type1"] + pol["weights"]["type2"]
         pol["weights"]["type1"] = round(pol["weights"]["type1"]/s, 4)
         pol["weights"]["type2"] = round(pol["weights"]["type2"]/s, 4)
@@ -263,7 +270,9 @@ class IndicatorAgent:
         if fired:
             d = pol["direct_signals"].get(fired, {"weight": 0.7, "score": 0})
             d["score"] += reward
-            d["weight"] = float(np.clip(d["weight"] + (0.05 if reward > 0 else -0.07), 0.1, 0.95))
+            # same normalization: +0.025|r| / -0.035|r| == old +0.05/-0.07 at |r|=2
+            d_step = (0.025 * mag) if reward > 0 else -(0.035 * mag)
+            d["weight"] = float(np.clip(d["weight"] + d_step, 0.1, 0.95))
             pol["direct_signals"][fired] = d
         _save_policy(pol)
         self.policy = pol

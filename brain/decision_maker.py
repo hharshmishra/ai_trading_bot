@@ -322,7 +322,18 @@ class DecisionMaker:
     
     def _apply_feedback_to_brain(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str, news_reward: float):
         """Update scores slowly so Indicator > Research > News stays stable unless
-        long-term evidence suggests otherwise."""
+        long-term evidence suggests otherwise.
+
+        v3.2 criteria fixes:
+        - The delta uses the ACTIVE reward map (grader.active_reward_fn) — the
+          old hardcoded ±1/−4 graded a flat market as a full wrong for every
+          directional agent (the lesson-9 defect class, one layer up).
+        - ``news_reward`` is IGNORED (kept for call-site compat): the old extra
+          add gave news ~2x the drift speed of every other agent per feedback
+          for no documented reason — each agent is scored exactly once.
+        """
+        from grader import active_reward_fn   # lazy: avoids import cycles
+        reward_fn = active_reward_fn()
         true = self._normalize_action(true_outcome)
 
         # learning rate controls how fast priorities can change
@@ -335,18 +346,12 @@ class DecisionMaker:
             pred = res.get("action", "skip")
             conf = float(res.get("confidence", 0.0) or 0.0)
 
-            delta = (1.0 if pred == true else -4.0) * conf
+            delta = reward_fn(pred, true) * conf
             # apply with slow drift
             self.policy["scores"][ag] = (
                 float(self.policy["scores"].get(ag, 0.0))
                 + LEARNING_RATE * delta
             )
-
-        # news agent also gets explicit reward (scaled)
-        try:
-            self.policy["scores"]["news"] += LEARNING_RATE * float(news_reward)
-        except Exception:
-            pass
 
         self._normalize_weights()
 
@@ -359,7 +364,10 @@ class DecisionMaker:
 
 
     def feedback(self, decision_out: Dict[str, Any]):
-        """Interactive prompt: ask user for true outcome and numeric news reward and forward to child agents."""
+        """DEPRECATED console-only flow (input() prompts; uses the legacy
+        instance-state NewsAgent.learn). Production feedback goes through
+        grader.apply_manual_feedback (Telegram VERDICT buttons / auto-grader),
+        which trains from stored per-prediction snapshots."""
         agents = decision_out["agents"]
         # show summary
         print("\n=== Decision summary ===")

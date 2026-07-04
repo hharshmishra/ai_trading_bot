@@ -487,10 +487,12 @@ class NewsAgent:
         return result
 
     def learn(self, taken_action_label: str | None, reward: float):
-        """
-        Call this AFTER you know if the news decision helped or hurt.
-        If you pass taken_action_label, it will map to action index; if None, uses last action.
-        Reward: your scheme (+1 for correct, -4 for wrong) as you defined.
+        """DEPRECATED (legacy console path only — DecisionMaker.feedback()).
+
+        Trains from INSTANCE state (_last_features), which is wrong under
+        concurrent per-pair analysis. Every production path (auto-grader,
+        Telegram verdicts) uses apply_reward() with the stored per-prediction
+        snapshot instead. Kept for the interactive CLI; do not wire anew.
         """
         if self._last_features is None:
             return
