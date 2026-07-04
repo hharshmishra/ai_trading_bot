@@ -55,7 +55,7 @@ async def poll_payments_once(bd: Dict[str, Any], bot,
                                                   ref=p["ref"], now_ts=now):
                         activated += 1
                     continue
-                if status == "cancelled":
+                if status in ("cancelled", "expired"):
                     subs.expire_payment(p["id"])
                     continue
             # expire regardless of .configured, so an unconfigured/removed rail
