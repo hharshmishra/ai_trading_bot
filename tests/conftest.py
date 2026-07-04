@@ -21,6 +21,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+class _NoNet:
+    """requests stand-in that refuses: modules under test fall into their
+    None-tolerant offline paths instead of hitting live APIs. Tests that
+    exercise a transport monkeypatch .get/.post over this object."""
+    def get(self, *a, **k):
+        raise RuntimeError("network disabled in tests")
+
+    def post(self, *a, **k):
+        raise RuntimeError("network disabled in tests")
+
+
 @pytest.fixture(autouse=True)
 def _isolated_policy_paths(tmp_path, monkeypatch):
     import agents.indicator_agent as ia
@@ -29,11 +40,33 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
     import brain.decision_maker as dmm
     import config
 
+    # ---- hermetic runtime (added after the phase1 flake of 2026-07-04): ----
+    # macro modules fetched LIVE CoinGecko/stooq inside "offline" tests (the
+    # real .env flags leak in via load_dotenv), so results drifted with the
+    # actual market and their module-level TTL caches crossed test boundaries.
+    from utils import macro_fetcher, macro_prices
+    monkeypatch.setattr(macro_fetcher, "requests", _NoNet())
+    monkeypatch.setattr(macro_fetcher, "_cache", {"fng": (0.0, None), "dom": (0.0, None)})
+    monkeypatch.setattr(macro_prices, "requests", _NoNet())
+    monkeypatch.setattr(macro_prices, "_cache", {})
+
+    # get_store() singleton: without a reset, the first test to touch it pins
+    # the REAL logs/bitreinforcex.db (or a stale tmp dir) for every later test.
+    import persistence
+    from agents import llm_client
+    _default_store = persistence.Store(str(tmp_path / "default-store.db"))
+    monkeypatch.setattr(persistence, "_STORE", _default_store)
+    # phase1-style set_client(mock) calls leaked across tests: fresh per test
+    monkeypatch.setattr(llm_client, "_ACTIVE", llm_client.LLMClient())
+
     monkeypatch.setattr(na, "POLICY_PATH", str(tmp_path / "news_agent_policy.json"))
     monkeypatch.setattr(na, "PREDICTIONS_LOG_PATH", str(tmp_path / "predictions_log.json"))
     monkeypatch.setattr(ra, "POLICY_PATH", str(tmp_path / "research_agent_policy.json"))
     monkeypatch.setattr(ia, "POLICY_PATH", str(tmp_path / "indicator_agent_policy.json"))
     monkeypatch.setattr(dmm, "POLICY_PATH", str(tmp_path / "brain_policy.json"))
+
+    # membership store (Bot D) — separate DB, same isolation rule
+    monkeypatch.setattr(config, "MEMBERSHIP_DB", str(tmp_path / "subscriptions.db"))
 
     # nightly-training artifacts live under logs/ too (read via config at call time)
     for attr, name in [("INDICATOR_CONF_PATH", "indicator_conf.json"),
@@ -42,3 +75,6 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
                        ("META_METRICS_PATH", "meta_metrics.json"),
                        ("CALIBRATION_PATH", "calibration.json")]:
         monkeypatch.setattr(config, attr, str(tmp_path / name))
+
+    yield
+    _default_store.close()

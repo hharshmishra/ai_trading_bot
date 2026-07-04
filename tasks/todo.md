@@ -135,3 +135,14 @@ Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
 - Refuted from review: NWE "lookahead" (parity by construction), correction brain
   feedback (documented design), alpha_trend shift(2) (faithful port), _loads
   leniency (by design). 194 tests green.
+
+## 2026-07-04 — membership system (rent-out mode, feature/membership)
+- [x] membership/ package: plans catalog (7 SKUs), SubsStore (own SQLite,
+      injected clocks), Razorpay Links + TronGrid watchers (injectable http),
+      Bot D handlers (storefront/doors/admin), lifecycle jobs, pro gate
+- [x] telegram_app wiring behind MEMBERSHIP_ENABLED (default OFF — byte-
+      identical runtime; membership never imported when off)
+- [x] 52 new tests incl. full pay->kick->renew->rejoin lifecycle w/ fakes
+- [x] FIXED pre-existing flake: phase1 equivalence test depended on LIVE
+      CoinGecko dominance + real-DB store singleton (lesson 10); conftest now
+      hermetic — 246 tests deterministic, logs/ clean across double runs

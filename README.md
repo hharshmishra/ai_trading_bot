@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-194%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-246%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -72,7 +72,7 @@ python scripts/preflight.py            # must print READY (checks pins, DB, univ
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **194 passing**.
+Tests (no network / keys needed): `pytest -q` → **246 passing**.
 
 ## 🎓 How it learns
 
@@ -156,6 +156,15 @@ Backups: nightly `deploy/backup.sh` (WAL-safe) or continuous Litestream (`deploy
 > `scikit-learn==1.3.2`, `scipy==1.11.4` (newer pulls numpy 2.x and breaks the ABI).
 > `preflight.py` asserts all of it, plus that every universe pair still trades
 > (it has already caught LUNA, LRC and MKR delistings).
+
+## 💼 Renting it out (membership mode)
+
+Optional subscription layer (default **off**): 7/15/30-day paid plans for the signals
+channel, an independent Pro plan for direct agent access via the control bot, INR (UPI)
++ USDT (TRC-20) rails with **no webhook server**, and fully automated Telegram access —
+join-request gating on payment, auto-kick after expiry + grace. Design, pricing and
+economics: [`docs/subscription-deck.html`](docs/subscription-deck.html). Enable with the
+`MEMBERSHIP_*` keys in [`.env.example`](.env.example).
 
 ## 📚 Deeper docs
 

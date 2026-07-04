@@ -370,6 +370,18 @@ def main() -> None:
     control_token = os.environ.get("TELEGRAM_CONTROL_BOT_TOKEN")
     control_app = None
 
+    # Membership (Bot D) — fully flag-gated: with MEMBERSHIP_ENABLED=false the
+    # package is never imported and the runtime is identical to a build
+    # without it.
+    import config as _cfg
+    membership_app = None
+    subs_store = None
+    membership_token = os.environ.get("MEMBERSHIP_BOT_TOKEN")
+    if _cfg.MEMBERSHIP_ENABLED and membership_token:
+        from membership.payments import RazorpayLinks, TronWatcher
+        from membership.store import SubsStore
+        subs_store = SubsStore(_cfg.MEMBERSHIP_DB)
+
     async def post_init(app):
         broadcaster = Broadcaster(app.bot, store, customer, dev)
         app.bot_data.update({"dm": dm, "store": store, "grader": grader, "broadcaster": broadcaster})
@@ -389,6 +401,13 @@ def main() -> None:
             await control_app.start()
             await control_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
             logger.info("control bot started")
+        if membership_app is not None:
+            await membership_app.initialize()
+            await membership_app.start()
+            await membership_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            from membership.jobs import membership_loop
+            app.bot_data["_tasks"].append(asyncio.create_task(membership_loop(membership_app)))
+            logger.info("membership bot started")
 
     async def post_shutdown(app):
         for t in app.bot_data.get("_tasks", []):
@@ -397,18 +416,33 @@ def main() -> None:
             await control_app.updater.stop()
             await control_app.stop()
             await control_app.shutdown()
+        if membership_app is not None:
+            await membership_app.updater.stop()
+            await membership_app.stop()
+            await membership_app.shutdown()
 
     app = Application.builder().token(token).post_init(post_init).post_shutdown(post_shutdown).build()
     app.add_handler(CallbackQueryHandler(handle_callback))
 
     if control_token:
         control_app = Application.builder().token(control_token).build()
-        control_app.add_handler(CommandHandler("news", cmd_news))
-        control_app.add_handler(CommandHandler("indicator", cmd_indicator))
-        control_app.add_handler(CommandHandler("research", cmd_research))
-        control_app.add_handler(CommandHandler("context", cmd_context))
-        control_app.add_handler(CommandHandler("regime", cmd_regime))
-        control_app.add_handler(CommandHandler("derivs", cmd_derivs))
+        _handlers = {"news": cmd_news, "indicator": cmd_indicator,
+                     "research": cmd_research, "context": cmd_context,
+                     "regime": cmd_regime, "derivs": cmd_derivs}
+        if subs_store is not None:
+            # Pro gating: subscription + daily fair-use around every command.
+            # Flag off -> handlers registered bare, behavior identical to today.
+            from membership.gate import requires_pro
+            gate = requires_pro(subs_store)
+            _handlers = {name: gate(h) for name, h in _handlers.items()}
+        for _name, _h in _handlers.items():
+            control_app.add_handler(CommandHandler(_name, _h))
+
+    if subs_store is not None:
+        from membership import bot as membership_bot
+        membership_app = Application.builder().token(membership_token).build()
+        membership_bot.register(membership_app, subs_store, customer,
+                                rzp=RazorpayLinks(), tron=TronWatcher())
 
     logger.info("starting BitReinforceX runtime")
     app.run_polling(poll_interval=1.0, allowed_updates=Update.ALL_TYPES)

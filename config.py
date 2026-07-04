@@ -169,3 +169,16 @@ NIGHTLY_HOUR_IST = _env_int("NIGHTLY_HOUR_IST", 2)
 META_MODEL_PATH = os.getenv("META_MODEL_PATH", "logs/meta_model.pkl")
 META_METRICS_PATH = os.getenv("META_METRICS_PATH", "logs/meta_metrics.json")
 CALIBRATION_PATH = os.getenv("CALIBRATION_PATH", "logs/calibration.json")
+
+# --------------------------------------------------------------------------
+# Membership / subscriptions (Bot D). Default OFF: runtime identical to a
+# build without the membership package. Payment credentials are read from the
+# environment AT CALL TIME (never cached here) — they are secrets.
+# --------------------------------------------------------------------------
+MEMBERSHIP_ENABLED = _env_bool("MEMBERSHIP_ENABLED", False)
+MEMBERSHIP_DB = os.getenv("MEMBERSHIP_DB", "logs/subscriptions.db")
+ADMIN_USER_IDS = frozenset(
+    int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x)
+PRO_DAILY_QUERY_CAP = _env_int("PRO_DAILY_QUERY_CAP", 30)
+MEMBERSHIP_GRACE_HOURS = _env_float("MEMBERSHIP_GRACE_HOURS", 24.0)
+REFERRAL_BONUS_DAYS = _env_int("REFERRAL_BONUS_DAYS", 7)
