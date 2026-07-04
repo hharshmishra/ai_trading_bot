@@ -320,17 +320,12 @@ class DecisionMaker:
     #     # re-normalize weights and save
     #     self._normalize_weights() 
     
-    def _apply_feedback_to_brain(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str, news_reward: float):
+    def _apply_feedback_to_brain(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str):
         """Update scores slowly so Indicator > Research > News stays stable unless
-        long-term evidence suggests otherwise.
-
-        v3.2 criteria fixes:
-        - The delta uses the ACTIVE reward map (grader.active_reward_fn) — the
-          old hardcoded ±1/−4 graded a flat market as a full wrong for every
-          directional agent (the lesson-9 defect class, one layer up).
-        - ``news_reward`` is IGNORED (kept for call-site compat): the old extra
-          add gave news ~2x the drift speed of every other agent per feedback
-          for no documented reason — each agent is scored exactly once.
+        long-term evidence suggests otherwise. The delta uses the ACTIVE reward
+        map (grader.active_reward_fn) — the old hardcoded ±1/−4 graded a flat
+        market as a full wrong for every directional agent (the lesson-9 defect
+        class, one layer up). Each agent is scored exactly once.
         """
         from grader import active_reward_fn   # lazy: avoids import cycles
         reward_fn = active_reward_fn()
@@ -355,12 +350,12 @@ class DecisionMaker:
 
         self._normalize_weights()
 
-    def apply_brain_feedback(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str, news_reward: float):
+    def apply_brain_feedback(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str):
         """Public entry for the grader / Telegram handler to update the brain's
         agent-priority weights from a (auto- or human-derived) ground truth.
         ``agent_results`` = {agent: {"action": str, "confidence": float}}.
         """
-        self._apply_feedback_to_brain(agent_results, true_outcome, news_reward)
+        self._apply_feedback_to_brain(agent_results, true_outcome)
 
 
     def feedback(self, decision_out: Dict[str, Any]):
@@ -382,11 +377,13 @@ class DecisionMaker:
 
         true = self._normalize_action(true)
         # ask for numeric reward for news agent
-        nr_in = input("Enter numeric reward for news agent (e.g. 1.0 or -4.0). Press Enter to auto-assign based on match: ").strip()
+        nr_in = input("Enter numeric reward for news agent (Enter to auto-assign via the active reward map): ").strip()
         if nr_in == "":
-            # auto assign: if news matched true => +1 else -4
+            # auto-assign through the SAME active map as production (never the
+            # old inline +1/-4 — that reintroduced the lesson-9 flat-market bug)
+            from grader import active_reward_fn
             news_pred = agents.get("news", {}).get("action")
-            news_reward = 1.0 if news_pred == true else -4.0
+            news_reward = active_reward_fn()(news_pred, true)
             print(f"Auto news reward => {news_reward}")
         else:
             try:
@@ -427,7 +424,7 @@ class DecisionMaker:
 
         # Update brain policy scores & weights
         try:
-            self._apply_feedback_to_brain(agents, true, news_reward)
+            self._apply_feedback_to_brain(agents, true)
             print("Brain policy updated. New weights:", json.dumps(self.policy.get("weights", {}), indent=2))
         except Exception as e:
             print("Warning: failed to update brain policy:", e)

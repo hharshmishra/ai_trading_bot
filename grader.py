@@ -266,9 +266,8 @@ class Grader:
         if p.get("deriv_action") is not None:
             agent_results["derivatives"] = {"action": _norm_action(p.get("deriv_action")),
                                             "confidence": p.get("deriv_conf") or 0.0}
-        news_reward = rewards.get("news", reward_for(p.get("news_action"), label))
         try:
-            self.dm.apply_brain_feedback(agent_results, label, news_reward)
+            self.dm.apply_brain_feedback(agent_results, label)
         except Exception:
             pass
         return rewards

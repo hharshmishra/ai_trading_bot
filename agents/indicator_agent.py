@@ -253,16 +253,22 @@ class IndicatorAgent:
         """
         pol = _load_policy()
         pol["score"] = pol.get("score", 0) + reward
-        # Magnitude-scaled steps (v3.2 criteria fix): the old sign-only nudge
-        # moved weights identically for a -4 direction-wrong and a -1 missed
-        # move — the v2 map's graded severities never reached this policy.
-        # Normalized so the historical average step is preserved (mean |r|
-        # under the v2 map ~= 2): 0.015*|r| == the old flat 0.03 at |r|=2.
-        mag = min(abs(float(reward)), 4.0)
-        sign = 1 if reward > 0 else -1
-        step = 0.015 * mag
-        pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + sign*step*blend.get("type1_share", 0.5), 0.05, 0.95))
-        pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + sign*step*blend.get("type2_share", 0.5), 0.05, 0.95))
+        # Sign-anchored steps (v3.2.1): a CORRECT call is always +1, so its step
+        # is the historical constant (0.03 type-share, +0.05 direct) — never
+        # scaled down. A WRONG call anchors at -4 with the historical loss step
+        # (0.03 type-share, -0.07 direct); the lesser losses (timeout -1.5,
+        # missed -1) scale below it by |r|/4. This preserves the old dynamics
+        # EXACTLY at the +1/-4 anchors while still letting the v2 map's graded
+        # severities separate a wrong (-4) from a missed move (-1) — the prior
+        # normalize-at-|r|=2 form made wins ~5x weaker than wrongs.
+        r = float(reward)
+        if r >= 0:
+            ts_step, d_step = 0.03, 0.05
+        else:
+            mag = min(abs(r), 4.0)
+            ts_step, d_step = -0.0075 * mag, -0.0175 * mag
+        pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + ts_step*blend.get("type1_share", 0.5), 0.05, 0.95))
+        pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + ts_step*blend.get("type2_share", 0.5), 0.05, 0.95))
         s = pol["weights"]["type1"] + pol["weights"]["type2"]
         pol["weights"]["type1"] = round(pol["weights"]["type1"]/s, 4)
         pol["weights"]["type2"] = round(pol["weights"]["type2"]/s, 4)
@@ -270,8 +276,6 @@ class IndicatorAgent:
         if fired:
             d = pol["direct_signals"].get(fired, {"weight": 0.7, "score": 0})
             d["score"] += reward
-            # same normalization: +0.025|r| / -0.035|r| == old +0.05/-0.07 at |r|=2
-            d_step = (0.025 * mag) if reward > 0 else -(0.035 * mag)
             d["weight"] = float(np.clip(d["weight"] + d_step, 0.1, 0.95))
             pol["direct_signals"][fired] = d
         _save_policy(pol)

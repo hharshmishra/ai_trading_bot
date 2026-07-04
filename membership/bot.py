@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import config
-from membership.plans import SKUS, plans_text
+from membership.plans import SKUS, ordered, plans_text
 from membership.store import IST, FingerprintExhausted, SubsStore
 
 logger = logging.getLogger("membership.bot")
@@ -29,9 +29,8 @@ def _fmt_date(ts: float) -> str:
 def _plans_keyboard():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     rows, row = [], []
-    for code in ("SIG-7", "SIG-15", "SIG-30", "PRO-15", "PRO-30", "BUN-30", "FND-90"):
-        s = SKUS[code]
-        row.append(InlineKeyboardButton(f"{s.label} · ₹{s.inr}", callback_data=f"sub|{code}"))
+    for s in ordered():        # single source of SKU order (plans.DISPLAY_ORDER)
+        row.append(InlineKeyboardButton(f"{s.label} · ₹{s.inr}", callback_data=f"sub|{s.code}"))
         if len(row) == 2:
             rows.append(row)
             row = []

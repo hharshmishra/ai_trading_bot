@@ -30,6 +30,16 @@ SKUS = {
 
 PRODUCTS = ("signals", "pro")
 
+# Display order — the ONE place the SKU sequence lives. plans_text, the
+# storefront keyboard and the renewal keyboard all consume this, so adding a
+# SKU can never leave the description and the buy buttons disagreeing.
+DISPLAY_ORDER = ("SIG-7", "SIG-15", "SIG-30", "PRO-15", "PRO-30", "BUN-30", "FND-90")
+
+
+def ordered():
+    """SKUs in display order."""
+    return [SKUS[c] for c in DISPLAY_ORDER]
+
 
 def plans_text() -> str:
     """Customer-facing /plans body (HTML), built from the catalog so a price
