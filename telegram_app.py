@@ -185,13 +185,17 @@ async def handle_callback(update, context) -> None:
             await q.answer("Prediction still recording — try again in a moment.", show_alert=True)
             return
         verdict = value                                   # buy | sell | skip(=flat)
+        # grader.apply_manual_feedback is the SINGLE writer of the session's
+        # true_outcome (it sets it from the normalized label on both the
+        # pending and correction paths) — the handler must not also write it,
+        # or a second tap that returns already_manual would overwrite the
+        # stored truth to disagree with what the agents actually trained on.
         result = await asyncio.to_thread(
             grader.apply_manual_feedback, sess["prediction_id"], verdict)
         status = result.get("status")
         if status == "unknown_prediction":                # row vanished — keep session
             await q.answer("Prediction record missing — cannot grade.", show_alert=True)
             return
-        store.set_session_true_outcome(session_id, verdict)
         store.deactivate_session(session_id)
         await broadcaster.strip_keyboard(sess)
         if status == "already_manual":                    # double tap / second human
@@ -414,10 +418,16 @@ def main() -> None:
     membership_app = None
     subs_store = None
     membership_token = os.environ.get("MEMBERSHIP_BOT_TOKEN")
-    if _cfg.MEMBERSHIP_ENABLED and membership_token:
-        from membership.payments import RazorpayLinks, TronWatcher
+    if _cfg.MEMBERSHIP_ENABLED:
+        # The store — and therefore the Pro gate on the control bot — comes up
+        # whenever MEMBERSHIP_ENABLED, independent of the storefront token. A
+        # missing token must NOT silently leave the six agent commands
+        # ungated; it only means the storefront bot can't run.
         from membership.store import SubsStore
         subs_store = SubsStore(_cfg.MEMBERSHIP_DB)
+        if not membership_token:
+            logger.error("MEMBERSHIP_ENABLED but MEMBERSHIP_BOT_TOKEN is unset — "
+                         "Pro gating is ON, but the storefront bot will not start")
 
     async def post_init(app):
         broadcaster = Broadcaster(app.bot, store, customer, dev)
@@ -432,31 +442,49 @@ def main() -> None:
         app.bot_data["_tasks"] = [asyncio.create_task(scheduler_loop(app)),
                                   asyncio.create_task(grader_loop(app)),
                                   asyncio.create_task(nightly_loop(app))]
+        # Each secondary bot starts under its own try/except: one failing to
+        # come up must never strand another's poller (an orphaned getUpdates
+        # loop 409s on the next restart).
         if control_app is not None:
-            control_app.bot_data["dm"] = dm
-            await control_app.initialize()
-            await control_app.start()
-            await control_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-            logger.info("control bot started")
+            try:
+                control_app.bot_data["dm"] = dm
+                await control_app.initialize()
+                await control_app.start()
+                await control_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+                logger.info("control bot started")
+            except Exception as e:
+                logger.error("control bot failed to start: %s", e)
         if membership_app is not None:
-            await membership_app.initialize()
-            await membership_app.start()
-            await membership_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-            from membership.jobs import membership_loop
-            app.bot_data["_tasks"].append(asyncio.create_task(membership_loop(membership_app)))
-            logger.info("membership bot started")
+            try:
+                await membership_app.initialize()
+                await membership_app.start()
+                await membership_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+                me = await membership_app.bot.get_me()
+                # publish the storefront username so the Pro-gate refusal on the
+                # control bot renders a tappable ?start=pro deep link
+                membership_app.bot_data["membership_username"] = me.username
+                if control_app is not None:
+                    control_app.bot_data["membership_username"] = me.username
+                from membership.jobs import membership_loop
+                app.bot_data["_tasks"].append(
+                    asyncio.create_task(membership_loop(membership_app)))
+                logger.info("membership bot started (@%s)", me.username)
+            except Exception as e:
+                logger.error("membership bot failed to start: %s", e)
 
     async def post_shutdown(app):
         for t in app.bot_data.get("_tasks", []):
             t.cancel()
-        if control_app is not None:
-            await control_app.updater.stop()
-            await control_app.stop()
-            await control_app.shutdown()
-        if membership_app is not None:
-            await membership_app.updater.stop()
-            await membership_app.stop()
-            await membership_app.shutdown()
+        for secondary in (control_app, membership_app):
+            if secondary is None:
+                continue
+            try:
+                if secondary.updater and secondary.updater.running:
+                    await secondary.updater.stop()
+                await secondary.stop()
+                await secondary.shutdown()
+            except Exception as e:
+                logger.error("secondary bot shutdown error: %s", e)
 
     app = Application.builder().token(token).post_init(post_init).post_shutdown(post_shutdown).build()
     app.add_handler(CallbackQueryHandler(handle_callback))
@@ -475,8 +503,9 @@ def main() -> None:
         for _name, _h in _handlers.items():
             control_app.add_handler(CommandHandler(_name, _h))
 
-    if subs_store is not None:
+    if subs_store is not None and membership_token:
         from membership import bot as membership_bot
+        from membership.payments import RazorpayLinks, TronWatcher
         membership_app = Application.builder().token(membership_token).build()
         membership_bot.register(membership_app, subs_store, customer,
                                 rzp=RazorpayLinks(), tron=TronWatcher())
