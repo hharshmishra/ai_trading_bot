@@ -51,15 +51,19 @@ MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "5"))
 # Inline keyboard
 # --------------------------------------------------------------------------- #
 def build_dev_keyboard(session_id: str):
+    """One-tap verdict keyboard (v3.2): a single press records what ACTUALLY
+    happened and trains every agent + the brain against it with the active
+    reward map. FLAT is a real, teachable verdict (skip-callers rewarded,
+    directional calls get the timeout penalty) — previously impossible. The
+    old two-step OUTCOME→REWARD keyboard (with the news-only 1.0/−4.0
+    overrides, a v1 relic) is gone from NEW messages, but its callbacks are
+    still handled so old messages in the channel keep working."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("BUY", callback_data=f"{session_id}|OUTCOME|buy"),
-         InlineKeyboardButton("SELL", callback_data=f"{session_id}|OUTCOME|sell"),
-         InlineKeyboardButton("SKIP LEARNING", callback_data=f"{session_id}|OUTCOME|skip")],
-        [InlineKeyboardButton("1.0", callback_data=f"{session_id}|REWARD|1.0"),
-         InlineKeyboardButton("-4.0", callback_data=f"{session_id}|REWARD|-4.0"),
-         InlineKeyboardButton("Auto-Assign", callback_data=f"{session_id}|REWARD|auto")],
-        [InlineKeyboardButton("CLOSE SESSION", callback_data=f"{session_id}|CLOSE|x")],
+        [InlineKeyboardButton("✅ BUY", callback_data=f"{session_id}|VERDICT|buy"),
+         InlineKeyboardButton("❌ SELL", callback_data=f"{session_id}|VERDICT|sell"),
+         InlineKeyboardButton("➖ FLAT", callback_data=f"{session_id}|VERDICT|skip")],
+        [InlineKeyboardButton("🚫 DISCARD (no learning)", callback_data=f"{session_id}|CLOSE|x")],
     ])
 
 
@@ -171,6 +175,32 @@ async def handle_callback(update, context) -> None:
         store.deactivate_session(session_id)
         await broadcaster.strip_keyboard(sess)
         await q.answer("Session closed.")
+        return
+
+    if kind == "VERDICT":
+        # One tap = ground truth for EVERYONE: all four agents + the brain are
+        # graded against it with the active reward map (pending rows), or the
+        # policy is netted to this verdict via corrections (auto-graded rows).
+        if not sess.get("prediction_id"):
+            await q.answer("Prediction still recording — try again in a moment.", show_alert=True)
+            return
+        verdict = value                                   # buy | sell | skip(=flat)
+        result = await asyncio.to_thread(
+            grader.apply_manual_feedback, sess["prediction_id"], verdict)
+        status = result.get("status")
+        if status == "unknown_prediction":                # row vanished — keep session
+            await q.answer("Prediction record missing — cannot grade.", show_alert=True)
+            return
+        store.set_session_true_outcome(session_id, verdict)
+        store.deactivate_session(session_id)
+        await broadcaster.strip_keyboard(sess)
+        if status == "already_manual":                    # double tap / second human
+            await q.answer("Already graded manually — nothing changed.")
+            return
+        label = {"buy": "BUY", "sell": "SELL", "skip": "FLAT"}.get(verdict, verdict)
+        vals = result.get("rewards") or result.get("corrections") or {}
+        parts = " · ".join(f"{k[:4]} {v:+g}" for k, v in vals.items())
+        await q.answer(f"Trained vs {label} ({status}) {parts}"[:190])
         return
 
     if kind == "OUTCOME":
