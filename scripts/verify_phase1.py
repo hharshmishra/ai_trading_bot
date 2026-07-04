@@ -27,13 +27,7 @@ sys.modules.setdefault("pandas_ta", types.ModuleType("pandas_ta"))  # locally br
 sys.path.insert(0, str(ROOT / "tests"))
 from test_phase1_shared_context import MockLLM, FakeIndicator, _fake_ohlcv  # noqa: E402
 
-SYMBOLS = [s + "USDT" for s in [
-    "AAVE", "ADA", "ALGO", "AR", "ARB", "ATOM", "AVAX", "AXS", "BCH", "BNB",
-    "BTC", "CAKE", "COMP", "CRV", "DOGE", "DOT", "DYDX", "ENJ", "ETC", "ETH",
-    "FET", "FIL", "FLOW", "GALA", "GMT", "GRT", "ICP", "IMX", "INJ", "LINK",
-    "LRC", "LUNA", "MANA", "MKR", "NEAR", "OP", "POL", "PYTH", "RENDER", "SAND",
-    "SHIB", "SNX", "SOL", "STORJ", "THETA", "UNI", "WLD", "XRP",
-]]
+from universe import SYMBOLS  # noqa: E402  (single source of truth)
 TF = "4h"
 
 

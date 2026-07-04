@@ -29,11 +29,13 @@ DEFAULT_RSS = [
 ]
 
 # Base tickers we track (trading universe + macro proxies).
-KNOWN_TICKERS = set((
-    "AAVE ADA ALGO AR ARB ATOM AVAX AXS BCH BNB BTC CAKE COMP CRV DOGE DOT DYDX "
-    "ENJ ETC ETH FET FIL FLOW GALA GMT GRT ICP IMX INJ LINK LTC MANA "
-    "NEAR OP POL PYTH RENDER SAND SHIB SNX SOL STORJ SUI THETA TRX UNI WLD XRP SPX DXY"
-).split())
+# Derived from the trading universe (universe.py) so a newly added pair is
+# news-taggable automatically; SPX/DXY are macro proxies the research agent
+# tracks via tagged headlines. ALIASES below stay manual — full-name matching
+# is editorial judgment, not derivable.
+from universe import BASE_TICKERS
+
+KNOWN_TICKERS = set(BASE_TICKERS) | {"SPX", "DXY"}
 
 # Common name -> ticker, for tagging headlines that use full names.
 ALIASES = {

@@ -29,12 +29,10 @@ from signals import TF_SECONDS, should_emit_signal, should_emit_signal_v2
 # preflight freshness check immediately caught two more corpses — LRC (dead
 # 93 days) -> LTC, MKR (dead 291 days) -> TRX. Every cycle had been silently
 # skipping them. preflight now fails loudly on the next delisting.
-SYMBOLS = [s + "USDT" for s in [
-    "AAVE", "ADA", "ALGO", "AR", "ARB", "ATOM", "AVAX", "AXS", "BCH", "BNB",
-    "BTC", "CAKE", "COMP", "CRV", "DOGE", "DOT", "DYDX", "ENJ", "ETC", "ETH",
-    "FET", "FIL", "FLOW", "GALA", "GMT", "GRT", "ICP", "IMX", "INJ", "LINK",
-    "LTC", "MANA", "NEAR", "OP", "POL", "PYTH", "RENDER", "SAND",
-    "SHIB", "SNX", "SOL", "STORJ", "SUI", "THETA", "TRX", "UNI", "WLD", "XRP"]]
+# Single source of truth for the pair list (env-extendable via UNIVERSE_ADD /
+# UNIVERSE_REMOVE) — see universe.py. Re-exported here because half the
+# codebase does `from cycle import SYMBOLS`.
+from universe import SYMBOLS  # noqa: F401  (re-export)
 
 
 def _entry_from_df(df, tf: str) -> tuple[Optional[float], Optional[int]]:
