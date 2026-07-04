@@ -276,7 +276,7 @@
     <a href="#runbook"><span class="dot"></span><span class="n">14</span>Runbook / gotchas</a>
     <a href="#pending"><span class="dot"></span><span class="n">15</span>What's pending</a>
   </nav>
-  <div class="pulse"><i></i><span>main @ v3.3 · 270 tests</span></div>
+  <div class="pulse"><i></i><span>main @ v3.4 · 296 tests</span></div>
 </aside>
 
 <div class="wrap">
@@ -291,7 +291,7 @@
       <p class="sub">One long-lived Python process analyses 48 Binance pairs every hour with four reinforcement-learning voters, gates what is worth sending by market regime, grades every prediction against the realized price path, and re-trains itself nightly on its own track record. This page is the whole machine — every module, every flow, every env var, and the honest numbers behind every enabled flag.</p>
       <div class="chips">
         <div class="chip"><b class="grad">main @ f0d9822</b><span>this snapshot</span></div>
-        <div class="chip"><b>270</b><span>tests green</span></div>
+        <div class="chip"><b>296</b><span>tests green</span></div>
         <div class="chip"><b>48</b><span>USDT pairs</span></div>
         <div class="chip"><b>$0<span style="font-size:14px;color:var(--faint)">/mo</span></b><span>data cost</span></div>
         <div class="chip"><b style="color:var(--magenta)">advisory</b><span>only — no orders</span></div>
@@ -426,7 +426,7 @@
           <tr><td class="file">scripts/experiments/lorentzian_knn.py</td><td>Experiment only (D5): Lorentzian-distance kNN, walk-forward 70/30. Adopt only if holdout precision &gt; 40% with n ≥ 100 — else documented and dropped.</td><td class="fns">run_pair() · lorentzian_dist()</td></tr>
           <tr><td class="file">deploy/</td><td>bitreinforcex.service (systemd), backup.sh (WAL-safe sqlite3 .backup, keeps 14), litestream.yml (continuous replication).</td><td class="fns">systemctl enable --now bitreinforcex · journalctl -u bitreinforcex -f</td></tr>
           <tr><td class="file">vendor/pandas-ta</td><td>Vendored pandas_ta 0.3.14b0 — upstream deleted from PyPI/GitHub; the reason for the numpy&lt;2 pin.</td><td class="fns">installed by requirements.txt (./vendor/pandas-ta)</td></tr>
-          <tr><td class="file">tests/ · 23 files</td><td>270 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 270 passed</td></tr>
+          <tr><td class="file">tests/ · 23 files</td><td>296 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 296 passed</td></tr>
         </tbody>
       </table>
     </div>
@@ -771,7 +771,7 @@ cp .env.example .env
 python <span class="p">scripts/preflight.py</span>
 
 <span class="c"># tests need no network and no keys</span>
-pytest -q                        <span class="c"># → 270 passed</span>
+pytest -q                        <span class="c"># → 296 passed</span>
 
 <span class="c"># run everything — scheduler + grader + nightly in ONE process</span>
 python <span class="p">telegram_app.py</span></div>
@@ -967,6 +967,8 @@ python <span class="p">scripts/run_training.py</span>                           
         <p><b>2 · News bandit was constructed 5-dim.</b> <code>NewsAgent.__init__</code> builds <code>NewsRL(n_features=5)</code> (news_agent.py:383) while <code>features_from_jsons()</code> emits 10-dim vectors; <code>_pad()</code> truncates them, so the 5 event dims are recorded in the DB but not trained by the live instance. Harmless while <code>NEWS_EVENTS_ENABLED=false</code> (those dims are all 0.0) — <b>FIXED in <code>2a1747c</code></b>: the constructor is now <code>NewsRL()</code> (follows N_FEATURES=10; the logit-preserving migration runs on first live load, <code>.bak-5dim</code> backup) and a wiring test asserts the agent's bandit width equals N_FEATURES.</p>
         <p><b>v3.1 post-audit pass (2026-07-04).</b> A 47-agent full-code review (6 module-group finders, adversarial verifier per finding) surfaced 27 verified findings; 21 were fixed, 4 refuted on manual re-verification. Highlights: <b>manual grades now train with the active reward map</b> — every manual/correction path hardcoded the legacy ±1/−4 map while auto grading used the v2 TB map, so human feedback computed wrong policy deltas; a process-wide reward lock serializes the grader thread and Telegram callbacks; crashed grades revert to pending; REWARD presses inside the record window answer "try again" instead of burning the session (legacy sessions back-filled by migration); RSS timestamps are parsed as UTC (were 5.5&nbsp;h early on IST hosts) with bounded feed timeouts; switching <code>RAG_EMBEDDER</code> no longer breaks the corpus; malformed LLM scan output falls back to truthful-neutral instead of losing the news agent's learning row. Refuted as bugs: the NWE repaint default (the measured production variant — parity by construction), alpha_trend's <code>shift(2)</code> (faithful to the source indicator). 194 tests.</p>
         <p><b>v3.2 learning-criteria pass (2026-07-04).</b> Universe centralized in <code>universe.py</code> (env-extendable via <code>UNIVERSE_ADD/REMOVE</code>; all 48 pairs live-verified, MATIC→POL long since applied); dev keyboard replaced with <b>one-tap verdicts</b> (✅ BUY / ❌ SELL / ➖ FLAT) — a single press trains all four agents + the brain with the active reward map, and FLAT is finally a teachable outcome; the brain's feedback used the hardcoded v1 ±1/−4 map (lesson-9 class, one layer up) and double-counted news — both fixed; indicator weight nudges now scale with |reward| so a −4 direction-wrong moves 4× more than a −1 missed move. 260 tests.</p>
+        <p><b>v3.3 hardening + reset (2026-07-05).</b> <code>/code-review max</code> over the membership/v3.2 arc: 34 findings fixed — USDT fingerprint total-millis keying (half-integer SKU collision), <code>asyncio.to_thread</code> for every payment HTTP call, TRON match-then-expire with grace + <code>/paid</code> rescue, join-request invite lifecycle, config.py owns dotenv for every entry point. Plus <code>scripts/reset_learning.py</code>: backs up, wipes learned state only (policies, predictions, rewards, sessions), keeps market data + subscribers — the go-live zero-start. 270 tests.</p>
+        <p><b>v3.4 indicator enhancement, evidence-gated (2026-07-05).</b> Six new type-2 confluence votes behind <code>T2_EXTRA_VOTES</code> — RSI-30, MFI-14, CCI-20, UTC-anchored+rolling VWAP, causal Ichimoku, and a repaint-safe <b>Fibonacci golden-pocket</b> vote (confirmed swings only, 0.5–0.618 zone ±0.25·ATR, rejection candle required). A/B'd on the 12-pair × 3-TF × 2-year exact replay (28.3k emissions, pinned end date): <b>all six refused promotion</b> — every pooled delta inside noise (|z| ≤ 0.38), zero significant groups; the honest table lives in <a href="v34-vote-evidence.md">docs/v34-vote-evidence.md</a>. The structural upgrade that shipped ON-able: <b>per-rule learned credibility</b> (<code>T2_RULE_LEARNING</code>) — every named type-2 rule now earns its own weight from graded outcomes (same sign-anchored steps as direct signals, clip [0.1, 2.0]), replacing the frozen ±1 votes; recommended at go-live reset. 296 tests.</p>
       </div>
     </div>
   </section>
