@@ -81,6 +81,7 @@ def _ensure_logs():
                 "weights": {"type1": 0.65, "type2": 0.35},
                 # track per-signal credibility for multiple direct indicators
                 "direct_signals": {},  # e.g., {"nwe": {"weight":0.8,"score":0}}
+                "type2_rules": {},     # per-rule type-2 credibility (v3.4)
                 "score": 0
             }, f)
 
@@ -90,6 +91,7 @@ def _load_policy():
         default_policy = {
             "weights": {"type1": 0.65, "type2": 0.35},
             "direct_signals": {},
+            "type2_rules": {},
             "score": 0
         }
         with open(POLICY_PATH, "w") as f:
@@ -99,11 +101,14 @@ def _load_policy():
     # If file exists but is empty or invalid JSON
     try:
         with open(POLICY_PATH, "r") as f:
-            return json.load(f)
+            pol = json.load(f)
+        pol.setdefault("type2_rules", {})   # additive schema migration (v3.4)
+        return pol
     except (json.JSONDecodeError, FileNotFoundError):
         default_policy = {
             "weights": {"type1": 0.65, "type2": 0.35},
             "direct_signals": {},
+            "type2_rules": {},
             "score": 0
         }
         with open(POLICY_PATH, "w") as f:
@@ -278,6 +283,16 @@ class IndicatorAgent:
             d["score"] += reward
             d["weight"] = float(np.clip(d["weight"] + d_step, 0.1, 0.95))
             pol["direct_signals"][fired] = d
+        # v3.4 per-rule type-2 credibility: same sign-anchored step as the
+        # direct signals, wider clip (base weight is 1.0, not 0.7). Only rules
+        # that supported the graded action are touched; flag off => the blend
+        # snapshot carries no fired_rules and this is a no-op.
+        if config.T2_RULE_LEARNING:
+            for key in blend.get("fired_rules") or []:
+                d = pol.setdefault("type2_rules", {}).get(key, {"weight": 1.0, "score": 0})
+                d["score"] += reward
+                d["weight"] = float(np.clip(d["weight"] + d_step, 0.1, 2.0))
+                pol["type2_rules"][key] = d
         _save_policy(pol)
         self.policy = pol
 
@@ -355,56 +370,50 @@ class IndicatorAgent:
 
     def _type2_rules(self, raw: pd.DataFrame) -> Dict[str, Any]:
         r = raw.dropna().iloc[-1]
-        votes = {"bull": 0, "bear": 0}
+
+        # Every rule is named so per-rule credibility can be learned (v3.4):
+        # (key, side, base) with side +1 bull / -1 bear, base = legacy vote size.
+        rules: List[tuple] = []
 
         # MA ribbon
         if r["close"] > r["ma20"] and r["close"] > r["ma50"]:
-            votes["bull"] += 2
+            rules.append(("ribbon", 1, 2))
         elif r["close"] < r["ma20"] and r["close"] < r["ma50"]:
-            votes["bear"] += 2
+            rules.append(("ribbon", -1, 2))
 
         # RSI extremes
         if r["rsi14"] < 30:
-            votes["bull"] += 1
+            rules.append(("rsi14", 1, 1))
         elif r["rsi14"] > 70:
-            votes["bear"] += 1
+            rules.append(("rsi14", -1, 1))
 
         # MACD histogram
-        if r["macd_hist"] > 0:
-            votes["bull"] += 1
-        else:
-            votes["bear"] += 1
+        rules.append(("macd", 1 if r["macd_hist"] > 0 else -1, 1))
 
         # BB squeeze-ish positioning bonus (lightweight)
         if r["close"] <= r["bb_lower"]:
-            votes["bull"] += 1
+            rules.append(("bb", 1, 1))
         elif r["close"] >= r["bb_upper"]:
-            votes["bear"] += 1
-        
+            rules.append(("bb", -1, 1))
+
         # StochRSI (overbought/oversold)
         if r["stochrsi_k"] < 20 and r["stochrsi_d"] < 20:
-            votes["bull"] += 1
+            rules.append(("stochrsi", 1, 1))
         elif r["stochrsi_k"] > 80 and r["stochrsi_d"] > 80:
-            votes["bear"] += 1
-            
+            rules.append(("stochrsi", -1, 1))
+
         # ✅ SuperTrend direction
         if r["supertrend_dir"] == 1:
-            votes["bull"] += 2
+            rules.append(("supertrend", 1, 2))
         elif r["supertrend_dir"] == -1:
-            votes["bear"] += 2
+            rules.append(("supertrend", -1, 2))
 
         # RSI / OBV divergence votes (D1/D2; columns exist only when
         # DIVERGENCE_VOTES is on and tf is 4h/1d)
-        if "rsi_div" in r.index:
-            if r["rsi_div"] > 0:
-                votes["bull"] += 1
-            elif r["rsi_div"] < 0:
-                votes["bear"] += 1
-        if "obv_div" in r.index:
-            if r["obv_div"] > 0:
-                votes["bull"] += 1
-            elif r["obv_div"] < 0:
-                votes["bear"] += 1
+        if "rsi_div" in r.index and r["rsi_div"]:
+            rules.append(("rsi_div", 1 if r["rsi_div"] > 0 else -1, 1))
+        if "obv_div" in r.index and r["obv_div"]:
+            rules.append(("obv_div", 1 if r["obv_div"] > 0 else -1, 1))
 
         # v3.4 extra confluence votes (columns exist only for enabled
         # T2_EXTRA_VOTES keys); each ±1, recorded in `extras` for details.
@@ -413,12 +422,20 @@ class IndicatorAgent:
             if col in r.index:
                 v = float(r[col])
                 extras[col[2:]] = int(v)
-                if v > 0:
-                    votes["bull"] += 1
-                elif v < 0:
-                    votes["bear"] += 1
+                if v:
+                    rules.append((col[2:], 1 if v > 0 else -1, 1))
         if "v_fib_ratio" in r.index and extras.get("fib"):
             extras["fib_ratio"] = float(r["v_fib_ratio"])
+
+        # Tally. With T2_RULE_LEARNING each rule's base vote is scaled by its
+        # learned credibility (default 1.0 => identical sums); with the flag
+        # off the tally stays the legacy integer arithmetic, bit-identical.
+        learn = config.T2_RULE_LEARNING
+        t2w = self.policy.get("type2_rules", {}) if learn else {}
+        votes = {"bull": 0, "bear": 0}
+        for key, side, base in rules:
+            w = base * float(t2w.get(key, {}).get("weight", 1.0)) if learn else base
+            votes["bull" if side > 0 else "bear"] += w
 
         if votes["bull"] > votes["bear"]:
             action = "buy"
@@ -450,6 +467,11 @@ class IndicatorAgent:
         }
         if extras:
             out["extras"] = extras       # shape unchanged when no extra votes on
+        if learn and action in ("buy", "sell"):
+            # rules that supported the winning side — the ones apply_reward
+            # credits/debits (mirrors fired_direct semantics for type-1)
+            want = 1 if action == "buy" else -1
+            out["fired_rules"] = [k for k, side, _ in rules if side == want]
         return out
 
     def _vol_ok(self, df: pd.DataFrame) -> bool:
@@ -585,4 +607,7 @@ class IndicatorAgent:
             "scores": scores,
             "fired_direct": type1.get("fired_direct")
         }
+        if type2.get("fired_rules") is not None:
+            # snapshot travels prediction -> grader -> apply_reward, stateless
+            blend_details["fired_rules"] = type2["fired_rules"]
         return action, confidence, blend_details
