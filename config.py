@@ -15,6 +15,20 @@ import os
 import sys
 from typing import Any, Dict, Tuple
 
+# config is the universal chokepoint — EVERY entry point imports it (directly
+# or transitively) before reading any flag, and every flag below is snapshotted
+# from os.environ at import time. So .env must be loaded HERE, before the first
+# os.getenv, or scripts that don't call load_dotenv themselves (run_backtest,
+# run_training, refresh_ecosystems, verify_phase1, …) silently run on flag
+# DEFAULTS. The tests set BITREINFORCEX_NO_DOTENV=1 (in conftest, before any
+# import) to stay hermetic — the .env on a dev/CI box must not leak in.
+if not os.getenv("BITREINFORCEX_NO_DOTENV"):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+
 
 def _env_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)

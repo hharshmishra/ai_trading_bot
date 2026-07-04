@@ -10,8 +10,10 @@ _news_logger = logging.getLogger("news_agent")
 
 PREDICTIONS_LOG_PATH = "logs/predictions_log.json"
 
-from dotenv import load_dotenv
-load_dotenv()
+# importing config loads .env once (respecting BITREINFORCEX_NO_DOTENV so the
+# test suite stays hermetic) — replaces a bare module-level load_dotenv() that
+# leaked the dev .env into tests.
+import config  # noqa: F401
 
 # --- LLM access (provider-agnostic, lazy, call-counted) ---
 # Routed through agents.llm_client so the model/provider lives in one place and

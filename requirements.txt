@@ -15,7 +15,7 @@ langgraph==0.4.3
 pydantic==2.11.7
 python-telegram-bot==22.3     # signals bot + control bot
 python-dotenv==1.0.0
-requests==2.31.0              # macro feeds (Fear&Greed, CoinGecko)
+requests==2.32.4              # macro feeds + payment rails (pure-python; no numpy interaction)
 feedparser==6.0.11            # RSS ingestion
 
 # --- accuracy upgrade: nightly meta-label + calibration training -------------

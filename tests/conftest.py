@@ -11,8 +11,16 @@ setattr overrides this fixture.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+# MUST run before ANY project import: config.py loads .env at import time unless
+# this is set, and several modules import config transitively the moment the
+# first test file is collected. Setting it here (module top of the root
+# conftest) guarantees the dev/CI .env never leaks flags into the suite
+# (lesson 10 — "'offline' tests must be MADE offline, not assumed offline").
+os.environ["BITREINFORCEX_NO_DOTENV"] = "1"
 
 import pytest
 
@@ -69,6 +77,16 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
 
     # membership store (Bot D) — separate DB, same isolation rule
     monkeypatch.setattr(config, "MEMBERSHIP_DB", str(tmp_path / "subscriptions.db"))
+    # new env-driven module flags must be neutralized too (lesson 10): the flag
+    # is snapshotted from os.environ at config import; a dev/CI box that runs
+    # the real bot (MEMBERSHIP_ENABLED=true, ADMIN_USER_IDS set) would otherwise
+    # flip flag-parity tests. Also drop the universe env so SYMBOLS stays 48.
+    monkeypatch.setattr(config, "MEMBERSHIP_ENABLED", False)
+    monkeypatch.setattr(config, "ADMIN_USER_IDS", frozenset())
+    for _var in ("UNIVERSE_ADD", "UNIVERSE_REMOVE", "MEMBERSHIP_BOT_TOKEN",
+                 "TELEGRAM_CONTROL_BOT_TOKEN", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET",
+                 "TRON_WALLET_ADDRESS", "TRONGRID_API_KEY"):
+        monkeypatch.delenv(_var, raising=False)
 
     # nightly-training artifacts live under logs/ too (read via config at call time)
     for attr, name in [("INDICATOR_CONF_PATH", "indicator_conf.json"),

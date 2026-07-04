@@ -21,6 +21,10 @@ from __future__ import annotations
 import os
 from typing import List
 
+import config  # noqa: F401  — importing config loads .env (once, hermetic-guarded)
+              # BEFORE the os.getenv calls below, so UNIVERSE_ADD/REMOVE from
+              # .env are honoured even when universe is imported directly.
+
 _CORE = [
     "AAVE", "ADA", "ALGO", "AR", "ARB", "ATOM", "AVAX", "AXS", "BCH", "BNB",
     "BTC", "CAKE", "COMP", "CRV", "DOGE", "DOT", "DYDX", "ENJ", "ETC", "ETH",
