@@ -177,8 +177,21 @@ CALIBRATION_PATH = os.getenv("CALIBRATION_PATH", "logs/calibration.json")
 # --------------------------------------------------------------------------
 MEMBERSHIP_ENABLED = _env_bool("MEMBERSHIP_ENABLED", False)
 MEMBERSHIP_DB = os.getenv("MEMBERSHIP_DB", "logs/subscriptions.db")
-ADMIN_USER_IDS = frozenset(
-    int(x) for x in os.getenv("ADMIN_USER_IDS", "").replace(" ", "").split(",") if x)
+def _parse_admin_ids(raw: str) -> frozenset:
+    """Crash-proof: one malformed id must not kill the whole app at import."""
+    out = set()
+    for x in raw.replace(" ", "").split(","):
+        if not x:
+            continue
+        try:
+            out.add(int(x))
+        except ValueError:
+            print(f"[config] ADMIN_USER_IDS entry {x!r} is not a numeric id — ignored",
+                  file=sys.stderr)
+    return frozenset(out)
+
+
+ADMIN_USER_IDS = _parse_admin_ids(os.getenv("ADMIN_USER_IDS", ""))
 PRO_DAILY_QUERY_CAP = _env_int("PRO_DAILY_QUERY_CAP", 30)
 MEMBERSHIP_GRACE_HOURS = _env_float("MEMBERSHIP_GRACE_HOURS", 24.0)
 REFERRAL_BONUS_DAYS = _env_int("REFERRAL_BONUS_DAYS", 7)

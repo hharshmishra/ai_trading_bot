@@ -17,6 +17,14 @@ unit-testable with a fake bot; the wiring in main() needs live tokens.
 """
 from __future__ import annotations
 
+# Load .env BEFORE any project import: config.py snapshots os.environ at
+# import time, and the very first project import below pulls config in. The
+# old load_dotenv() inside main() ran too late — local `python telegram_app.py`
+# processes silently used flag DEFAULTS instead of the .env values (systemd
+# deployments with EnvironmentFile= were unaffected).
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import logging
 import os
@@ -346,8 +354,7 @@ def _chat_id(*names: str) -> Optional[int]:
 
 
 def main() -> None:
-    from dotenv import load_dotenv
-    load_dotenv()
+    # .env already loaded at module import (see file top) — must precede config
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
