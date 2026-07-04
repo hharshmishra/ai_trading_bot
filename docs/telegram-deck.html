@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitReinforceX — The Telegram Layer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e14; --panel:#11161f; --panel2:#151b26; --line:#1f2733;
+  --text:#dbe3ee; --muted:#8a97a8; --dim:#5c6879;
+  --teal:#2dd4bf; --violet:#8b7cf6; --amber:#fbbf24; --rose:#fb7185; --green:#34d399; --blue:#60a5fa;
+  --mono:'JetBrains Mono',monospace; --disp:'Space Grotesk',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font:15px/1.65 'Inter',sans-serif}
+a{color:var(--teal);text-decoration:none}
+code{font-family:var(--mono);font-size:.86em;background:#0d1420;border:1px solid var(--line);padding:1px 6px;border-radius:5px;color:#9fd4c8}
+section{max-width:1100px;margin:0 auto;padding:68px 5vw;scroll-margin-top:20px}
+h2{font-family:var(--disp);font-size:26px;margin-bottom:6px}
+h3{font-family:var(--disp);font-size:17px;margin:26px 0 10px;color:#c6d2e2}
+.k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);display:block;margin-bottom:10px}
+p.lead{color:var(--muted);max-width:780px;margin-bottom:18px}
+.hero{min-height:min(60vh,680px);display:flex;align-items:center;background:
+  radial-gradient(900px 420px at 12% -10%,rgba(96,165,250,.15),transparent 60%),
+  radial-gradient(900px 480px at 88% 0%,rgba(45,212,191,.13),transparent 60%),var(--bg);
+  border-bottom:1px solid var(--line)}
+.hero-in{max-width:1100px;margin:0 auto;padding:80px 5vw 60px;width:100%}
+.hero h1{font-family:var(--disp);font-size:clamp(32px,5.2vw,54px);line-height:1.1;letter-spacing:-.01em}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--blue),var(--teal));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{color:var(--muted);max-width:660px;margin:18px 0 26px;font-size:16px}
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 15px;font-family:var(--mono);font-size:12px;color:#a9b7c8}
+.chip b{color:var(--teal)}
+nav.toc{position:sticky;top:0;z-index:9;background:rgba(10,14,20,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav.toc .in{max-width:1100px;margin:0 auto;padding:10px 5vw;display:flex;gap:18px;overflow-x:auto;white-space:nowrap}
+nav.toc a{font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+nav.toc a:hover{color:var(--teal)}
+.grid{display:grid;gap:16px}
+.grid.c3{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.card h4{font-family:var(--disp);font-size:16px;margin-bottom:8px}
+.card .sub{color:var(--muted);font-size:13.5px}
+.card.a{border-top:2px solid var(--teal)} .card.b{border-top:2px solid var(--violet)} .card.d{border-top:2px solid var(--amber)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+td{padding:10px 12px;border-bottom:1px solid #161d29;vertical-align:top}
+tr:hover td{background:#131a26}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.tbl-wrap table{margin:0}
+.mono{font-family:var(--mono);font-size:12.5px}
+.yes{color:var(--green);font-weight:600} .no{color:var(--dim)}
+.callout{border-left:3px solid var(--amber);background:rgba(251,191,36,.06);border-radius:0 10px 10px 0;padding:16px 18px;margin:18px 0;font-size:13.5px;color:#cdb98a}
+.callout.risk{border-color:var(--rose);background:rgba(251,113,133,.06);color:#e3a9b4}
+pre{background:#0d1420;border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#a8bfd4;margin:14px 0}
+pre .c{color:#5c6879}pre .g{color:#34d399}pre .v{color:#8b7cf6}pre .t{color:#2dd4bf}
+/* telegram-style message bubbles */
+.tg{max-width:480px;background:#182533;border:1px solid #22344a;border-radius:14px 14px 14px 4px;padding:13px 16px;margin:14px 0;font-size:13.5px;line-height:1.55;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.tg .from{font-family:var(--mono);font-size:10.5px;color:var(--blue);letter-spacing:.06em;margin-bottom:6px}
+.tg b{color:#eaf2fb}
+.tg i{color:#93a7bd}
+.tg .kb{margin-top:10px;display:grid;gap:5px}
+.tg .kb .row{display:flex;gap:5px}
+.tg .kb button{flex:1;background:#1f3247;color:#7fc2ff;border:1px solid #2a4562;border-radius:8px;padding:7px 4px;font-size:12px;font-family:'Inter';cursor:default}
+.flow{display:grid;gap:10px;margin:18px 0}
+.step{display:grid;grid-template-columns:44px 1fr;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 18px}
+.step .n{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,rgba(96,165,250,.18),rgba(45,212,191,.18));border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;color:var(--blue)}
+.step b{display:block;margin-bottom:3px}
+.step .sub{color:var(--muted);font-size:13.5px}
+.copybox{background:var(--panel2);border:1px dashed #2a3546;border-radius:12px;padding:14px 16px;margin:10px 0;font-size:13px;color:#b7c3d3;white-space:pre-wrap;font-family:var(--mono)}
+footer{border-top:1px solid var(--line);padding:40px 5vw 60px;text-align:center;color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-in">
+    <h1>The <em>Telegram Layer</em><br>bots · channels · commands · formats</h1>
+    <p>Everything BitReinforceX does on Telegram, in one reference: which bot exists for what,
+    what rights each needs where, every command with its real reply format, every message the
+    system sends, and the flows that connect them.</p>
+    <div class="chips">
+      <div class="chip"><b>3</b> bots</div>
+      <div class="chip"><b>2</b> channels</div>
+      <div class="chip"><b>13</b> commands</div>
+      <div class="chip"><b>10</b> message types</div>
+      <div class="chip"><b>1</b> human admin (you)</div>
+    </div>
+  </div>
+</div>
+
+<nav class="toc"><div class="in">
+  <a href="#cast">The Cast</a><a href="#rights">Admin Rights</a><a href="#commands">Commands</a>
+  <a href="#formats">Message Formats</a><a href="#keyboard">Dev Keyboard</a><a href="#flows">Flows</a>
+  <a href="#timing">Timing</a><a href="#botfather">BotFather Setup</a><a href="#gotchas">Limits & Gotchas</a>
+</div></nav>
+
+<!-- ================================ CAST ================================ -->
+<section id="cast">
+  <span class="k">01 · The cast</span>
+  <h2>Three bots, two channels, one human</h2>
+  <p class="lead">Each bot has ONE job. They never talk to each other — the SQLite databases and
+  the shared process are the only glue. All three run inside the single
+  <code>python telegram_app.py</code> process (one asyncio loop, three pollers).</p>
+  <div class="grid c3">
+    <div class="card a">
+      <h4>📡 Bot A — Signals</h4>
+      <p class="sub"><code>TELEGRAM_BOT_TOKEN</code> · the spine of the process</p>
+      <ul class="sub" style="margin:10px 0 0 18px">
+        <li>Posts every signal to the customer channel (clean) and dev channel (verbose)</li>
+        <li>Owns the dev feedback keyboard + its button callbacks</li>
+        <li>Hosts the scheduler / grader / nightly background loops</li>
+        <li>No commands. Nobody DMs it.</li>
+      </ul>
+    </div>
+    <div class="card b">
+      <h4>🤖 Bot B — Control</h4>
+      <p class="sub"><code>TELEGRAM_CONTROL_BOT_TOKEN</code> · the Pro product</p>
+      <ul class="sub" style="margin:10px 0 0 18px">
+        <li>Six on-demand agent commands, DM only</li>
+        <li>Pro-gated + 30 queries/day cap (when membership is on)</li>
+        <li>Member of NO channel — pure DM surface</li>
+      </ul>
+    </div>
+    <div class="card d">
+      <h4>💳 Bot D — Membership</h4>
+      <p class="sub"><code>MEMBERSHIP_BOT_TOKEN</code> · the storefront &amp; doorman</p>
+      <ul class="sub" style="margin:10px 0 0 18px">
+        <li>/plans → payment → auto-invite; join-request gate on the channel</li>
+        <li>Hourly lifecycle: reminders → kick → winback</li>
+        <li>Admin ops: /grant /revoke /subs (only <code>ADMIN_USER_IDS</code>)</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Channels</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Channel</th><th>Visibility</th><th>Who posts</th><th>Content</th><th>Who's in it</th></tr>
+    <tr><td><b>Customer / signals</b><br><span class="mono">CUSTOMER_CHAT_ID</span></td>
+        <td>Private, join-request link only</td><td>Bot A</td>
+        <td>Clean signal messages, nothing else</td>
+        <td>Paying subscribers (gate: Bot D approves by database)</td></tr>
+    <tr><td><b>Dev</b><br><span class="mono">DEV_CHAT_ID</span></td>
+        <td>Private, invite only — YOURS</td><td>Bot A</td>
+        <td>Same signal + brain dump + 3-row feedback keyboard</td>
+        <td>You (and anyone you trust to grade signals)</td></tr>
+  </table></div>
+</section>
+
+<!-- =============================== RIGHTS =============================== -->
+<section id="rights">
+  <span class="k">02 · Admin rights matrix</span>
+  <h2>Exactly which right, exactly where — nothing more</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th></th><th>Customer channel</th><th>Dev channel</th><th>DM surface</th></tr>
+    <tr><td><b>Bot A</b> (signals)</td>
+        <td class="yes">Admin: Post Messages</td>
+        <td class="yes">Admin: Post Messages</td>
+        <td class="no">—</td></tr>
+    <tr><td><b>Bot B</b> (control)</td>
+        <td class="no">not a member</td>
+        <td class="no">not a member</td>
+        <td class="yes">answers Pro users</td></tr>
+    <tr><td><b>Bot D</b> (membership)</td>
+        <td class="yes">Admin: Invite Users via Link + Ban Users</td>
+        <td class="no">not a member</td>
+        <td class="yes">storefront + lifecycle DMs</td></tr>
+    <tr><td><b>You</b></td>
+        <td class="yes">Owner</td>
+        <td class="yes">Owner</td>
+        <td class="yes">admin commands to Bot D (<span class="mono">ADMIN_USER_IDS</span>)</td></tr>
+  </table></div>
+  <div class="callout">Principle of least privilege: Bot D can invite and remove but cannot post;
+  Bot A can post but cannot manage members; Bot B touches no channel at all. A leaked token
+  compromises only its own lane — revoke at @BotFather, paste the new token in .env, restart.</div>
+</section>
+
+<!-- ============================== COMMANDS ============================== -->
+<section id="commands">
+  <span class="k">03 · Command reference</span>
+  <h2>All 13 commands</h2>
+  <h3>Bot B — agent queries (Pro users · 30/day cap)</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Command</th><th>Args (defaults)</th><th>Reply shape (real format)</th></tr>
+    <tr><td class="mono">/news</td><td class="mono">pair (BTCUSDT)</td><td class="mono">news BTCUSDT · action=BUY conf=0.71 · overall=Neutral pair=Bullish</td></tr>
+    <tr><td class="mono">/indicator</td><td class="mono">pair tf (BTCUSDT 4h)</td><td class="mono">indicator BTCUSDT 4h · action=buy conf=0.643 · type1=buy type2=skip</td></tr>
+    <tr><td class="mono">/research</td><td class="mono">pair tf (ETHUSDT 4h)</td><td class="mono">research ETHUSDT 4h · action=skip conf=0.55</td></tr>
+    <tr><td class="mono">/context</td><td class="mono">tf (4h)</td><td class="mono">fear&amp;greed, BTC dominance + ROC, SPX/DXY trends, money-flow phase, drivers</td></tr>
+    <tr><td class="mono">/regime</td><td class="mono">pair tf (BTCUSDT 4h)</td><td class="mono">regime=trend_up · adx=31.2 chop=35.1 vol_pct=0.62 atr=412.5</td></tr>
+    <tr><td class="mono">/derivs</td><td class="mono">pair (BTCUSDT)</td><td class="mono">action=sell conf=0.58 · funding=0.00031 oiΔ=2.145 · top L/S=1.82 acct L/S=2.31</td></tr>
+  </table></div>
+  <h3>Bot D — public (anyone)</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Command</th><th>What happens</th></tr>
+    <tr><td class="mono">/start [payload]</td><td>Registers the user, issues referral code, handles deep links (<span class="mono">?start=pro</span>, <span class="mono">?start=ref_CODE</span>), shows /plans</td></tr>
+    <tr><td class="mono">/plans</td><td>All 7 SKUs with tap-to-buy buttons → UPI/USDT rail choice</td></tr>
+    <tr><td class="mono">/ref</td><td>Your referral code + share link (+7 days both sides on friend's first payment)</td></tr>
+    <tr><td class="mono">/paid</td><td>Forces an immediate on-chain check of your pending USDT order</td></tr>
+  </table></div>
+  <h3>Bot D — admin (only ids in <code>ADMIN_USER_IDS</code>; silent for everyone else)</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Command</th><th>Syntax</th><th>Effect</th></tr>
+    <tr><td class="mono">/grant</td><td class="mono">/grant &lt;user_id&gt; &lt;days&gt; &lt;signals|pro&gt;</td><td>Comp access; signals grants also DM a join link. Logged as a ₹0 admin payment.</td></tr>
+    <tr><td class="mono">/revoke</td><td class="mono">/revoke &lt;user_id&gt; &lt;signals|pro&gt;</td><td>Kills access AND removes from the channel immediately</td></tr>
+    <tr><td class="mono">/subs</td><td class="mono">/subs</td><td>Active counts per product · expiring ≤7d · 30-day revenue by currency</td></tr>
+  </table></div>
+  <p class="sub" style="color:var(--muted)">Dev-channel feedback buttons (Bot A) are callbacks, not commands — see §05.</p>
+</section>
+
+<!-- ============================== FORMATS =============================== -->
+<section id="formats">
+  <span class="k">04 · Message formats</span>
+  <h2>Every message the system sends, as subscribers see it</h2>
+
+  <h3>1 · Customer signal (Bot A → customer channel)</h3>
+  <div class="tg"><div class="from">BOT A → customer channel</div>
+    <b>🚨 SIGNAL ALERT 🚨</b><br><br>
+    <b>OVERALL TRADE SIGNAL:</b> BUY<br>
+    <b>NWE SIGNAL:</b> BUY<br>
+    💱 <b>PAIR:</b> BTCUSDT<br>
+    ⏰ <b>TIMEFRAME:</b> 4h<br>
+    📊 <b>CONFIDENCE:</b> 84.20%<br>
+    🧠 <b>REASON:</b> Trend continuation + volume<br>
+    📐 <b>REGIME:</b> TRENDING ↑<br>
+    🎯 <b>TRIGGER:</b> trend_continuation<br>
+    🎚 <b>CAL. CONFIDENCE:</b> 61%<br>
+    🧲 <b>DERIVS:</b> crowded longs — funding 0.031%/8h<br><br>
+    ⚠️ <i>Disclaimer: This is NOT financial advice.<br>
+    Trading involves risk – do your own research.<br>
+    Sharing or reselling these signals is illegal.</i><br><br>
+    ~ <b>BitReinforceX</b><br>&nbsp;&nbsp;"Reinforcing your trades with AI power"
+  </div>
+  <p class="sub" style="color:var(--muted)">REGIME/TRIGGER/CAL./DERIVS lines appear only when available. Calibrated confidence comes from the nightly isotonic fit — the honest number vs the raw one.</p>
+
+  <h3>2 · Dev signal + brain dump + keyboard (Bot A → dev channel)</h3>
+  <div class="tg"><div class="from">BOT A → dev channel (same signal, then:)</div>
+    <b>🧠 BRAIN DUMP — BTCUSDT 4h</b><br>
+    final: <b>BUY</b> conf=0.842 score=0.51<br>
+    • indicator: BUY (conf 0.79)<br>
+    • research: SKIP (conf 0.55)<br>
+    • news: BUY (conf 0.71)<br>
+    • derivatives: SELL (conf 0.58)<br>
+    • meta p(correct): 0.564<br>
+    • NWE direct: BUY
+    <div class="kb">
+      <div class="row"><button>BUY</button><button>SELL</button><button>SKIP LEARNING</button></div>
+      <div class="row"><button>1.0</button><button>-4.0</button><button>Auto-Assign</button></div>
+      <div class="row"><button>CLOSE SESSION</button></div>
+    </div>
+  </div>
+
+  <h3>3 · Storefront /plans (Bot D → DM)</h3>
+  <div class="tg"><div class="from">BOT D → DM</div>
+    ⚡ <b>BitReinforceX — AI Signal System</b><br><br>
+    Four AI agents vote on 48 pairs, every hour, at real candle closes. Every signal carries
+    entry, target and stop — and every signal is graded against what the market actually did.<br><br>
+    📡 <b>SIGNALS</b> — private channel<br>
+    &nbsp;· 7 days — ₹199 (2.5 USDT)<br>
+    &nbsp;· 15 days — ₹349 (4.5 USDT)<br>
+    &nbsp;· 30 days — ₹599 (7 USDT)<br><br>
+    🤖 <b>PRO</b> — talk to the agents (/news /indicator /research /context /regime /derivs)<br>
+    &nbsp;· 15 days — ₹299 (3.5 USDT)<br>
+    &nbsp;· 30 days — ₹499 (6 USDT)<br><br>
+    💎 <b>BUNDLE</b> — both, 30 days — ₹899 (10 USDT)<br>
+    🏆 <b>FOUNDERS</b> — both, 90 days — ₹2,199 (25 USDT)<br><br>
+    Pay by UPI or USDT (TRC-20). Access is instant and automatic.<br>
+    <i>Educational market analysis, not financial advice.</i>
+    <div class="kb">
+      <div class="row"><button>Signals · 7 days · ₹199</button><button>Signals · 15 days · ₹349</button></div>
+      <div class="row"><button>Signals · 30 days · ₹599</button><button>Pro · 15 days · ₹299</button></div>
+      <div class="row"><button>Pro · 30 days · ₹499</button><button>Bundle · 30 days · ₹899</button></div>
+      <div class="row"><button>Founders · 90 days · ₹2,199</button></div>
+    </div>
+  </div>
+
+  <h3>4 · USDT payment instructions (Bot D → DM)</h3>
+  <div class="tg"><div class="from">BOT D → DM</div>
+    ₮ Send <b>exactly 7.413 USDT</b> (TRC-20) to:<br>
+    <code>TD5siFSeA2QX4zzujBeLhkxVRenCr6Eaxh</code><br><br>
+    The exact amount is how we match your payment — do not round it.<br>
+    Access activates automatically after confirmation (~1–2 min).<br>
+    Sent but nothing happened after 5 min? Reply /paid
+  </div>
+  <p class="sub" style="color:var(--muted)">The 3 decimals ARE the order id — each pending order gets a unique suffix, and SKU ranges never overlap, so one amount maps to exactly one order.</p>
+
+  <h3>5 · Welcome (on payment) · 6 · Reminders · 7 · Kick · 8 · Winback</h3>
+  <div class="tg"><div class="from">BOT D → DM · on activation</div>
+    ✅ You're in! <b>Signals · 30 days</b> active until <b>03 Aug 2026, 14:05 IST</b>.<br>
+    Your invite (valid 48h — tap it and you'll be approved automatically):<br>
+    https://t.me/+aBcDeFgH...<br>
+    Signals arrive at :30 IST — 1h hourly · 4h ×6/day · daily 05:30 · weekly Mon 05:30.<br>
+    Your referral code: <b>BRX17A52C</b> — every friend who joins gives you both +7 days.<br>
+    <i>Educational market analysis, not financial advice.</i>
+  </div>
+  <div class="tg"><div class="from">BOT D → DM · T-3 days (and T-1 day)</div>
+    ⏳ Your signals plan ends in 3 days (03 Aug 2026, 14:05 IST).<br>
+    Renew now and access continues without a gap:
+    <div class="kb"><div class="row"><button>Renew 30d — ₹599</button><button>Bundle — ₹899</button></div></div>
+  </div>
+  <div class="tg"><div class="from">BOT D → DM · after expiry + 24h grace</div>
+    Your signals plan has ended — your seat is held. Rejoin in one tap:
+    <div class="kb"><div class="row"><button>Renew 30d — ₹599</button><button>Bundle — ₹899</button></div></div>
+  </div>
+  <div class="tg"><div class="from">BOT D → DM · once, +7 days after expiry</div>
+    We held your seat 👀 Come back this week and I'll add +3 bonus days to any plan.
+    <div class="kb"><div class="row"><button>Renew 30d — ₹599</button><button>Bundle — ₹899</button></div></div>
+  </div>
+
+  <h3>9 · Join declined (stranger taps the channel link) · 10 · Pro refusal (Bot B)</h3>
+  <div class="tg"><div class="from">BOT D → DM · join request declined</div>
+    This channel is for subscribers. Plans: https://t.me/YourPayBot?start=plans
+  </div>
+  <div class="tg"><div class="from">BOT B → DM · non-Pro user tries /news</div>
+    🔒 Pro plan required for agent commands.<br>
+    Subscribe: https://t.me/YourPayBot?start=pro
+  </div>
+</section>
+
+<!-- ============================== KEYBOARD ============================== -->
+<section id="keyboard">
+  <span class="k">05 · The dev keyboard</span>
+  <h2>Three rows that train the system</h2>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><b>Row 1 — BUY / SELL / SKIP LEARNING (ground truth)</b>
+      <span class="sub">What ACTUALLY happened in the market — not what you traded. Required before row 2. SKIP LEARNING closes the session teaching nothing.</span></div></div>
+    <div class="step"><div class="n">2</div><div><b>Row 2 — 1.0 / −4.0 / Auto-Assign (apply)</b>
+      <span class="sub"><b>Auto-Assign</b> (default choice): every agent graded against your outcome with the active reward map (+1 correct / −4 wrong / −1.5 flat / −1 missed). <b>1.0 / −4.0</b> override the NEWS agent only; others still auto. Pressing on an already-auto-graded signal applies a correction netting the policy to YOUR verdict.</span></div></div>
+    <div class="step"><div class="n">3</div><div><b>Row 3 — CLOSE SESSION</b>
+      <span class="sub">Discard. Sessions also expire after 12h and are superseded by the next signal on the same pair+TF.</span></div></div>
+  </div>
+  <div class="callout">You never HAVE to press anything — the auto-grader labels every prediction via
+  triple-barrier within the horizon. Buttons exist to confirm or override. Answers you may see:
+  "Select BUY/SELL/SKIP first" (row order), "Prediction still recording — try again in a moment"
+  (clicked within seconds of the signal), "(news override ignored — agent absent)".</div>
+</section>
+
+<!-- ================================ FLOWS ================================ -->
+<section id="flows">
+  <span class="k">06 · Flows</span>
+  <h2>How the pieces connect</h2>
+  <pre>
+<span class="c">SIGNAL FLOW (automatic, every candle close)</span>
+scheduler tick (:30 IST) ─▶ 4 agents vote ─▶ regime gate ─▶ emit?
+   ├─ yes ─▶ <span class="t">Bot A → customer channel</span> (clean)  +  <span class="t">Bot A → dev channel</span> (dump + keyboard)
+   └─ every prediction recorded → auto-graded → agents rewarded    <span class="c">(you: nothing)</span>
+
+<span class="c">PURCHASE FLOW (automatic)</span>
+DM <span class="v">Bot D</span> /plans ─▶ tap SKU ─▶ UPI link or USDT amount ─▶ pay
+   ─▶ poller (30s) confirms ─▶ DB row ─▶ join-request invite DM'd
+   ─▶ user taps ─▶ join request ─▶ <span class="g">approved by database</span>          <span class="c">(you: nothing)</span>
+
+<span class="c">EXIT FLOW (automatic, hourly)</span>
+T-3d reminder ─▶ T-1d reminder ─▶ expiry ─▶ 24h grace
+   ─▶ ban+unban (out, seat held) ─▶ +7d winback DM, once           <span class="c">(you: nothing)</span>
+</pre>
+</section>
+
+<!-- =============================== TIMING =============================== -->
+<section id="timing">
+  <span class="k">07 · Timing</span>
+  <h2>What fires when (IST)</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>When</th><th>What</th><th>Bot</th></tr>
+    <tr><td class="mono">every hour :30</td><td>1h signals (+ ingest fresh headlines first)</td><td>A</td></tr>
+    <tr><td class="mono">01:30 05:30 09:30 13:30 17:30 21:30</td><td>4h signals</td><td>A</td></tr>
+    <tr><td class="mono">05:30 daily</td><td>1d signals</td><td>A</td></tr>
+    <tr><td class="mono">Mon 05:30</td><td>1w signals</td><td>A</td></tr>
+    <tr><td class="mono">every 60s</td><td>auto-grader labels due predictions, applies rewards</td><td>process</td></tr>
+    <tr><td class="mono">every 30s</td><td>payment poller (Razorpay status / TRON transfers)</td><td>D</td></tr>
+    <tr><td class="mono">hourly</td><td>lifecycle sweep: reminders · kicks · winbacks</td><td>D</td></tr>
+    <tr><td class="mono">02:00 daily</td><td>nightly self-training (meta model, calibration, EB confidences)</td><td>process</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================== BOTFATHER ============================== -->
+<section id="botfather">
+  <span class="k">08 · BotFather setup</span>
+  <h2>Paste-ready configuration</h2>
+  <h3>Command menus (<code>/setcommands</code> at @BotFather, per bot)</h3>
+  <p class="sub" style="color:var(--muted)">Bot B:</p>
+  <div class="copybox">news - news agent verdict for a pair
+indicator - indicator decide (pair + timeframe)
+research - research agent macro logics
+context - market context snapshot
+regime - trending/ranging classification
+derivs - derivatives positioning</div>
+  <p class="sub" style="color:var(--muted)">Bot D:</p>
+  <div class="copybox">plans - see subscription plans
+start - start / referral link
+ref - your referral code
+paid - I sent USDT, check now</div>
+  <p class="sub" style="color:var(--muted)">Bot A: no commands — leave empty.</p>
+  <h3>One-time channel setup</h3>
+  <div class="flow">
+    <div class="step"><div class="n">1</div><div><b>Customer channel → Administrators</b><span class="sub">Add Bot A (Post Messages). Add Bot D (Invite Users via Link + Ban Users).</span></div></div>
+    <div class="step"><div class="n">2</div><div><b>Customer channel → Invite Links</b><span class="sub">Create the public marketing link with <b>"Request Admin Approval" ON</b>. Old open links: revoke them — any link without join-request bypasses the gate.</span></div></div>
+    <div class="step"><div class="n">3</div><div><b>Dev channel → Administrators</b><span class="sub">Bot A only (Post Messages). Bot D has no business here.</span></div></div>
+    <div class="step"><div class="n">4</div><div><b>Going production later</b><span class="sub">Repeat 1–2 on the production channel, flip <code>CUSTOMER_CHAT_ID</code> in .env, restart. One line.</span></div></div>
+  </div>
+</section>
+
+<!-- =============================== GOTCHAS =============================== -->
+<section id="gotchas">
+  <span class="k">09 · Limits & gotchas</span>
+  <h2>Telegram platform rules worth knowing</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Rule</th><th>Consequence for us</th></tr>
+    <tr><td><b>Bots cannot DM a user first</b></td><td>Reminders/invites reach only users who ever pressed /start on Bot D. Every PAYING user has (they bought via DM). But a <code>/grant</code> to someone who never talked to Bot D → the invite DM fails; tell them to /start the bot first.</td></tr>
+    <tr><td><b>Bots cannot list channel members</b></td><td>No retroactive audit possible — which is why every JOIN must pass the database gate (join-request links only, never member_limit links).</td></tr>
+    <tr><td><b>No "remove member" API</b></td><td>The kick is <code>ban + immediate unban</code> — that's the standard idiom; the seat stays rejoinable.</td></tr>
+    <tr><td><b>Rate limits ~30 msg/s per bot, ~20 msg/min per channel</b></td><td>Why three bots share the work; a burst cycle never queues behind membership DMs.</td></tr>
+    <tr><td><b>Join-request links need the bot online</b></td><td>If the process is down, joins wait as pending requests — approved on the next start. Nothing lost.</td></tr>
+    <tr><td><b>Tokens are the keys to everything</b></td><td>Live only in .env (gitignored). Leak → @BotFather /revoke → paste new token → restart. Each bot revocable independently.</td></tr>
+  </table></div>
+  <div class="callout risk">Never post the invite links Bot D mints into public places — they're per-buyer.
+  The only public link is the channel's own "Request Admin Approval" link, which is safe by construction:
+  the database, not the link, decides who gets in.</div>
+</section>
+
+<footer>BitReinforceX · Telegram layer reference · 2026-07-04 · formats mirror signals.py / membership/bot.py exactly</footer>
+</body>
+</html>
