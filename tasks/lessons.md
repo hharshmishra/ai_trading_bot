@@ -66,3 +66,30 @@
     modules, TTL-cache resets, a tmp-store singleton, and an llm_client
     reset. Rule: every module-level cache, singleton, or env-driven flag
     needs an entry in the hermeticity fixture the day it is born.
+
+11. **Fix at the chokepoint, not the symptom.** load_dotenv() was patched into
+    telegram_app only; 5 script entry points stayed env-broken (backtests
+    silently ignored UNIVERSE_ADD + gate flags). config.py is the module every
+    entry point imports before reading a flag — loading .env THERE (guarded by
+    BITREINFORCEX_NO_DOTENV for tests) fixed all of them at once. When a bug is
+    "this file didn't load env/config", ask what shared thing every caller
+    already touches and put the fix there.
+
+12. **Amount-fingerprint keys must match the comparison, not a reconstruction.**
+    USDT order matching compared full-amount millis, but uniqueness was checked
+    on `fingerprint % 1 * 1000` — a *reconstruction* that folded half-integer
+    base prices (2.5/3.5/4.5) into the wrong namespace, minting duplicate
+    amounts. Key any dedup/uniqueness check on the SAME quantity the downstream
+    match uses (here: round(total*1000)), never on a derived slice of it.
+
+13. **Sync HTTP in an async handler blocks the whole loop.** The membership
+    payment code called requests directly inside PTB async handlers/loops that
+    share the single event loop with signal broadcasting — a slow rail froze
+    everything for up to the timeout. Every blocking call in an async context
+    must go through asyncio.to_thread (the rest of the codebase already did).
+
+14. **RL step size must be anchored to a fixed reference point, not a moving
+    mean.** v3.2 normalized indicator steps at |r|=2, but wins are always +1 and
+    the worst loss is -4, so wins came out ~5x weaker than wrongs and weights
+    ratcheted down. Anchor the win step to the +1 case and the loss step to the
+    -4 case (both = historical constants); scale only the in-between losses.

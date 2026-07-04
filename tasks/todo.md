@@ -159,3 +159,24 @@ Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
       double-count -> active map, single count; indicator steps scale with
       |reward| (mean-|r| normalized: 0.015|r| type, +0.025|r|/-0.035|r| direct)
 - [x] Deprecation notes on legacy console feedback paths. 260 tests green x2.
+
+
+## 2026-07-04 — v3.3 post-review hardening (10-angle max review) + reset
+- [x] SECURITY: leaked Bot D token scrubbed from tracked .env.example (rotate!)
+- [x] CRITICAL: USDT fingerprint collision on half-integer SKUs; keyed on
+      total-millis now; +40% overquote -> <+0.1; 24h no-reuse
+- [x] CRITICAL: all 4 sync payment HTTP calls -> asyncio.to_thread (were
+      freezing the shared loop / signal broadcasting)
+- [x] CRITICAL: TRON match-before-expire + 600s grace; /paid rescues expired
+- [x] HIGH: paywall no longer silently off without token; gate deep link real;
+      grant onboarding honesty (bot can't DM un-started users); env at config
+      chokepoint (backtests were ignoring UNIVERSE_ADD + gate flags);
+      lesson-10 flags in hermeticity fixture; indicator step re-anchored;
+      tron per-row guard; price-display honesty
+- [x] MED: revoke retry via kicker; bundle single DM; VERDICT single-writer;
+      referral no-resurrect; edited-msg + stale-keyboard guards; per-app
+      start/stop isolation; unconfigured-rail expiry; NULL-expiry predicate;
+      welcome expiry incl bonus; TronGrid pagination; fingerprint exhaustion
+- [x] cleanup: dead news_reward plumbing; assert->check; SKU/IST dedup; GC
+- [x] requests 2.31->2.32.4 (pins intact); reset_learning.py + tests
+- [x] 268 tests green x2; logs/ clean

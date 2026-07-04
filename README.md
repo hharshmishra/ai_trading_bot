@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-246%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -72,7 +72,7 @@ python scripts/preflight.py            # must print READY (checks pins, DB, univ
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **246 passing**.
+Tests (no network / keys needed): `pytest -q` → **268 passing**.
 
 ## 🎓 How it learns
 
@@ -159,6 +159,8 @@ journalctl -u bitreinforcex -f
 ```
 
 Backups: nightly `deploy/backup.sh` (WAL-safe) or continuous Litestream (`deploy/litestream.yml`).
+
+**Reset learning to zero** (before a real go-live, after test runs polluted the record): `python scripts/reset_learning.py` (dry-run) then `--yes`. Backs up everything it wipes; keeps market-data cache and the subscriptions DB.
 
 > ⚠️ **Pinned stack — do not casually `pip install`:** `numpy==1.25.0`, `pandas==2.0.3`
 > (vendored `pandas_ta` in `vendor/` — upstream is deleted from PyPI/GitHub),
