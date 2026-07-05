@@ -2,12 +2,12 @@
 
 # ⚡ BitReinforceX
 
-**Self-training crypto signal system — four RL agents, one brain, evidence-gated everything.**
+**Self-training crypto signal system — five RL agents, one brain, evidence-gated everything.**
 
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-296%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-325%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -25,7 +25,7 @@
 
 ## 🧠 What it is
 
-Four reinforcement-learning agents analyze 48 Binance USDT pairs every hour and vote; a
+Five reinforcement-learning agents analyze 48 Binance USDT pairs every hour and vote; a
 decision brain aggregates them with learned priorities; a **regime-gated signal gate** decides
 what's worth sending; a grader later checks every prediction against realized price with
 **triple-barrier labels** and rewards each agent for what *it* said. Nightly, the system trains a
@@ -37,6 +37,7 @@ meta-model and confidence calibration **on its own track record**.
 | 📈 **Indicator** | NWE · Chandelier · AlphaTrend · trend triggers · 8 type-2 rules | no | learned per-indicator weights + type1/type2 blend |
 | 🔬 **Research** | ecosystem membership · SPX+DXY price/news · money-flow · BTC dominance | gpt-4o-mini | 10-feature softmax bandit |
 | 🧲 **Derivatives** | funding rate · open interest · top-trader long/short (Binance USDM, keyless) | no | 8-feature softmax bandit |
+| 🌡 **Sentiment** | Fear&Greed level/trend/extremes · mempool fee pressure · tx momentum · price-vs-usage divergence · CoinGecko trending · taker buy/sell flow (raw klines) | no | 10-feature softmax bandit |
 | 📐 **Regime** *(gate, not voter)* | ADX + Choppiness + vol-percentile, hysteresis | no | deterministic |
 
 ## 🏗 Architecture
@@ -47,13 +48,13 @@ meta-model and confidence calibration **on its own track record**.
  scheduler (IST :30 == UTC :00) ─▶ market context (once/cycle: overall news,
         │ UTC-aligned cascade        SPX+DXY trends, dominance ROC, F&G, drivers)
         ▼                                   │
-   per pair ─▶ BRAIN ─▶ News · Indicator(+Regime) · Research · Derivatives
+   per pair ─▶ BRAIN ─▶ News · Indicator(+Regime) · Research · Derivatives · Sentiment
                  │            weighted vote  Σ wᵢ·aᵢ·confᵢ
                  ▼
      regime-gated signal gate ─▶ Telegram (customer + dev+buttons channels)
                  │ every prediction recorded (SQLite WAL)
                  ▼
-   grader (60s): triple-barrier first-touch labels ─▶ rewards ─▶ 4 policies
+   grader (60s): triple-barrier first-touch labels ─▶ rewards ─▶ 5 policies
    nightly (02:00 IST): meta-label model · confidence calibration ·
                         empirical-Bayes indicator confidences · ecosystem refresh
 ```
@@ -72,7 +73,7 @@ python scripts/preflight.py            # must print READY (checks pins, DB, univ
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **296 passing**.
+Tests (no network / keys needed): `pytest -q` → **325 passing**.
 
 ## 🎓 How it learns
 
@@ -148,6 +149,7 @@ All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented)
 | `EMPIRICAL_DIRECT_CONF` | ⏸ off | self-arms once ≥30 graded direct-fires exist |
 | `T2_EXTRA_VOTES` (rsi30/mfi/cci/vwap/fib/ichimoku) | ❌ off | measured 2026-07-05: no significant edge, all six refused promotion ([evidence](docs/v34-vote-evidence.md)) |
 | `T2_RULE_LEARNING` | ⏸ off | v3.4 per-rule type-2 credibility — recommended ON at go-live reset; learns each rule's weight from real outcomes |
+| `SENTIMENT_ENABLED` | ⏸ off | v3.5 5th voter (F&G/on-chain/taker flow, all $0) — recommended ON at go-live; feature IC study in [docs/sentiment-evidence.md](docs/sentiment-evidence.md) |
 
 </details>
 
