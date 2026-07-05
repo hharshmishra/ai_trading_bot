@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-325%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-332%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -73,7 +73,7 @@ python scripts/preflight.py            # must print READY (checks pins, DB, univ
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **325 passing**.
+Tests (no network / keys needed): `pytest -q` → **332 passing**.
 
 ## 🎓 How it learns
 
