@@ -37,7 +37,9 @@ def _imports():
     import ccxt, openai, telegram, langgraph, pandas, numpy, pandas_ta, feedparser, pydantic  # noqa
     import brain.decision_maker, cycle, signals, grader, persistence, rag, ingestion, telegram_app  # noqa
     import config, backtest.engine, grading.barriers, jobs.nightly, agents.regime_agent, agents.derivatives_agent, agents.sentiment_agent  # noqa
-    return "core + app + accuracy-v2 modules import"
+    import backtest.data, backtest.metrics, backtest.report, backtest.sweep  # noqa
+    import membership.store, membership.bot, membership.gate, membership.jobs, membership.payments, membership.plans  # noqa
+    return "core + app + accuracy-v2 + membership modules import"
 
 
 def _sklearn():
@@ -76,6 +78,21 @@ def _env():
     return f"required set; channels: {chans or 'NONE (no signals will send)'}"
 
 
+def _membership():
+    """Rent-out mode misconfig fails BEFORE start, not at the first /grant.
+    Token missing is a WARN (storefront degrades by design, Pro gate stays on);
+    empty ADMIN_USER_IDS while enabled is a hard fail (no one can operate)."""
+    import config as _c
+    if not _c.MEMBERSHIP_ENABLED:
+        return "disabled (flag off)"
+    if not _c.ADMIN_USER_IDS:
+        raise RuntimeError("MEMBERSHIP_ENABLED=true but ADMIN_USER_IDS is empty")
+    notes = []
+    if not os.getenv("MEMBERSHIP_BOT_TOKEN"):
+        notes.append("WARN: no MEMBERSHIP_BOT_TOKEN (storefront bot won't start; gate still on)")
+    return f"enabled, {len(_c.ADMIN_USER_IDS)} admin(s)" + ("; " + "; ".join(notes) if notes else "")
+
+
 def _universe():
     """Every SYMBOLS pair must have a fresh 1h candle — delisted/halted pairs
     (the LUNA/TON class of rot) fail loudly here instead of silently skipping
@@ -104,6 +121,7 @@ check("sklearn", _sklearn)
 check("database", _db)
 check("rag embedder", _embedder)
 check("env vars", _env)
+check("membership", _membership)
 check("universe", _universe)
 
 print("\n" + ("READY" if ok else "NOT READY — fix the XX items above"))

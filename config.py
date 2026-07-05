@@ -187,6 +187,10 @@ SENTIMENT_ENABLED = _env_bool("SENTIMENT_ENABLED", False)     # 5th voter (shado
 SENTIMENT_TTL_SECONDS = _env_int("SENTIMENT_TTL_SECONDS", 55 * 60)  # market-wide bundle cache
 SENTIMENT_BRAIN_SCORE = _env_float("SENTIMENT_BRAIN_SCORE", 1.5)
 
+# Retention (v3.6): nightly prune of graded predictions older than N days
+# (outcomes/rewards rows go with them; ungraded rows always kept). <=0 = keep all.
+PRED_RETENTION_D = _env_int("PRED_RETENTION_D", 120)
+
 # --------------------------------------------------------------------------
 # Meta-labeling / calibration (nightly)
 # --------------------------------------------------------------------------

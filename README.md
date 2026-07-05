@@ -158,6 +158,7 @@ All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented)
 ```bash
 # Oracle Cloud ARM (or any VPS) — one process, one systemd unit, one SQLite file
 sudo cp deploy/bitreinforcex.service /etc/systemd/system/   # edit User= and paths
+sudo cp deploy/logrotate.conf /etc/logrotate.d/bitreinforcex # runtime.log rotation
 sudo systemctl daemon-reload && sudo systemctl enable --now bitreinforcex
 journalctl -u bitreinforcex -f
 ```

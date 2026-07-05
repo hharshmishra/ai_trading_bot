@@ -202,10 +202,45 @@ def run_nightly_training(store) -> Dict[str, Any]:
         except Exception as e:
             logger.error("ecosystem refresh failed: %s", e)
 
+    # Retention (v3.6): AFTER training consumed the full window — prune graded
+    # history past PRED_RETENTION_D and size-cap the append-only shadow logs,
+    # so disk and the nightly re-read stay bounded forever.
+    pruned = 0
+    try:
+        pruned = store.gc_predictions(time.time(), config.PRED_RETENTION_D)
+        _truncate_shadow_logs()
+    except Exception as e:
+        logger.error("retention gc failed: %s", e)
+
     return {"rows": len(rows), "meta": meta,
             "calibrated_tfs": sorted((calib or {}).get("knots", {})),
             "direct_conf_indicators": sorted((direct_conf or {}).get("conf", {})),
-            "ecosystems_refreshed": ecosystems_refreshed}
+            "ecosystems_refreshed": ecosystems_refreshed,
+            "pruned_predictions": pruned}
+
+
+_SHADOW_LOGS = ("logs/predictions_log.json", "logs/indicator_predictions.jsonl",
+                "logs/research_predictions.jsonl")
+_SHADOW_LOG_CAP = 50 * 1024 * 1024      # 50 MB per file
+
+
+def _truncate_shadow_logs(cap: int = _SHADOW_LOG_CAP) -> None:
+    """Keep the newest half of any shadow line-log that outgrew the cap.
+    Line-aligned (drops to the next newline) so every kept line stays valid."""
+    for path in _SHADOW_LOGS:
+        try:
+            if not os.path.exists(path) or os.path.getsize(path) <= cap:
+                continue
+            with open(path, "rb") as f:
+                f.seek(-cap // 2, os.SEEK_END)
+                tail = f.read()
+            nl = tail.find(b"\n")
+            tail = tail[nl + 1:] if nl >= 0 else tail
+            with open(path, "wb") as f:
+                f.write(tail)
+            logger.info("truncated shadow log %s to %d bytes", path, len(tail))
+        except Exception as e:
+            logger.error("shadow log truncate failed for %s: %s", path, e)
 
 
 # --------------------------------------------------------------------------- #

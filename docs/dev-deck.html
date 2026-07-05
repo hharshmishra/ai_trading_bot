@@ -426,7 +426,7 @@
           <tr><td class="file">scripts/experiments/lorentzian_knn.py</td><td>Experiment only (D5): Lorentzian-distance kNN, walk-forward 70/30. Adopt only if holdout precision &gt; 40% with n ≥ 100 — else documented and dropped.</td><td class="fns">run_pair() · lorentzian_dist()</td></tr>
           <tr><td class="file">deploy/</td><td>bitreinforcex.service (systemd), backup.sh (WAL-safe sqlite3 .backup, keeps 14), litestream.yml (continuous replication).</td><td class="fns">systemctl enable --now bitreinforcex · journalctl -u bitreinforcex -f</td></tr>
           <tr><td class="file">vendor/pandas-ta</td><td>Vendored pandas_ta 0.3.14b0 — upstream deleted from PyPI/GitHub; the reason for the numpy&lt;2 pin.</td><td class="fns">installed by requirements.txt (./vendor/pandas-ta)</td></tr>
-          <tr><td class="file">tests/ · 23 files</td><td>325 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 325 passed</td></tr>
+          <tr><td class="file">tests/ · 31 files</td><td>325 tests, no network or keys needed: barriers, regime+gate, grader TB, correctness-v3 audit, per-agent enhancements, harness parity, runtime, RAG, nightly.</td><td class="fns">pytest -q → 325 passed</td></tr>
         </tbody>
       </table>
     </div>

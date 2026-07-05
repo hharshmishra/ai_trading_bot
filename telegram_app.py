@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
@@ -411,7 +412,7 @@ def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         logger.error("TELEGRAM_BOT_TOKEN not set")
-        return
+        sys.exit(1)          # systemd must show `failed`, not a silent 0-exit loop
 
     from brain.decision_maker import DecisionMaker
     dm = DecisionMaker(prefer_csv=False)

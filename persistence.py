@@ -541,6 +541,23 @@ class Store:
             self.conn.commit()
         return stale
 
+    def gc_predictions(self, now_ts: float, keep_days: int) -> int:
+        """Retention (v3.6): delete GRADED predictions older than keep_days,
+        with their outcomes/rewards rows. Ungraded rows are always kept (the
+        grader still owes them a verdict). keep_days <= 0 disables. Returns
+        rows deleted. Nightly training window stays bounded forever."""
+        if keep_days <= 0:
+            return 0
+        cutoff = now_ts - keep_days * 86400.0
+        with self._lock:
+            old = "SELECT id FROM predictions WHERE graded = 1 AND created_ts < ?"
+            self.conn.execute(f"DELETE FROM outcomes WHERE prediction_id IN ({old})", (cutoff,))
+            self.conn.execute(f"DELETE FROM rewards WHERE prediction_id IN ({old})", (cutoff,))
+            cur = self.conn.execute(
+                "DELETE FROM predictions WHERE graded = 1 AND created_ts < ?", (cutoff,))
+            self.conn.commit()
+            return int(cur.rowcount or 0)
+
     # ------------------------------------------------------------------ #
     # Macro snapshots (BTC dominance / fear&greed history for ROC features)
     # ------------------------------------------------------------------ #
