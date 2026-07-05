@@ -188,6 +188,8 @@ economics: [`docs/subscription-deck.html`](docs/subscription-deck.html). Enable 
 | [`docs/dev-deck.html`](docs/dev-deck.html) | **The developer deck** — full system walkthrough 0→100: every module, every env var, every flow, runbook |
 | [`docs/accuracy-upgrade.html`](docs/accuracy-upgrade.html) | v2 evidence deck — baseline vs gate-v2 numbers, truth table, rollout criteria |
 | [`docs/system-design.html`](docs/system-design.html) | v1 rebuild deck — original architecture story |
+| [`docs/telegram-deck.html`](docs/telegram-deck.html) | Telegram operations deck — bots, commands, admin flows, message formats |
+| [`docs/subscription-deck.html`](docs/subscription-deck.html) | Subscription business deck — plans, pricing, payment rails, lifecycle |
 | `logs/backtest/*/report.md` | Every archived backtest run (baseline, ablation, candidates) |
 | [`tasks/todo.md`](tasks/todo.md) / [`tasks/lessons.md`](tasks/lessons.md) | Project log + hard-won lessons |
 

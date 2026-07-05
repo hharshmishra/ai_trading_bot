@@ -9,7 +9,7 @@
 #   Logic 5  – DXY inverse relation via news
 #
 # Features from each logic are blended into a contextual bandit (3 actions:
-# sell, skip, buy). You can call .learn(+1 / -4) after the outcome.
+# sell, skip, buy). The grader trains it via stateless apply_reward().
 #
 # Dependencies (already present in your project):
 #   - utils.data_fetcher.DataFetcher (CSV-first; CCXT fallback)
@@ -20,7 +20,7 @@
 #   agent = ResearchAgent()
 #   out = agent.decide("ETCUSDT", "1h", indicator_agent=IndicatorAgent(), news_agent=NewsAgent())
 #   print(out)
-#   agent.learn(predicted_action=out["action"], true_outcome="buy")  # +1 if correct else -4
+#   agent.apply_reward(feats, action_idx, reward)  # stateless, from stored snapshot
 # -----------------------------------------------------------------------------
 from __future__ import annotations
 import os, json, math, time, random
@@ -240,8 +240,6 @@ class ResearchAgent:
         _ensure_logs()
         self.data = DataFetcher(prefer_csv=prefer_csv)
         self._rl = ResearchRL(n_features=10)
-        self._last_feats: Optional[List[float]] = None
-        self._last_action: Optional[int] = None
 
     # ---------- Public API ----------
     def decide(self,
@@ -305,8 +303,6 @@ class ResearchAgent:
         mag = abs(sum(float(wi)*float(xi) for wi,xi in zip(w, feats)))
         confidence = float(1.0 / (1.0 + math.exp(-2.5 * mag)))
 
-        self._last_feats = feats
-        self._last_action = action_idx
 
         details = {
             "features": {
@@ -349,20 +345,6 @@ class ResearchAgent:
             # RL replay payload for stateless, race-free reward application.
             "rl": {"feats": feats, "action_idx": action_idx},
         }
-
-    def learn(self, predicted_action: str | int, true_outcome: str | float | int | None = None, reward: Optional[float] = None):
-        if self._last_feats is None or self._last_action is None:
-            return
-        if reward is None and true_outcome is not None:
-            try:
-                outcome = str(true_outcome).lower()
-                pred = predicted_action if isinstance(predicted_action, str) else ["sell","skip","buy"][int(predicted_action)]
-                reward = 1.0 if outcome == pred else -4.0
-            except Exception:
-                reward = -1.0
-        elif reward is None:
-            reward = -1.0
-        self._rl.update(self._last_feats, self._last_action, float(reward))
 
     def apply_reward(self, feats: Optional[List[float]], action_idx: Optional[int], reward: float):
         """Stateless RL update (see NewsAgent.apply_reward). Trains on the passed

@@ -205,49 +205,6 @@ class IndicatorAgent:
             _append_jsonl(PRED_LOG, asdict(out))
         return out
 
-    def learn(self, predicted_action: str, true_outcome: str,
-              reward_correct: int = 1, reward_wrong: int = -4):
-        """
-        RL feedback: update weights depending on whether our final action matched 'true_outcome'.
-        You call this AFTER you know the result.
-        """
-        pol = _load_policy()
-        reward = reward_correct if predicted_action == true_outcome else reward_wrong
-
-        # Global score for this agent
-        pol["score"] = pol.get("score", 0) + reward
-
-        # Nudge Type1/Type2 weights depending on which contributed more to the last decision.
-        # We look at the last line in predictions log to see the blend contributions.
-        try:
-            with open(PRED_LOG, "r") as f:
-                last = None
-                for line in f:
-                    last = json.loads(line)
-            if last and "details" in last and "blend" in last["details"]:
-                b = last["details"]["blend"]
-                # if we were correct, increase contribution weights that supported the action; else decrease
-                sign = 1 if reward > 0 else -1
-                pol["weights"]["type1"] = float(np.clip(pol["weights"]["type1"] + sign*0.03*b.get("type1_share", 0.5), 0.05, 0.95))
-                pol["weights"]["type2"] = float(np.clip(pol["weights"]["type2"] + sign*0.03*b.get("type2_share", 0.5), 0.05, 0.95))
-                # renormalize
-                s = pol["weights"]["type1"] + pol["weights"]["type2"]
-                pol["weights"]["type1"] = round(pol["weights"]["type1"]/s, 4)
-                pol["weights"]["type2"] = round(pol["weights"]["type2"]/s, 4)
-
-                # If a specific direct indicator fired, adapt its credibility
-                fired = b.get("fired_direct", None)
-                if fired:
-                    d = pol["direct_signals"].get(fired, {"weight": 0.7, "score": 0})
-                    d["score"] += reward
-                    d["weight"] = float(np.clip(d["weight"] + (0.05 if reward > 0 else -0.07), 0.1, 0.95))
-                    pol["direct_signals"][fired] = d
-        except FileNotFoundError:
-            pass
-
-        _save_policy(pol)
-        self.policy = pol
-
     def apply_reward(self, blend: Dict[str, Any], reward: float):
         """Stateless RL update — replays the Type1/Type2 weight nudge from the
         PASSED ``blend`` snapshot (decide()'s details["blend"]) instead of

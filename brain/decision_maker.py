@@ -1,28 +1,15 @@
 #!/usr/bin/env python3
 """brain/decision_maker.py
 
-Decision Maker (Brain) agent that orchestrates three child agents:
-  - IndicatorAgent (high priority initially)
-  - ResearchAgent
-  - NewsAgent (lowest priority initially)
+Decision Maker (Brain): orchestrates the five voter agents — Indicator,
+Research, News, Derivatives, Sentiment — for a symbol+timeframe and
+aggregates their votes with learned priority weights (persistent policy:
+scores -> normalized weights).
 
-Features:
-  - Calls child agents for a symbol+timeframe and aggregates their outputs
-  - Maintains a simple persistent brain policy (scores -> normalized weights)
-  - Prompts the user for ground-truth (buy/sell/skip) and a numeric reward for the news agent
-  - Forwards feedback to child agents:
-      * news_agent.learn(action_label, reward_float)
-      * indicator_agent.learn(predicted_action, true_outcome_str)
-      * research_agent.learn(predicted_action, true_outcome_str)
-  - Updates internal agent scores and re-normalizes weights so the brain "learns" which agents to prioritize
-
-This file is written to be dropped into your existing project under brain/decision_maker.py
-It is intentionally dependency-light for orchestration; running decisions will call the agents which rely on your project's data fetching and indicator libraries.
-
-Usage (simple):
-    python decision_maker.py
-
-You can also import DecisionMaker from other scripts.
+Learning: the grader calls ``apply_brain_feedback(agent_results, label)``
+after every graded prediction; agent scores drift toward the voters that
+were right and the weights renormalize. Per-agent policy updates happen in
+each agent's own stateless ``apply_reward`` — never here.
 """
 
 from __future__ import annotations
@@ -371,92 +358,3 @@ class DecisionMaker:
         ``agent_results`` = {agent: {"action": str, "confidence": float}}.
         """
         self._apply_feedback_to_brain(agent_results, true_outcome)
-
-
-    def feedback(self, decision_out: Dict[str, Any]):
-        """DEPRECATED console-only flow (input() prompts; uses the legacy
-        instance-state NewsAgent.learn). Production feedback goes through
-        grader.apply_manual_feedback (Telegram VERDICT buttons / auto-grader),
-        which trains from stored per-prediction snapshots."""
-        agents = decision_out["agents"]
-        # show summary
-        print("\n=== Decision summary ===")
-        print(json.dumps(decision_out, indent=2))
-        print("========================\n")
-
-        # ask for true outcome (buy/sell/skip)
-        true = input("Enter true outcome (buy/sell/skip) for this chart (or blank to skip learning): ").strip()
-        if true == "":
-            print("Skipping learning for this chart.")
-            return
-
-        true = self._normalize_action(true)
-        # ask for numeric reward for news agent
-        nr_in = input("Enter numeric reward for news agent (Enter to auto-assign via the active reward map): ").strip()
-        if nr_in == "":
-            # auto-assign through the SAME active map as production (never the
-            # old inline +1/-4 — that reintroduced the lesson-9 flat-market bug)
-            from grader import active_reward_fn
-            news_pred = agents.get("news", {}).get("action")
-            news_reward = active_reward_fn()(news_pred, true)
-            print(f"Auto news reward => {news_reward}")
-        else:
-            try:
-                news_reward = float(nr_in)
-            except Exception:
-                print("Invalid numeric reward, falling back to -4.0")
-                news_reward = -4.0
-
-        # Forward feedback to child agents
-        # NewsAgent: learn(action_label, reward_float)
-        try:
-            news_raw = agents.get("news", {}).get("raw", {})
-            # news_agent.learn expects the textual label from last run (e.g., 'BUY'/'SELL'/'SKIP') or None
-            news_action_label = None
-            if isinstance(news_raw, dict) and "action" in news_raw:
-                news_action_label = news_raw.get("action")
-            self.news.learn(news_action_label, reward=news_reward)
-        except Exception as e:
-            print("Warning: news_agent.learn failed:", e)
-
-        # IndicatorAgent: learn(predicted_action, true_outcome)
-        try:
-            ind_pred = agents.get("indicator", {}).get("action")
-            self.indicator.learn(predicted_action=ind_pred, true_outcome=true)
-        except Exception as e:
-            print("Warning: indicator_agent.learn failed:", e)
-
-        # ResearchAgent: learn(predicted_action, true_outcome) - research.learn can accept either true_outcome or reward
-        try:
-            res_pred = agents.get("research", {}).get("action")
-            self.research.learn(predicted_action=res_pred, true_outcome=true, reward=None)
-        except Exception:
-            # some versions accept (pred, true_outcome) directly under other param names
-            try:
-                self.research.learn(res_pred, true)
-            except Exception as e:
-                print("Warning: research_agent.learn failed:", e)
-
-        # Update brain policy scores & weights
-        try:
-            self._apply_feedback_to_brain(agents, true)
-            print("Brain policy updated. New weights:", json.dumps(self.policy.get("weights", {}), indent=2))
-        except Exception as e:
-            print("Warning: failed to update brain policy:", e)
-
-
-def demo_run():
-    dm = DecisionMaker(prefer_csv=False)
-    # default symbols and timeframes - you can change this or wire it to your main.py
-    symbols = ["LINKUSDT", "POLUSDT"]
-    timeframes = ["4h"]
-
-    for s in symbols:
-        for tf in timeframes:
-            print(f"\n--- Running brain for {s} @ {tf} ---")
-            out = dm.decide(s, tf)
-            dm.feedback(out)
-
-
-if __name__ == "__main__":
-    demo_run()

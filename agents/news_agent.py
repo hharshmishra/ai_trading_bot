@@ -401,15 +401,11 @@ class NewsAgent:
     Usage:
         agent = NewsAgent()
         result = agent.run(pair="BTCUSDT")
-        # later when ground-truth known:
-        agent.learn(result["action"], reward=+1 or -4)
+        # later, the grader trains it statelessly:
+        agent.apply_reward(features, action_idx, reward)
     """
     def __init__(self):
         self._rl = NewsRL()   # width follows N_FEATURES; old 5-dim policies zero-pad up
-        self._last_features: List[float] | None = None
-        self._last_action: int | None = None
-        self._last_pair: str | None = None
-        self._last_raw: Dict[str, Any] | None = None
 
     def scan_overall(self, headlines: Optional[List[str]] = None) -> OverallScanJSON:
         """Run ONLY the market-wide panic/sentiment scan (1 LLM call).
@@ -464,10 +460,6 @@ class NewsAgent:
         feats = features_from_jsons(overall, pairj)
         action = self._rl.select_action(feats)
 
-        self._last_features = feats
-        self._last_action = action
-        self._last_pair = pair
-        self._last_raw = {"overall": overall.model_dump(), "pair": pairj.model_dump()}
 
         result = {
             "agent": "news",
@@ -488,40 +480,6 @@ class NewsAgent:
 
         return result
 
-    def learn(self, taken_action_label: str | None, reward: float):
-        """DEPRECATED (legacy console path only — DecisionMaker.feedback()).
-
-        Trains from INSTANCE state (_last_features), which is wrong under
-        concurrent per-pair analysis. Every production path (auto-grader,
-        Telegram verdicts) uses apply_reward() with the stored per-prediction
-        snapshot instead. Kept for the interactive CLI; do not wire anew.
-        """
-        if self._last_features is None:
-            return
-
-        if taken_action_label is not None:
-            label_map = {"SELL": 0, "SKIP": 1, "BUY": 2}
-            action_idx = label_map.get(taken_action_label.upper(), self._last_action)
-        else:
-            action_idx = self._last_action
-
-        if action_idx is None:
-            return
-
-        self._rl.update(self._last_features, action_idx, float(reward))
-
-        # Optional: log the learning step
-        learn_log = {
-            "type": "news_agent_learn",
-            "pair": self._last_pair,
-            "features": self._last_features,
-            "action": action_to_label(action_idx),
-            "reward": reward,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        with open(PREDICTIONS_LOG_PATH, "a") as f:
-            f.write(json.dumps(learn_log) + "\n")
-
     def apply_reward(self, features: List[float] | None, action_idx: int | None, reward: float):
         """Stateless RL update — train on the PASSED prediction, not on mutable
         instance state (``_last_*``). This is the fix for the concurrency
@@ -532,16 +490,3 @@ class NewsAgent:
         if features is None or action_idx is None:
             return
         self._rl.update(list(features), int(action_idx), float(reward))
-
-
-# =========================
-# Quick local test (optional)
-# =========================
-if __name__ == "__main__":
-    agent = NewsAgent()
-    out = agent.run("SPX")
-    print(json.dumps(out, indent=2))
-    user_input_str = input("Enter a floating-point number: ")
-    float_number = float(user_input_str)
-    # later, after you verify outcome, call:
-    agent.learn(out["action"], reward=float_number)   # or -4.0
