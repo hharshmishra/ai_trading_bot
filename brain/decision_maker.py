@@ -47,12 +47,13 @@ POLICY_PATH = os.path.join(LOG_DIR, "brain_policy.json")
 
 # Voter roster. Every aggregation / feedback loop iterates this tuple, so adding
 # a voter is one entry here + a DEFAULT_SCORES prior.
-AGENT_NAMES = ("indicator", "research", "news", "derivatives")
+AGENT_NAMES = ("indicator", "research", "news", "derivatives", "sentiment")
 
 # initial (relative) scores - indicator > research > news as you asked;
-# derivatives starts between research and news (informative but unproven).
+# derivatives/sentiment start between research and news (informative, unproven).
 DEFAULT_SCORES = {"indicator": 3.0, "research": 2.0, "news": 1.0,
-                  "derivatives": config.DERIV_BRAIN_SCORE}
+                  "derivatives": config.DERIV_BRAIN_SCORE,
+                  "sentiment": config.SENTIMENT_BRAIN_SCORE}
 
 
 def _ensure_logs_dir():
@@ -92,6 +93,10 @@ class DecisionMaker:
         # grader can replay rewards on rows that carry deriv snapshots.
         from agents.derivatives_agent import DerivativesAgent
         self.derivatives = DerivativesAgent(data_fetcher=self.indicator.data)
+        # 5th voter (v3.5): crowd sentiment + on-chain + taker flow; same
+        # always-instantiated rule so the grader can replay stored snapshots.
+        from agents.sentiment_agent import SentimentAgent
+        self.sentiment = SentimentAgent(data_fetcher=self.indicator.data)
         self.policy = _load_policy()
         self._normalize_weights()
 
@@ -188,8 +193,8 @@ class DecisionMaker:
             confidence = float(dd.get("confidence", 0.0) or 0.0)
             return {"action": action, "confidence": confidence, "raw": dd}
 
-        # DerivativesAgent returns a dict (Phase 4); unavailable -> conf 0.0
-        if agent_name == "derivatives":
+        # Derivatives/Sentiment agents return dicts; unavailable -> conf 0.0
+        if agent_name in ("derivatives", "sentiment"):
             dd = raw_out if isinstance(raw_out, dict) else getattr(raw_out, "__dict__", {"action": None, "confidence": 0.0})
             action = self._normalize_action(dd.get("action"))
             confidence = float(dd.get("confidence", 0.0) or 0.0)
@@ -251,6 +256,16 @@ class DecisionMaker:
             except Exception:
                 deriv_out = None
         agent_results["derivatives"] = self._coerce_agent_out(deriv_out, "derivatives")
+
+        # call sentiment agent (v3.5; flag-gated, keyless free data)
+        sent_out = None
+        if "sentiment" in use_agents and config.SENTIMENT_ENABLED:
+            try:
+                sent_out = self.sentiment.decide(symbol, timeframe,
+                                                 market_context=market_context)
+            except Exception:
+                sent_out = None
+        agent_results["sentiment"] = self._coerce_agent_out(sent_out, "sentiment")
 
         # Weighted aggregation
         weights = self.policy.get("weights", {"indicator": 0.6, "research": 0.3, "news": 0.1})

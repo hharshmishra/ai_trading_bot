@@ -235,7 +235,8 @@ def fmt_signal_message(pair: str, tf: str, overall_action: str, nwe_action: str,
                        regime: Optional[str] = None,
                        trigger: Optional[str] = None,
                        calibrated_conf: Optional[float] = None,
-                       deriv_note: Optional[str] = None) -> str:
+                       deriv_note: Optional[str] = None,
+                       sentiment_note: Optional[str] = None) -> str:
     reason_text = _REASON_TEXT.get(reason, "NWE" if reason == "nwe_direct" else "Confidence > 80%")
     conf_pc = f"{conf * 100:.2f}%"
     extra = ""
@@ -249,6 +250,8 @@ def fmt_signal_message(pair: str, tf: str, overall_action: str, nwe_action: str,
         extra += f"🎚 <b>CAL. CONFIDENCE:</b> {calibrated_conf * 100:.0f}%\n"
     if deriv_note:
         extra += f"🧲 <b>DERIVS:</b> {deriv_note}\n"
+    if sentiment_note:
+        extra += f"🌡 <b>SENTIMENT:</b> {sentiment_note}\n"
     if extra:
         extra = extra.rstrip("\n") + "\n"
     return (
@@ -273,10 +276,10 @@ def fmt_brain_dump(res: Dict[str, Any], outcome: Optional[Dict[str, Any]] = None
     final = res.get("final", {})
     lines = [f"<b>🧠 BRAIN DUMP — {res.get('chartName')} {res.get('timeframe')}</b>",
              f"final: <b>{final.get('action','?').upper()}</b> conf={final.get('confidence')} score={final.get('score')}"]
-    for name in ("indicator", "research", "news", "derivatives"):
+    for name in ("indicator", "research", "news", "derivatives", "sentiment"):
         a = agents.get(name)
         if a is None:
-            continue  # e.g. derivatives absent on legacy decisions
+            continue  # e.g. derivatives/sentiment absent on legacy decisions
         lines.append(f"• {name}: {str(a.get('action','?')).upper()} (conf {a.get('confidence')})")
     meta = res.get("meta") or {}
     if meta.get("meta_p") is not None:

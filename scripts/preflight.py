@@ -36,7 +36,7 @@ print("BitReinforceX preflight\n")
 def _imports():
     import ccxt, openai, telegram, langgraph, pandas, numpy, pandas_ta, feedparser, pydantic  # noqa
     import brain.decision_maker, cycle, signals, grader, persistence, rag, ingestion, telegram_app  # noqa
-    import config, backtest.engine, grading.barriers, jobs.nightly, agents.regime_agent, agents.derivatives_agent  # noqa
+    import config, backtest.engine, grading.barriers, jobs.nightly, agents.regime_agent, agents.derivatives_agent, agents.sentiment_agent  # noqa
     return "core + app + accuracy-v2 modules import"
 
 

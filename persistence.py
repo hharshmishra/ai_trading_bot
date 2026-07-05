@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_news_pub ON news_items(published_ts);
 
 # Columns on `predictions` that hold JSON and must be (de)serialised.
 _PRED_JSON_COLS = ("news_feats", "research_feats", "indicator_blend", "brain_weights",
-                   "regime_feats", "deriv_feats")
+                   "regime_feats", "deriv_feats", "sentiment_feats")
 
 # Accuracy-upgrade columns, added by the idempotent migration below. Additive
 # ALTER TABLE only — legacy rows keep NULLs and grade via the legacy path.
@@ -147,6 +147,10 @@ _MIGRATION_COLS = {
         ("meta_p", "REAL"),                # meta-label p(correct), shadow
         ("calibrated_conf", "REAL"),
         ("final_action_v2", "TEXT"),       # deadzone-v2 shadow action (A7)
+        ("sentiment_action", "TEXT"),      # 5th voter snapshot (v3.5)
+        ("sentiment_action_idx", "INTEGER"),
+        ("sentiment_feats", "TEXT"),       # JSON list
+        ("sentiment_conf", "REAL"),
     ],
     "outcomes": [
         ("label_tb", "TEXT"),              # tp | sl | timeout
@@ -264,6 +268,10 @@ class Store:
         deriv_raw = _raw("derivatives")
         deriv_rl = deriv_raw.get("rl") or {}
 
+        # Sentiment voter snapshot (v3.5; same NULL-tolerant contract).
+        sent_raw = _raw("sentiment")
+        sent_rl = sent_raw.get("rl") or {}
+
         row = {
             "id": pid,
             "cycle_id": cycle_id,
@@ -304,6 +312,10 @@ class Store:
             "deriv_action_idx": deriv_rl.get("action_idx"),
             "deriv_feats": _dumps(deriv_rl.get("feats")),
             "deriv_conf": (agents.get("derivatives") or {}).get("confidence"),
+            "sentiment_action": sent_raw.get("action"),
+            "sentiment_action_idx": sent_rl.get("action_idx"),
+            "sentiment_feats": _dumps(sent_rl.get("feats")),
+            "sentiment_conf": (agents.get("sentiment") or {}).get("confidence"),
             "meta_p": meta_p,
             "calibrated_conf": calibrated_conf,
         }

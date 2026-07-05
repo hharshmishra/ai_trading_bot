@@ -24,7 +24,7 @@ def tree(tmp_path, monkeypatch):
     (tmp_path / "data" / "BTCUSDT_1h.csv").write_text("keep me")
     for f in ("news_agent_policy.json", "brain_policy.json",
               "indicator_agent_policy.json", "research_agent_policy.json",
-              "derivatives_agent_policy.json"):
+              "derivatives_agent_policy.json", "sentiment_agent_policy.json"):
         (tmp_path / "logs" / f).write_text(json.dumps({"weights": [[1.0]]}))
     (tmp_path / "logs" / "news_agent_policy.json.bak-5dim").write_text("{}")
     (tmp_path / "logs" / "meta_model.pkl").write_bytes(b"model")
@@ -86,7 +86,7 @@ def test_execute_wipes_learning_keeps_data_and_customers(tree, monkeypatch):
     assert _run(monkeypatch, "--yes") == 0
 
     # policies + artifacts + line logs gone
-    for f in ("brain_policy.json", "news_agent_policy.json",
+    for f in ("brain_policy.json", "news_agent_policy.json", "sentiment_agent_policy.json",
               "news_agent_policy.json.bak-5dim", "meta_model.pkl", "predictions_log.json"):
         assert not (tmp / "logs" / f).exists(), f
 

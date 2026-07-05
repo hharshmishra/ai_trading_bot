@@ -257,6 +257,14 @@ class Grader:
             self.store.record_reward(p["id"], "derivatives", p["deriv_action"], rd, source)
             rewards["derivatives"] = rd
 
+        sent_agent = getattr(self.dm, "sentiment", None)
+        if (sent_agent is not None and p.get("sentiment_feats") is not None
+                and p.get("sentiment_action_idx") is not None):
+            rs = reward_fn(p["sentiment_action"], label)
+            sent_agent.apply_reward(p["sentiment_feats"], p["sentiment_action_idx"], rs)
+            self.store.record_reward(p["id"], "sentiment", p["sentiment_action"], rs, source)
+            rewards["sentiment"] = rs
+
         # Brain priority weights learn from the same ground truth.
         agent_results = {
             "news": {"action": _norm_action(p.get("news_action")), "confidence": p.get("news_conf") or 0.0},
@@ -266,6 +274,9 @@ class Grader:
         if p.get("deriv_action") is not None:
             agent_results["derivatives"] = {"action": _norm_action(p.get("deriv_action")),
                                             "confidence": p.get("deriv_conf") or 0.0}
+        if p.get("sentiment_action") is not None:
+            agent_results["sentiment"] = {"action": _norm_action(p.get("sentiment_action")),
+                                          "confidence": p.get("sentiment_conf") or 0.0}
         try:
             self.dm.apply_brain_feedback(agent_results, label)
         except Exception:
@@ -362,6 +373,16 @@ class Grader:
                     deriv_agent.apply_reward(p["deriv_feats"], p["deriv_action_idx"], corr)
                 self.store.record_reward(p["id"], "derivatives", p["deriv_action"], corr, "correction")
                 corrections["derivatives"] = corr
+
+            sent_agent = getattr(self.dm, "sentiment", None)
+            if (sent_agent is not None and p.get("sentiment_feats") is not None
+                    and p.get("sentiment_action_idx") is not None):
+                manual = reward_fn(p["sentiment_action"], label)
+                corr = manual - prior_auto.get("sentiment", 0.0)
+                if corr:
+                    sent_agent.apply_reward(p["sentiment_feats"], p["sentiment_action_idx"], corr)
+                self.store.record_reward(p["id"], "sentiment", p["sentiment_action"], corr, "correction")
+                corrections["sentiment"] = corr
 
             if p.get("session_id"):
                 self.store.set_session_true_outcome(p["session_id"], label)

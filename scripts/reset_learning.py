@@ -50,6 +50,7 @@ POLICY_FILES = [
     "logs/research_agent_policy.json",
     "logs/indicator_agent_policy.json",
     "logs/derivatives_agent_policy.json",
+    "logs/sentiment_agent_policy.json",
     "logs/brain_policy.json",
 ]
 LINE_LOGS = [

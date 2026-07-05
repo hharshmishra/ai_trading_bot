@@ -84,13 +84,21 @@ class Broadcaster:
             note = _dn(deriv_raw.get("details")) if deriv_raw.get("available") else None
         except Exception:
             note = None
+        sent_raw = ((decision.get("agents") or {}).get("sentiment") or {}).get("raw") or {}
+        s_note = None
+        try:
+            from agents.sentiment_agent import sentiment_note as _sn
+            s_note = _sn(sent_raw.get("details")) if sent_raw.get("available") else None
+        except Exception:
+            s_note = None
         meta = decision.get("meta") or {}
         text = fmt_signal_message(
             pair, tf, overall, nwe, conf, reason,
             regime=ind_details.get("regime"),
             trigger=reason if reason.startswith("trend_") else None,
             calibrated_conf=meta.get("calibrated_conf"),
-            deriv_note=note)
+            deriv_note=note,
+            sentiment_note=s_note)
 
         cust_msg_id = None
         if self.customer_chat_id is not None:
@@ -277,6 +285,19 @@ async def cmd_derivs(update, context):
     await _reply(update, f"<b>derivs {pair}</b>\naction={out.get('action')} conf={_r3(out.get('confidence'))}\n"
                          f"funding={d.get('funding_rate')} oiΔ={_r3(d.get('oi_change_pct'))}\n"
                          f"top L/S={_r3(d.get('top_position_ratio'))} acct L/S={_r3(d.get('global_account_ratio'))}")
+
+
+async def cmd_sentiment(update, context):
+    dm = context.application.bot_data["dm"]
+    pair = (context.args[0] if context.args else "BTCUSDT").upper()
+    out = await asyncio.to_thread(dm.sentiment.decide, pair, "1h")
+    if not out.get("available"):
+        await _reply(update, f"<b>sentiment {pair}</b>\nall free sources down / fetch failed")
+        return
+    d = out.get("details") or {}
+    from agents.sentiment_agent import sentiment_note as _sn
+    await _reply(update, f"<b>sentiment {pair}</b>\naction={out.get('action')} conf={_r3(out.get('confidence'))}\n"
+                         f"{_sn(d) or 'no notable signals'}")
 
 
 async def cmd_regime(update, context):
@@ -485,7 +506,8 @@ def main() -> None:
         control_app = Application.builder().token(control_token).build()
         _handlers = {"news": cmd_news, "indicator": cmd_indicator,
                      "research": cmd_research, "context": cmd_context,
-                     "regime": cmd_regime, "derivs": cmd_derivs}
+                     "regime": cmd_regime, "derivs": cmd_derivs,
+                     "sentiment": cmd_sentiment}
         if subs_store is not None:
             # Pro gating: subscription + daily fair-use around every command.
             # Flag off -> handlers registered bare, behavior identical to today.
