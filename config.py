@@ -181,6 +181,13 @@ DERIV_OI_WINDOW_H = _env_int("DERIV_OI_WINDOW_H", 6)
 DERIV_BRAIN_SCORE = _env_float("DERIV_BRAIN_SCORE", 1.5)
 
 # --------------------------------------------------------------------------
+# Sentiment agent (v3.5): Fear&Greed + free BTC on-chain + taker order-flow
+# --------------------------------------------------------------------------
+SENTIMENT_ENABLED = _env_bool("SENTIMENT_ENABLED", False)     # 5th voter (shadow at go-live)
+SENTIMENT_TTL_SECONDS = _env_int("SENTIMENT_TTL_SECONDS", 55 * 60)  # market-wide bundle cache
+SENTIMENT_BRAIN_SCORE = _env_float("SENTIMENT_BRAIN_SCORE", 1.5)
+
+# --------------------------------------------------------------------------
 # Meta-labeling / calibration (nightly)
 # --------------------------------------------------------------------------
 META_MIN_ROWS = _env_int("META_MIN_ROWS", 500)

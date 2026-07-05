@@ -85,6 +85,7 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_USER_IDS", frozenset())
     monkeypatch.setattr(config, "T2_EXTRA_VOTES", frozenset())
     monkeypatch.setattr(config, "T2_RULE_LEARNING", False)
+    monkeypatch.setattr(config, "SENTIMENT_ENABLED", False)
     for _var in ("UNIVERSE_ADD", "UNIVERSE_REMOVE", "MEMBERSHIP_BOT_TOKEN",
                  "TELEGRAM_CONTROL_BOT_TOKEN", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET",
                  "TRON_WALLET_ADDRESS", "TRONGRID_API_KEY"):
