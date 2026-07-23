@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-367%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -73,7 +73,7 @@ python scripts/preflight.py            # must print READY (pins, DB, universe fr
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **359 passing**.
+Tests (no network / keys needed): `pytest -q` → **367 passing**.
 
 ## 🎓 How it learns
 
@@ -151,6 +151,7 @@ All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented)
 | `GATE_CONF_SATURATION` | ✅ 0.97 (v3.7) | conf==1.0 unanimity herds graded 1c/7w/15f emitted — suppressed (0 = off) |
 | `GATE_1H_MIXED` | ❌ off (v3.7) | 1h mixed-regime NWE emissions graded 2/17 on direction |
 | `NIGHTLY_CATCHUP` | ✅ on (v3.7) | runs a missed 02:00 IST training once at startup |
+| `GATE_NWE_VOL_MAX` | ⏸ 0/off (v3.7.1) | NWE volatility ceiling — 19d test found hit-rate FLAT across vol buckets (31/31/31/34%), so off; day-30 emitted-path data decides. Funnel now records `gate_reason`+`nwe_action` on every row |
 | `MONEY_FLOW_V2` `NEWS_EVENTS_ENABLED` `ECOSYSTEMS_AUTO` | ⏸ off | enable after shadow sanity |
 | `DIVERGENCE_VOTES` `GATE_TREND_REVERSAL` `GATE_NWE_HIGHER_TF` `GATE_1H_TREND` | ❌ off | measured: no benefit / harmful |
 | `EMPIRICAL_DIRECT_CONF` | ⏸ off | self-arms once ≥30 graded direct-fires exist |

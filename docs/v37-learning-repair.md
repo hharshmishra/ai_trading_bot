@@ -92,6 +92,7 @@ Order matters — **archive before any git operation**:
    GATE_CONF_SATURATION=0.97
    GATE_1H_MIXED=false
    NIGHTLY_CATCHUP=true
+   GATE_NWE_VOL_MAX=0
    ```
 6. `venv/bin/python scripts/preflight.py` → READY, then
    `sudo systemctl start bitreinforcex`. **Check the `env parity` line** — it
@@ -134,6 +135,29 @@ from `.env.example`, diffs them against the live environment, and **warns**
 (never fails — a box may omit optional keys deliberately) naming each missing
 key. Presence is the test, not truthiness, so `T2_EXTRA_VOTES=` counts as set.
 Values are never read or printed. Run preflight after any `.env` edit.
+
+## Day-30 protocol (v3.7.1 instrumentation)
+
+v3.7.1 records, on **every** prediction: `gate_reason` (the final gate verdict,
+including `conf_saturated`/`meta_gate` suppressions that `trigger_source`
+discards) and `nwe_action` (the NWE direction when one fired). After ~30 days
+of v3.7 on Oracle, rerun the audit and decide rebuild/keep/tune with:
+
+- **Funnel:** `SELECT gate_reason, emitted, COUNT(*) FROM predictions GROUP BY 1,2` —
+  every suppression path sized; join `outcomes` for the counterfactual quality
+  of each suppressed cohort (suppressed rows are graded too).
+- **Meta-gate verdict:** outcomes of `gate_reason='meta_gate'` rows vs emitted
+  rows — the gate's realized precision lift, measured directly.
+- **NWE hypothesis (operator: "NWE misses in violent markets"):** hit-rate of
+  `nwe_action` by `vol_pct` bucket × regime on the *emission-quality* subset.
+  19-day pre-check on all 1h NWE fires came back **negative** — hit-rate flat
+  across volatility buckets (calm 31.0% / normal 31.5% / elevated 31.1% /
+  extreme≥0.9 33.6%, n=7,303) — likely because the violent-market misses are
+  the trending-regime case gate v2 already suppresses. `GATE_NWE_VOL_MAX`
+  therefore ships **0 (off)**; arm via `.env` only if the day-30 emitted-path
+  data disagrees.
+- **Decision:** keep gate / tune thresholds / arm vol ceiling / redesign — now
+  with attribution, since the learning layer had 30 clean days underneath.
 
 ## Known follow-ups
 
