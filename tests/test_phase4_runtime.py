@@ -334,3 +334,83 @@ def test_run_cycle_conf_saturation_gate(tmp_path, monkeypatch):
         symbols=["AUSDT"], store=store, build_context=lambda *a, **k: None))
     assert summary2["emitted"] == 1 and broadcasts == ["AUSDT"]
     store.close()
+
+
+def test_run_cycle_persists_gate_reason_and_nwe(tmp_path, monkeypatch):
+    """v3.7.1 funnel telemetry: every row keeps its FINAL gate reason —
+    including cycle-level suppressions that trigger_source discards — and the
+    NWE direction when one fired."""
+    import config
+    from persistence import Store
+    from cycle import run_cycle
+
+    store = Store(str(tmp_path / "c.db"))
+    df = pd.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=10, freq="4h"),
+                       "open": 1.0, "high": 1.0, "low": 1.0, "close": 100.0, "volume": 1.0})
+    fetcher = SimpleNamespace(get_ohlcv=lambda s, tf, limit=500: df.copy())
+
+    def decide(sym, tf, ua, ctx):
+        d = make_decision(sym, tf, "buy", 0.9)
+        # ride an NWE signal on the indicator block so the gate sees it
+        d["agents"]["indicator"]["raw"].setdefault("details", {})["direct_signals"] = [
+            {"name": "nwe", "signal": "buy"}]
+        return d
+
+    dm = SimpleNamespace(indicator=None, news=None, research=None, decide=decide)
+
+    async def fake_broadcast(**kw):
+        return "sess"
+
+    # emitted row: gate_reason == trigger_source, nwe_action persisted
+    summary = asyncio.run(run_cycle(
+        ["4h"], dm=dm, data_fetcher=fetcher, broadcast=fake_broadcast,
+        symbols=["AUSDT"], store=store, build_context=lambda *a, **k: None))
+    assert summary["emitted"] == 1
+    with store._lock:
+        r = store.conn.execute(
+            "SELECT emitted, trigger_source, gate_reason, nwe_action "
+            "FROM predictions").fetchone()
+    assert r["emitted"] == 1
+    assert r["gate_reason"] == r["trigger_source"] and r["gate_reason"]
+    assert r["nwe_action"] == "buy"
+
+    # suppressed row: trigger_source NULL but gate_reason says why
+    monkeypatch.setattr(config, "GATE_CONF_SATURATION", 0.5)
+    asyncio.run(run_cycle(
+        ["4h"], dm=dm, data_fetcher=fetcher, broadcast=fake_broadcast,
+        symbols=["BUSDT"], store=store, build_context=lambda *a, **k: None))
+    with store._lock:
+        r2 = store.conn.execute(
+            "SELECT emitted, trigger_source, gate_reason FROM predictions "
+            "WHERE pair='BUSDT'").fetchone()
+    assert r2["emitted"] == 0
+    assert r2["trigger_source"] is None
+    assert r2["gate_reason"] == "conf_saturated"
+    store.close()
+
+
+def test_gate_reason_migration_is_additive(tmp_path):
+    """Reopening a pre-v3.7.1 DB adds the new columns without touching rows."""
+    import sqlite3 as sq
+    from persistence import Store
+    p = str(tmp_path / "old.db")
+    s = Store(p)
+    pid = s.record_prediction(make_decision("XUSDT", "4h", "buy", 0.9),
+                              candle_close_ts=1.0, entry_price=100.0,
+                              horizon_k=2, grade_due_ts=2.0)
+    with s._lock:
+        s.conn.execute("ALTER TABLE predictions DROP COLUMN gate_reason")
+        s.conn.execute("ALTER TABLE predictions DROP COLUMN nwe_action")
+        s.conn.commit()
+    s.close()
+
+    s2 = Store(p)                       # migration re-adds the columns
+    row = s2.get_prediction(pid)
+    assert row is not None and row["gate_reason"] is None
+    pid2 = s2.record_prediction(make_decision("YUSDT", "4h", "sell", 0.9),
+                                candle_close_ts=1.0, entry_price=100.0,
+                                horizon_k=2, grade_due_ts=2.0,
+                                gate_reason="meta_gate", nwe_action="sell")
+    r2 = s2.get_prediction(pid2)
+    assert r2["gate_reason"] == "meta_gate" and r2["nwe_action"] == "sell"
+    s2.close()

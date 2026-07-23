@@ -151,6 +151,11 @@ _MIGRATION_COLS = {
         ("sentiment_action_idx", "INTEGER"),
         ("sentiment_feats", "TEXT"),       # JSON list
         ("sentiment_conf", "REAL"),
+        # v3.7.1 funnel telemetry: reason for EVERY row (emitted or suppressed)
+        # — trigger_source stays emitted-only (it feeds meta-model one-hots) —
+        # plus the NWE direction so its hit-rate is measurable per regime/vol.
+        ("gate_reason", "TEXT"),
+        ("nwe_action", "TEXT"),
     ],
     "outcomes": [
         ("label_tb", "TEXT"),              # tp | sl | timeout
@@ -238,6 +243,8 @@ class Store:
         trigger_source: Optional[str] = None,
         meta_p: Optional[float] = None,
         calibrated_conf: Optional[float] = None,
+        gate_reason: Optional[str] = None,
+        nwe_action: Optional[str] = None,
     ) -> str:
         """Insert one prediction, snapshotting each child agent's RL replay data.
 
@@ -318,6 +325,8 @@ class Store:
             "sentiment_conf": (agents.get("sentiment") or {}).get("confidence"),
             "meta_p": meta_p,
             "calibrated_conf": calibrated_conf,
+            "gate_reason": gate_reason,
+            "nwe_action": nwe_action,
         }
         cols = ", ".join(row.keys())
         ph = ", ".join(["?"] * len(row))

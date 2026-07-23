@@ -178,7 +178,12 @@ async def run_cycle(
                     horizon_k=k, grade_due_ts=grade_due, emitted=emit, session_id=session_id,
                     atr=atr, tp_price=tp_price, sl_price=sl_price,
                     trigger_source=reason if emit else None,
-                    meta_p=meta_p, calibrated_conf=calibrated)
+                    meta_p=meta_p, calibrated_conf=calibrated,
+                    # v3.7.1 funnel telemetry: final reason for every row
+                    # (incl. conf_saturated/meta_gate suppressions) + the NWE
+                    # direction, so the day-30 analysis can grade both.
+                    gate_reason=reason or None,
+                    nwe_action=nwe if nwe in ("buy", "sell") else None)
                 if session_id and pid:
                     # session was created pre-record (keyboard needs its id);
                     # link back so REWARD buttons can find the prediction.
