@@ -129,3 +129,47 @@ class TestBrainTrustDelta:
             dm.apply_brain_feedback(
                 {"indicator": {"action": "buy", "confidence": 1.0}}, "sell")
         assert dm.policy["scores"]["indicator"] == pytest.approx(-bdm.SCORE_CLAMP)
+
+
+# ----------------------------- bandit clamps ------------------------------- #
+class TestBanditWeightClamp:
+    """Prod news weights hit +-287 (lr 0.1, no bound); all four bandits now
+    clamp per-weight to +-5 inside update()."""
+
+    def _drive(self, rl, feats, action, n=60):
+        for _ in range(n):
+            rl.update(list(feats), action, -4.0)
+            rl.update(list(feats), action, -4.0)
+
+    def test_news_clamped_and_lr_aligned(self, tmp_path, monkeypatch):
+        import agents.news_agent as na
+        monkeypatch.setattr(na, "POLICY_PATH", str(tmp_path / "n.json"))
+        rl = na.NewsRL()
+        assert rl.lr == pytest.approx(0.05)
+        rl.policy.weights[0][0] = 4.95
+        self._drive(rl, [1.0] * 10, 0)
+        assert all(abs(w) <= na.WEIGHT_CLAMP + 1e-9
+                   for row in rl.policy.weights for w in row)
+
+    def test_research_clamped(self, tmp_path, monkeypatch):
+        import agents.research_agent as ra
+        monkeypatch.setattr(ra, "POLICY_PATH", str(tmp_path / "r.json"))
+        rl = ra.ResearchRL(10)
+        self._drive(rl, [1.0] * rl.n_features, 0)
+        assert all(abs(w) <= ra.WEIGHT_CLAMP + 1e-9
+                   for row in rl.policy.weights for w in row)
+
+    def test_derivatives_clamped(self, tmp_path, monkeypatch):
+        import agents.derivatives_agent as da
+        monkeypatch.setattr(da, "POLICY_PATH", str(tmp_path / "d.json"))
+        rl = da.DerivativesRL(policy_path=str(tmp_path / "d.json"))
+        self._drive(rl, [1.0] * 8, 0)
+        assert all(abs(w) <= da.WEIGHT_CLAMP + 1e-9
+                   for row in rl.weights for w in row)
+
+    def test_sentiment_clamped(self, tmp_path):
+        import agents.sentiment_agent as sa
+        rl = sa.SentimentRL(policy_path=str(tmp_path / "s.json"))
+        self._drive(rl, [1.0] * 10, 0)
+        assert all(abs(w) <= sa.WEIGHT_CLAMP + 1e-9
+                   for row in rl.weights for w in row)

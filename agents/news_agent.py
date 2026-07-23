@@ -104,6 +104,7 @@ def softmax(logits: List[float]) -> List[float]:
 
 
 N_FEATURES = 10   # 5 legacy + 5 event features (C1); old policies zero-pad up
+WEIGHT_CLAMP = 5.0   # v3.7: bandit weights stay in [-5, +5]
 
 
 class NewsRL:
@@ -121,7 +122,9 @@ class NewsRL:
     replaying correctly and behavior with NEWS_EVENTS_ENABLED=false is
     bit-identical to the 5-dim bandit.
     """
-    def __init__(self, n_features: int = N_FEATURES, lr: float = 0.1):
+    def __init__(self, n_features: int = N_FEATURES, lr: float = 0.05):
+        # lr 0.05 (v3.7, was 0.1): aligned with the other bandits after the
+        # unclamped 0.1 run exploded prod weights to +-287
         self.n_features = n_features
         self.lr = lr
         self.policy = self._load_policy()
@@ -189,7 +192,10 @@ class NewsRL:
         for a in range(3):
             grad_coeff = (1.0 if a == action else 0.0) - probs[a]
             for j in range(self.n_features):
-                self.policy.weights[a][j] += self.lr * reward * grad_coeff * features[j]
+                w = self.policy.weights[a][j] + self.lr * reward * grad_coeff * features[j]
+                # clamp (v3.7): unbounded weights saturated the softmax into a
+                # deterministic policy under a persistently negative stream
+                self.policy.weights[a][j] = max(-WEIGHT_CLAMP, min(WEIGHT_CLAMP, w))
         self._save_policy()
 
 

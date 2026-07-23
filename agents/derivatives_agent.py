@@ -24,6 +24,7 @@ from utils import derivatives_fetcher as dfx
 POLICY_PATH = "logs/derivatives_agent_policy.json"
 
 N_FEATURES = 8
+WEIGHT_CLAMP = 5.0   # v3.7: bandit weights stay in [-5, +5]
 _ACTIONS = ["sell", "skip", "buy"]
 
 
@@ -88,7 +89,8 @@ class DerivativesRL:
         for a in range(3):
             grad = (1.0 if a == action else 0.0) - probs[a]
             for j in range(self.n_features):
-                self.weights[a][j] += self.lr * reward * grad * feats[j]
+                w = self.weights[a][j] + self.lr * reward * grad * feats[j]
+                self.weights[a][j] = max(-WEIGHT_CLAMP, min(WEIGHT_CLAMP, w))
         self._save()
 
 

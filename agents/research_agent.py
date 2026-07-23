@@ -35,6 +35,7 @@ from utils.data_fetcher import DataFetcher
 # ---------------- Configuration -----------------
 POLICY_PATH = "logs/research_agent_policy.json"
 PRED_LOG    = "logs/research_predictions.jsonl"
+WEIGHT_CLAMP = 5.0   # v3.7: bandit weights stay in [-5, +5]
 
 # Ecosystem map (editable). Symbols should be BASE asset tickers (no /USDT).
 ECOSYSTEMS: Dict[str, List[str]] = {
@@ -222,7 +223,8 @@ class ResearchRL:
         for a in range(3):
             grad_coeff = (1.0 if a==action else 0.0) - probs[a]
             for j in range(self.n_features):
-                self.policy.weights[a][j] += self.lr * reward * grad_coeff * feats[j]
+                w = self.policy.weights[a][j] + self.lr * reward * grad_coeff * feats[j]
+                self.policy.weights[a][j] = max(-WEIGHT_CLAMP, min(WEIGHT_CLAMP, w))
         self._save()
 
 # ---------------- Main Agent -----------------
