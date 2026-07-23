@@ -20,12 +20,19 @@ env/
 *.log
 *.tmp
 
-# Runtime data (SQLite DB + old prediction logs) — kept out of git.
-# Learned RL policies (logs/*.json) ARE tracked.
+# Runtime data — kept out of git. v3.7: learned policies + nightly artifacts
+# are runtime STATE, not source (archives cover forensics); untracking them
+# also kills the checkout-dance on every prod deploy. Top-level only:
+# logs/backtest/**/report.json stays tracked as evidence.
+logs/*.json
+logs/*.json.bak-*
+logs/*.pkl
 logs/*.jsonl
 logs/*.db
 logs/*.db-wal
 logs/*.db-shm
+logs/archive/
+logs/pre-reset-*/
 
 # Input docs / scratch
 *.docx
