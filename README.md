@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-332%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -73,7 +73,7 @@ python scripts/preflight.py            # must print READY (checks pins, DB, univ
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **332 passing**.
+Tests (no network / keys needed): `pytest -q` → **353 passing**.
 
 ## 🎓 How it learns
 
@@ -90,6 +90,10 @@ Tests (no network / keys needed): `pytest -q` → **332 passing**.
 4. **Nightly self-training**: logistic meta-model p(correct | regime, agreement, positioning, …),
    per-TF isotonic confidence calibration (runtime = `np.interp` on JSON knots — zero sklearn on
    the hot path), and shrunk win-rate confidences replacing hardcoded ones. All shadow-first.
+5. **Brain trust (v3.7)**: agent priority = `softmax(score/2)` with scores clamped ±10 and a 2%
+   floor — trust learns from a *symmetric* direction-quality signal (±1·conf, −0.25·conf on flat),
+   never the bandit's asymmetric map, so one bad stretch can't permanently mute a voter. Full
+   post-mortem of the 19-day v3.6 collapse: [docs/v37-learning-repair.md](docs/v37-learning-repair.md).
 
 ## 🚦 Signal gate
 
@@ -143,13 +147,16 @@ All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented)
 | `NWE_EVENT_MODE` | ✅ on | −25–36% duplicate emissions, precision non-inferior |
 | `MACRO_PRICES_ENABLED` | ✅ on | SPX via stooq keyless; DXY once `FRED_API_KEY` set |
 | `BRAIN_DEADZONE_V2` | 🌒 shadow | enable if suppressed cohort shows negative expectancy (≥2wk) |
-| `META_GATE_ENABLED` | 🌒 shadow | needs holdout AUC ≥ 0.60 + +5pts precision over 4wk |
+| `META_GATE_ENABLED` | ✅ on (v3.7) | prod counterfactual on emitted: meta_p≥0.55 → 37.5% vs 17.8% hit. Honesty note: holdout AUC 0.579 < the 0.60 bar — enabled on the emitted-subset lift, retrains nightly, env-revertible ([evidence](docs/v37-learning-repair.md)) |
+| `GATE_CONF_SATURATION` | ✅ 0.97 (v3.7) | conf==1.0 unanimity herds graded 1c/7w/15f emitted — suppressed (0 = off) |
+| `GATE_1H_MIXED` | ❌ off (v3.7) | 1h mixed-regime NWE emissions graded 2/17 on direction |
+| `NIGHTLY_CATCHUP` | ✅ on (v3.7) | runs a missed 02:00 IST training once at startup |
 | `MONEY_FLOW_V2` `NEWS_EVENTS_ENABLED` `ECOSYSTEMS_AUTO` | ⏸ off | enable after shadow sanity |
 | `DIVERGENCE_VOTES` `GATE_TREND_REVERSAL` `GATE_NWE_HIGHER_TF` `GATE_1H_TREND` | ❌ off | measured: no benefit / harmful |
 | `EMPIRICAL_DIRECT_CONF` | ⏸ off | self-arms once ≥30 graded direct-fires exist |
 | `T2_EXTRA_VOTES` (rsi30/mfi/cci/vwap/fib/ichimoku) | ❌ off | measured 2026-07-05: no significant edge, all six refused promotion ([evidence](docs/v34-vote-evidence.md)) |
 | `T2_RULE_LEARNING` | ⏸ off | v3.4 per-rule type-2 credibility — recommended ON at go-live reset; learns each rule's weight from real outcomes |
-| `SENTIMENT_ENABLED` | ⏸ off | v3.5 5th voter (F&G/on-chain/taker flow, all $0) — recommended ON at go-live; feature IC study in [docs/sentiment-evidence.md](docs/sentiment-evidence.md) |
+| `SENTIMENT_ENABLED` | ✅ on (v3.7) | v3.5 5th voter (F&G/on-chain/taker flow, all $0) — was silently absent from the prod `.env` for 19 days (0 votes); enabled with the v3.7 reset. Feature IC study in [docs/sentiment-evidence.md](docs/sentiment-evidence.md) |
 
 </details>
 
@@ -165,7 +172,7 @@ journalctl -u bitreinforcex -f
 
 Backups: nightly `deploy/backup.sh` (WAL-safe) or continuous Litestream (`deploy/litestream.yml`).
 
-**Reset learning to zero** (before a real go-live, after test runs polluted the record): `python scripts/reset_learning.py` (dry-run) then `--yes`. Backs up everything it wipes; keeps market-data cache and the subscriptions DB.
+**Reset learning to zero** (before a real go-live, after test runs polluted the record): `python scripts/reset_learning.py` (dry-run) then `--yes`. Backs up everything it wipes; keeps market-data cache and the subscriptions DB. **v3.7 repair reset:** `--policies-only` wipes only policies + nightly artifacts and KEEPS the DB learning tables (the meta model's training set) — this is the mode to use on a live deployment.
 
 > ⚠️ **Pinned stack — do not casually `pip install`:** `numpy==1.25.0`, `pandas==2.0.3`
 > (vendored `pandas_ta` in `vendor/` — upstream is deleted from PyPI/GitHub),
@@ -186,6 +193,7 @@ economics: [`docs/subscription-deck.html`](docs/subscription-deck.html). Enable 
 
 | Doc | What's inside |
 |---|---|
+| [`docs/overview-deck.html`](docs/overview-deck.html) | **Start here (non-technical)** — plain-English business overview: the 5 AI analysts, how a signal works, what a subscriber gets, and how the subscription earns |
 | [`docs/dev-deck.html`](docs/dev-deck.html) | **The developer deck** — full system walkthrough 0→100: every module, every env var, every flow, runbook |
 | [`docs/accuracy-upgrade.html`](docs/accuracy-upgrade.html) | v2 evidence deck — baseline vs gate-v2 numbers, truth table, rollout criteria |
 | [`docs/system-design.html`](docs/system-design.html) | v1 rebuild deck — original architecture story |

@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitReinforceX — The Business, In Plain English</title>
+<meta name="description" content="A non-technical, high-level overview of BitReinforceX: the AI crypto-signal product, its five analysts, and how the subscription business earns.">
+<style>
+  :root{
+    /* palette — house style (echoes docs/dev-deck.html) */
+    --void:#06070f; --void2:#0a0c1a; --ink:#0e1124;
+    --cyan:#22d3ee; --violet:#7c5cff; --magenta:#ff4d8d; --mint:#34f5c5; --amber:#ffcf5c;
+    --text:#e8eaf6; --muted:#9aa0cf; --faint:#6b7099;
+    --glass:rgba(20,24,52,.55);
+    --glass2:rgba(16,19,42,.72);
+    --border:rgba(140,150,210,.16);
+    --border2:rgba(140,150,210,.28);
+    --shadow:0 30px 80px -30px rgba(0,0,0,.85);
+    --g1:linear-gradient(120deg,#22d3ee,#7c5cff 55%,#ff4d8d);
+    --g2:linear-gradient(120deg,#34f5c5,#22d3ee 60%,#7c5cff);
+    /* self-contained fonts — no external requests */
+    --disp:-apple-system,"SF Pro Display","Segoe UI Variable","Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+    --body:-apple-system,"SF Pro Text","Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+    --r:18px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--void); color:var(--text);
+    font-family:var(--body); font-size:16px; line-height:1.65;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  /* fixed layered aurora behind everything */
+  .aurora{
+    position:fixed; inset:-20vh -10vw; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(42vw 42vw at 12% 8%, rgba(124,92,255,.20), transparent 60%),
+      radial-gradient(46vw 46vw at 88% 12%, rgba(34,211,238,.16), transparent 62%),
+      radial-gradient(50vw 50vw at 50% 108%, rgba(255,77,141,.14), transparent 60%),
+      linear-gradient(180deg,var(--void),var(--void2) 40%,var(--void));
+    will-change:transform;
+  }
+  .grain{position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.02) 1px, transparent 1px);
+    background-size:3px 3px; mix-blend-mode:overlay;}
+  main,header,footer,.topnav{position:relative; z-index:2}
+
+  /* ---------- top nav (sticky pill TOC, scroll-spy) ---------- */
+  .topnav{
+    position:sticky; top:0; z-index:40;
+    display:flex; align-items:center; gap:14px;
+    padding:12px clamp(16px,4vw,40px);
+    background:linear-gradient(180deg,rgba(6,7,15,.92),rgba(6,7,15,.55));
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--border);
+  }
+  .brandmark{display:flex; align-items:center; gap:10px; font-family:var(--disp); font-weight:700; letter-spacing:.2px; white-space:nowrap}
+  .logo{
+    width:30px; height:30px; border-radius:9px; display:grid; place-items:center;
+    background:var(--g1); color:#0a0a12; font-weight:800; font-size:15px;
+    box-shadow:inset 0 0 12px rgba(255,255,255,.35), 0 0 22px -6px var(--violet);
+  }
+  .brandmark b{background:var(--g1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .navlinks{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-left:auto}
+  .navlinks::-webkit-scrollbar{display:none}
+  .navlinks a{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.5px; text-transform:uppercase;
+    color:var(--muted); text-decoration:none; white-space:nowrap;
+    padding:7px 12px; border-radius:999px; border:1px solid transparent; transition:.18s;
+  }
+  .navlinks a:hover{color:var(--text); background:rgba(124,92,255,.10)}
+  .navlinks a.active{color:var(--text); border-color:var(--border2); background:rgba(124,92,255,.16)}
+
+  /* ---------- shared layout ---------- */
+  .wrap{max-width:1160px; margin:0 auto; padding:0 clamp(16px,4vw,40px)}
+  section{padding:clamp(52px,7vw,96px) 0; border-top:1px solid rgba(140,150,210,.08)}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan); margin:0 0 14px; display:flex; align-items:center; gap:10px}
+  .eyebrow .num{color:var(--faint)}
+  h1,h2,h3{font-family:var(--disp); line-height:1.12; margin:0}
+  h2{font-size:clamp(28px,4.4vw,46px); font-weight:700; letter-spacing:-.5px}
+  h2 em{font-style:normal; background:var(--g1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .lead{font-size:clamp(16px,1.6vw,19px); color:var(--muted); max-width:66ch; margin:18px 0 0}
+  p{margin:14px 0}
+  .accent{color:var(--text); font-weight:600}
+  .mint{color:var(--mint)} .amber{color:var(--amber)} .cyanx{color:var(--cyan)} .violetx{color:#a99bff} .rose{color:var(--magenta)}
+
+  /* ---------- hero ---------- */
+  .hero{min-height:clamp(560px,88vh,860px); display:flex; align-items:center; overflow:hidden; border:0}
+  .hero-canvas{position:absolute; inset:0; z-index:1; width:100%; height:100%; opacity:.55}
+  .hero .wrap{position:relative; z-index:3}
+  .hero .eyebrow{color:var(--mint)}
+  .hero h1{font-size:clamp(38px,7vw,88px); font-weight:800; letter-spacing:-1.5px; max-width:18ch}
+  .hero h1 .grad{background:var(--g1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero .sub{font-size:clamp(16px,1.9vw,22px); color:var(--muted); max-width:60ch; margin-top:22px}
+  .chips{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px}
+  .chip{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.3px;
+    padding:9px 15px; border-radius:999px; border:1px solid var(--border2);
+    background:var(--glass); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    box-shadow:0 10px 30px -18px rgba(0,0,0,.9);
+  }
+  .chip b{color:var(--cyan)}
+  .scroller{margin-top:40px; font-family:var(--mono); font-size:11.5px; letter-spacing:2px; color:var(--faint); text-transform:uppercase}
+
+  /* ---------- glass card base ---------- */
+  .card{
+    background:var(--glass); border:1px solid var(--border); border-radius:var(--r);
+    padding:22px; backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    box-shadow:var(--shadow);
+  }
+  .grid{display:grid; gap:18px; margin-top:34px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+
+  /* two-column IS / IS NOT */
+  .split{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); margin-top:34px}
+  .split .card h3{font-size:18px; margin-bottom:6px; display:flex; align-items:center; gap:9px}
+  .split ul{margin:12px 0 0; padding:0; list-style:none}
+  .split li{padding:8px 0 8px 26px; position:relative; color:var(--muted); border-top:1px solid rgba(140,150,210,.08)}
+  .split li:first-child{border-top:0}
+  .is li::before{content:"✓"; position:absolute; left:0; color:var(--mint); font-weight:700}
+  .isnot li::before{content:"✕"; position:absolute; left:0; color:var(--magenta); font-weight:700}
+  .card.ok{border-color:rgba(52,245,197,.28)} .card.no{border-color:rgba(255,77,141,.24)}
+
+  /* ---------- 3D agent deck ---------- */
+  .deck{perspective:1400px}
+  .agents{display:grid; gap:20px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); margin-top:36px}
+  .agent{
+    position:relative; border-radius:20px; padding:24px 22px 22px;
+    background:linear-gradient(160deg,var(--glass2),rgba(10,12,26,.85));
+    border:1px solid var(--border); overflow:hidden;
+    transform-style:preserve-3d;
+    transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(0);
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, border-color .35s;
+    box-shadow:0 22px 50px -30px rgba(0,0,0,.9);
+  }
+  .agent::after{ /* pointer glare */
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .3s;
+    background:radial-gradient(280px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,.10), transparent 45%);
+  }
+  .agent:hover{border-color:var(--border2); box-shadow:0 34px 70px -30px rgba(0,0,0,.95), 0 0 40px -22px var(--glow,var(--violet))}
+  .agent:hover::after{opacity:1}
+  .agent .ic{font-size:34px; line-height:1; filter:drop-shadow(0 6px 16px rgba(0,0,0,.5)); transform:translateZ(40px)}
+  .agent h3{font-size:20px; margin-top:14px; transform:translateZ(28px)}
+  .agent .role{font-family:var(--mono); font-size:10.5px; letter-spacing:1px; text-transform:uppercase; padding:3px 9px; border-radius:999px; border:1px solid var(--border2); color:var(--muted); display:inline-block; margin-top:10px; transform:translateZ(20px)}
+  .agent .role.core{color:#0a0a12; background:var(--mint); border-color:transparent}
+  .agent .role.new{color:var(--amber); border-color:rgba(255,207,92,.4)}
+  .agent .oneline{margin:14px 0 0; color:var(--text); font-weight:600; transform:translateZ(18px)}
+  .agent .senses{margin:12px 0 0; color:var(--muted); font-size:14.5px; transform:translateZ(10px)}
+  .agent .src{margin-top:16px; padding-top:13px; border-top:1px solid rgba(140,150,210,.12); font-family:var(--mono); font-size:11.5px; color:var(--faint); transform:translateZ(6px)}
+  .agent .src b{color:var(--mint)}
+  .agent.i{--glow:var(--cyan)} .agent.r{--glow:var(--violet)} .agent.n{--glow:var(--magenta)} .agent.d{--glow:var(--amber)} .agent.s{--glow:var(--mint)}
+
+  /* callouts */
+  .callout{margin-top:26px; border-left:3px solid var(--violet); background:rgba(124,92,255,.08); padding:16px 20px; border-radius:0 14px 14px 0; color:var(--muted)}
+  .callout.ok{border-color:var(--mint); background:rgba(52,245,197,.07)}
+  .callout.warn{border-color:var(--amber); background:rgba(255,207,92,.07)}
+  .callout b{color:var(--text)}
+  .big-quote{font-family:var(--disp); font-size:clamp(20px,2.6vw,30px); font-weight:600; line-height:1.35; margin-top:28px; max-width:22ch}
+  .big-quote .grad{background:var(--g2); -webkit-background-clip:text; background-clip:text; color:transparent}
+
+  /* diagram frame */
+  .figure{margin-top:34px; border:1px solid var(--border); border-radius:var(--r); background:var(--glass); padding:22px; overflow-x:auto; box-shadow:var(--shadow)}
+  .figure svg{display:block; width:100%; height:auto; min-width:560px}
+  .figcap{font-family:var(--mono); font-size:11.5px; letter-spacing:.4px; color:var(--faint); margin-top:12px; text-align:center}
+
+  /* numbered steps */
+  .steps{counter-reset:s; display:grid; gap:14px; margin-top:32px}
+  .step{display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:start; padding:18px 20px; border:1px solid var(--border); border-radius:16px; background:var(--glass)}
+  .step::before{counter-increment:s; content:counter(s); font-family:var(--disp); font-weight:800; font-size:18px; width:40px; height:40px; border-radius:12px; display:grid; place-items:center; background:var(--g1); color:#0a0a12; box-shadow:0 0 22px -8px var(--violet)}
+  .step h3{font-size:16.5px} .step p{margin:5px 0 0; color:var(--muted); font-size:14.5px}
+
+  /* telegram bubble mockup */
+  .tgwrap{margin-top:34px; display:flex; justify-content:center}
+  .phone{width:min(420px,100%); background:linear-gradient(180deg,#0c1018,#0a0d14); border:1px solid var(--border2); border-radius:26px; padding:16px 14px 18px; box-shadow:var(--shadow)}
+  .tgbar{display:flex; align-items:center; gap:10px; padding:4px 6px 14px; border-bottom:1px solid rgba(140,150,210,.12); margin-bottom:14px}
+  .tgav{width:34px; height:34px; border-radius:50%; background:var(--g1); display:grid; place-items:center; font-size:16px}
+  .tgbar .nm{font-weight:700; font-size:14px} .tgbar .st{font-size:11px; color:var(--faint)}
+  .tg{background:linear-gradient(180deg,#141b2b,#111726); border:1px solid rgba(140,150,210,.16); border-radius:14px 14px 14px 5px; padding:14px 15px; font-size:13.5px; box-shadow:0 6px 22px rgba(0,0,0,.4)}
+  .tg .ttl{font-weight:800; letter-spacing:.5px; text-align:center; margin-bottom:10px}
+  .tg .row{display:flex; justify-content:space-between; gap:12px; padding:3px 0; border-bottom:1px dashed rgba(140,150,210,.10)}
+  .tg .row:last-of-type{border-bottom:0}
+  .tg .k{color:var(--faint); font-family:var(--mono); font-size:11.5px; letter-spacing:.4px}
+  .tg .v{font-weight:700}
+  .tg .v.buy{color:var(--mint)} .tg .v.warnv{color:var(--amber)}
+  .tg .ctx{margin-top:9px; padding:9px 11px; border-radius:9px; background:rgba(124,92,255,.10); font-size:12.5px; color:var(--muted)}
+  .tg .disc{margin-top:11px; font-size:11px; color:var(--faint); font-style:italic; text-align:center; line-height:1.5}
+  .tg .brand{margin-top:9px; text-align:center; font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .kb{display:flex; gap:7px; margin-top:9px}
+  .kb button{flex:1; font-family:var(--mono); font-size:12px; padding:9px 0; border-radius:9px; border:1px solid var(--border2); background:rgba(255,255,255,.03); color:var(--text); cursor:default}
+
+  /* pricing */
+  .products{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); margin-top:34px}
+  .prod{border-radius:20px; padding:24px; background:var(--glass2); border:1px solid var(--border); box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .prod::before{content:""; position:absolute; inset:0 0 auto 0; height:4px}
+  .prod.sig::before{background:var(--g1)} .prod.pro::before{background:var(--g2)}
+  .prod h3{font-size:22px; display:flex; align-items:center; gap:10px}
+  .prod .tag{font-family:var(--mono); font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:1px}
+  .prod ul{list-style:none; padding:0; margin:16px 0 0}
+  .prod li{padding:8px 0 8px 24px; position:relative; color:var(--muted); font-size:14.5px}
+  .prod li::before{content:"›"; position:absolute; left:4px; color:var(--cyan); font-weight:800}
+  .tbl-wrap{margin-top:26px; overflow-x:auto; border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:14px}
+  th,td{padding:12px 15px; text-align:left; border-bottom:1px solid rgba(140,150,210,.10)}
+  th{font-family:var(--mono); font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--faint); background:rgba(255,255,255,.02)}
+  tbody tr:hover{background:rgba(124,92,255,.06)}
+  td .sku{font-family:var(--mono); color:var(--cyan)}
+  .best td{background:rgba(52,245,197,.06)}
+  .price{font-weight:700} .price .u{color:var(--faint); font-weight:400; font-family:var(--mono); font-size:12px}
+
+  /* stat band */
+  .stats{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); margin-top:34px}
+  .stat{text-align:center; padding:24px 16px; border-radius:16px; background:var(--glass); border:1px solid var(--border)}
+  .stat .n{font-family:var(--disp); font-weight:800; font-size:clamp(28px,4vw,40px); background:var(--g1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .stat .l{font-size:12.5px; color:var(--muted); margin-top:4px}
+
+  /* dos and donts */
+  .dd{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); margin-top:26px}
+  .dd .card h3{display:flex; align-items:center; gap:8px; font-size:17px; margin-bottom:6px}
+  .dd ul{margin:10px 0 0; padding-left:18px; color:var(--muted)}
+  .dd li{margin:7px 0}
+
+  /* footer */
+  footer{border-top:1px solid var(--border); padding:44px 0 60px; text-align:center}
+  footer .fbrand{font-family:var(--disp); font-weight:800; font-size:20px; background:var(--g1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  footer .flinks{display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin:18px 0}
+  footer a{color:var(--muted); text-decoration:none; font-family:var(--mono); font-size:12.5px; padding:7px 13px; border:1px solid var(--border); border-radius:999px; transition:.18s}
+  footer a:hover{color:var(--text); border-color:var(--border2)}
+  footer .disc{color:var(--faint); font-size:12px; max-width:60ch; margin:16px auto 0; line-height:1.6}
+
+  a.inline{color:var(--cyan); text-decoration:none; border-bottom:1px dashed rgba(34,211,238,.4)}
+  a.inline:hover{border-bottom-style:solid}
+
+  @media (max-width:640px){
+    body{font-size:15px}
+    .navlinks{gap:4px}
+    .step{grid-template-columns:auto 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .agent{transition:none !important}
+    .hero-canvas{opacity:.32}
+    .aurora{transform:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="aurora" id="aurora"></div>
+<div class="grain"></div>
+
+<!-- ===================== NAV ===================== -->
+<nav class="topnav">
+  <a class="brandmark" href="#top" style="text-decoration:none;color:inherit">
+    <span class="logo">B</span><span>Bit<b>ReinforceX</b></span>
+  </a>
+  <div class="navlinks" id="nav">
+    <a href="#pitch">Pitch</a>
+    <a href="#agents">The 5 Analysts</a>
+    <a href="#brain">The Brain</a>
+    <a href="#learning">It Learns</a>
+    <a href="#flow">A Signal</a>
+    <a href="#product">What You Get</a>
+    <a href="#pricing">Plans</a>
+    <a href="#payments">Payments</a>
+    <a href="#growth">Growth</a>
+  </div>
+</nav>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero" id="top">
+  <canvas class="hero-canvas" id="cv"></canvas>
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">00 /</span> The business, in plain English</p>
+    <h1>An AI that watches crypto <span class="grad">24/7</span> — and only speaks when it's sure.</h1>
+    <p class="sub">BitReinforceX is a self-improving crypto <b class="accent">signal advisor</b>. Five AI analysts each watch a different corner of the market, a central "brain" weighs their votes, and only the high-conviction calls are sent to Telegram. It never touches anyone's money — it just gives smart suggestions, then grades itself and gets sharper.</p>
+    <div class="chips">
+      <span class="chip"><b>5</b> AI analysts</span>
+      <span class="chip"><b>48</b> coins</span>
+      <span class="chip"><b>4</b> timeframes</span>
+      <span class="chip"><b>₹0</b> data cost</span>
+      <span class="chip">Learns from <b>every</b> call</span>
+    </div>
+    <p class="scroller">↓ scroll to explore</p>
+  </div>
+</header>
+
+<main>
+
+<!-- ===================== PITCH ===================== -->
+<section id="pitch">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">01 /</span> The 30-second version</p>
+    <h2>What it is — and what it <em>isn't</em></h2>
+    <p class="lead">If you remember one paragraph, remember this one. It's the elevator pitch you can say to anyone.</p>
+
+    <div class="callout ok">
+      <b>BitReinforceX is a self-improving crypto signal advisor.</b> Five AI "analysts" each watch a different part of the market — chart patterns, the wider market weather, breaking news, the futures crowd, and public mood plus blockchain activity — using only <b>free</b> public data. A central brain weighs their votes, trusts whoever has been most accurate lately, and only alerts subscribers when the analysts strongly agree. Every suggestion is later checked against what the market actually did, so the system rewards its correct analysts, learns from its mistakes, and gets sharper over time. It <b>never touches anyone's money</b> — it simply sends buy, sell, or hold suggestions to Telegram, always with a clear "this is not financial advice" reminder.
+    </div>
+
+    <div class="split">
+      <div class="card ok is">
+        <h3>✅ What it IS</h3>
+        <ul>
+          <li>A 24/7 AI research assistant for crypto markets</li>
+          <li>Five specialists voting into one clear call</li>
+          <li>Powered entirely by free, public data</li>
+          <li>A Telegram channel that sends buy / sell / hold alerts</li>
+          <li>Self-grading — it measures its own accuracy honestly</li>
+        </ul>
+      </div>
+      <div class="card no isnot">
+        <h3>🚫 What it is NOT</h3>
+        <ul>
+          <li>It never places trades or holds your funds</li>
+          <li>Not a wallet, not an exchange, not a bank</li>
+          <li>Not financial advice — every alert says so</li>
+          <li>Not a "guaranteed profit" or "get-rich" scheme</li>
+          <li>Not connected to any customer's trading account</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== AGENTS ===================== -->
+<section id="agents">
+  <div class="wrap deck">
+    <p class="eyebrow"><span class="num">02 /</span> The team of five</p>
+    <h2>Five AI analysts, <em>five points of view</em></h2>
+    <p class="lead">Think of a small research desk. Each analyst is an expert in one thing and blind to the rest — together they see the whole board. Hover a card to look closer.</p>
+
+    <div class="agents">
+      <article class="agent i tilt">
+        <div class="ic">📊</div>
+        <h3>Indicator</h3>
+        <div class="role core">Always on</div>
+        <p class="oneline">The chartist.</p>
+        <p class="senses">Reads the price chart the way a seasoned chart-watcher would — trend direction, momentum, over-bought / over-sold swings, volatility squeezes, and breakout &amp; reversal triggers.</p>
+        <p class="src">Reads (free): <b>Binance price candles</b></p>
+      </article>
+
+      <article class="agent r tilt">
+        <div class="ic">🌍</div>
+        <h3>Research</h3>
+        <div class="role core">Always on</div>
+        <p class="oneline">The macro strategist.</p>
+        <p class="senses">Looks at the weather <i>around</i> a coin: how its family leaders (BTC, ETH, SOL…) are moving, the US stock-market mood, where money is rotating, Bitcoin's pull on altcoins, and whether a strong US dollar is a headwind.</p>
+        <p class="src">Reads (free): <b>Binance, CoinGecko, S&amp;P 500 &amp; Dollar Index</b></p>
+      </article>
+
+      <article class="agent n tilt">
+        <div class="ic">📰</div>
+        <h3>News</h3>
+        <div class="role core">Always on</div>
+        <p class="oneline">The headline reader.</p>
+        <p class="senses">Scans current headlines for panic and hype, judges the mood, and flags real events — hacks, regulation, ETF flows, listings, token unlocks, partnerships. Grounded in genuine retrieved headlines, so it can't invent news.</p>
+        <p class="src">Reads: <b>an AI model over real headlines</b></p>
+      </article>
+
+      <article class="agent d tilt">
+        <div class="ic">🧲</div>
+        <h3>Derivatives</h3>
+        <div class="role new">Switches on at launch</div>
+        <p class="oneline">The futures-desk watcher.</p>
+        <p class="senses">Senses when the crowd is dangerously over-leveraged — funding rates, open-interest shifts, and long-vs-short crowding that often precede a violent "squeeze."</p>
+        <p class="src">Reads (free): <b>Binance futures (public)</b></p>
+      </article>
+
+      <article class="agent s tilt">
+        <div class="ic">🌡</div>
+        <h3>Sentiment</h3>
+        <div class="role new">Switches on at launch</div>
+        <p class="oneline">The mood &amp; blockchain pulse.</p>
+        <p class="senses">Feels the market's emotional temperature — the Fear &amp; Greed index (extreme fear can be contrarian fuel), on-chain activity, what's trending, and buy-vs-sell pressure on the tape.</p>
+        <p class="src">Reads (free): <b>Fear &amp; Greed, blockchain.info, CoinGecko, Binance</b></p>
+      </article>
+
+      <article class="agent i tilt" style="--glow:var(--violet)">
+        <div class="ic">🧠</div>
+        <h3>The Brain</h3>
+        <div class="role">Referee</div>
+        <p class="oneline">The decision-maker.</p>
+        <p class="senses">Not an analyst — the referee. It collects all five votes, weighs them by how trustworthy each analyst has proven, and produces the single final call. More on this next.</p>
+        <p class="src">See: <b>section 03 →</b></p>
+      </article>
+    </div>
+
+    <div class="callout">
+      <b>Three analysts are always on</b> (Indicator, Research, News). The two newer ones — Derivatives and Sentiment — are <b>switched on at launch</b>; until then they quietly learn in the background without affecting any call. And if a coin has no data for one analyst (say, no futures market), that analyst simply <b>stays silent</b> — never a blocker, never a broken signal.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BRAIN ===================== -->
+<section id="brain">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">03 /</span> The referee</p>
+    <h2>How five opinions become <em>one call</em></h2>
+    <p class="lead">It's weighted voting — and the weights are earned. Louder votes go to whoever has been right more often.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 860 360" role="img" aria-label="Five analysts feeding weighted votes into the brain, which outputs Buy, Hold, or Sell">
+        <defs>
+          <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#22d3ee" stop-opacity=".15"/>
+            <stop offset="1" stop-color="#7c5cff" stop-opacity=".9"/>
+          </linearGradient>
+          <linearGradient id="brainG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff4d8d"/>
+          </linearGradient>
+          <filter id="soft"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <!-- edges -->
+        <g stroke="url(#edge)" stroke-width="2.5" fill="none">
+          <path d="M190,58 C330,58 380,150 470,178"/>
+          <path d="M190,124 C330,124 380,160 470,182"/>
+          <path d="M190,190 C320,190 380,188 470,188"/>
+          <path d="M190,256 C330,256 380,220 470,196"/>
+          <path d="M190,322 C330,322 380,240 470,202"/>
+        </g>
+        <!-- analyst nodes -->
+        <g font-family="var(--mono)" font-size="13" fill="#e8eaf6">
+          <g><rect x="20" y="40" rx="11" width="170" height="36" fill="#0e1330" stroke="#22d3ee" stroke-opacity=".5"/><text x="38" y="63">📊 Indicator · 3.0</text></g>
+          <g><rect x="20" y="106" rx="11" width="170" height="36" fill="#0e1330" stroke="#7c5cff" stroke-opacity=".5"/><text x="38" y="129">🌍 Research · 2.0</text></g>
+          <g><rect x="20" y="172" rx="11" width="170" height="36" fill="#0e1330" stroke="#ff4d8d" stroke-opacity=".5"/><text x="38" y="195">📰 News · 1.0</text></g>
+          <g><rect x="20" y="238" rx="11" width="170" height="36" fill="#0e1330" stroke="#ffcf5c" stroke-opacity=".5"/><text x="38" y="261">🧲 Derivs · 1.5</text></g>
+          <g><rect x="20" y="304" rx="11" width="170" height="36" fill="#0e1330" stroke="#34f5c5" stroke-opacity=".5"/><text x="38" y="327">🌡 Sentiment · 1.5</text></g>
+        </g>
+        <!-- brain -->
+        <g filter="url(#soft)">
+          <circle cx="530" cy="188" r="62" fill="#0a0d1e" stroke="url(#brainG)" stroke-width="3"/>
+        </g>
+        <text x="530" y="182" text-anchor="middle" font-family="var(--disp)" font-size="26" fill="#e8eaf6">🧠</text>
+        <text x="530" y="210" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="#9aa0cf">weighted vote</text>
+        <!-- outputs -->
+        <g stroke="#2a2f55" stroke-width="2" fill="none">
+          <path d="M592,168 L690,120"/><path d="M594,188 L690,188"/><path d="M592,208 L690,256"/>
+        </g>
+        <g font-family="var(--disp)" font-size="15" font-weight="700">
+          <g><rect x="690" y="100" rx="10" width="150" height="40" fill="rgba(52,245,197,.12)" stroke="#34f5c5"/><text x="712" y="126" fill="#34f5c5">▲ BUY</text></g>
+          <g><rect x="690" y="168" rx="10" width="150" height="40" fill="rgba(154,160,207,.10)" stroke="#9aa0cf"/><text x="712" y="194" fill="#cfd3f0">— HOLD</text></g>
+          <g><rect x="690" y="236" rx="10" width="150" height="40" fill="rgba(255,77,141,.12)" stroke="#ff4d8d"/><text x="712" y="262" fill="#ff4d8d">▼ SELL</text></g>
+        </g>
+      </svg>
+      <p class="figcap">Numbers are each analyst's starting "trust score" — they rise and fall as the system learns.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div><h3>Each analyst gives a direction + a confidence</h3><p>Buy, sell, or hold — and how sure it is, from 0 to 100%.</p></div></div>
+      <div class="step"><div><h3>Each has a trust score, learned over time</h3><p>The Indicator starts most-trusted, then Research, then the rest. These are turned into weights that add up to 100%.</p></div></div>
+      <div class="step"><div><h3>The brain tallies the weighted votes</h3><p>A confident call from a highly-trusted analyst moves the needle far more than a hesitant vote from a low-trust one.</p></div></div>
+      <div class="step"><div><h3>It only speaks when the room clearly leans</h3><p>Buy or sell only on a clear lean — otherwise <b>hold</b>. A built-in "dead zone" stops one loud voice from forcing a trade the others disagree with.</p></div></div>
+    </div>
+
+    <p class="big-quote">Specialists vote, the more-often-right get a <span class="grad">louder vote</span>, and it only speaks when the room clearly leans one way.</p>
+  </div>
+</section>
+
+<!-- ===================== LEARNING ===================== -->
+<section id="learning">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">04 /</span> The "Reinforce" in BitReinforceX</p>
+    <h2>It grades itself — and gets <em>smarter</em></h2>
+    <p class="lead">No human is required in the loop. The system marks its own homework against reality and re-tunes who to trust.</p>
+
+    <div class="steps">
+      <div class="step"><div><h3>Predict &amp; save</h3><p>Every call is stored with the exact data each analyst saw, and a "check-back" time.</p></div></div>
+      <div class="step"><div><h3>Wait for reality</h3><p>Each timeframe has a fair waiting window before judging (a 1-hour call is judged sooner than a daily one).</p></div></div>
+      <div class="step"><div><h3>Check what actually happened</h3><p>Did the price really move up, down, or stay flat — past a sensible threshold for that timeframe?</p></div></div>
+      <div class="step"><div><h3>Reward or punish</h3><p>A correct call scores <b class="mint">+1</b>. A confidently-wrong call scores <b class="rose">−4</b> — being wrong hurts far more than being right helps, so the system learns <b>caution</b> instead of recklessness.</p></div></div>
+      <div class="step"><div><h3>Everyone learns individually, the brain re-tunes trust</h3><p>Each analyst adjusts its own judgement, and the brain slowly nudges trust toward whoever's been right lately — a gentle 5% per lesson, so it adapts without whiplash.</p></div></div>
+      <div class="step"><div><h3>A human can override with one tap</h3><p>The operator can correct any grade from Telegram (✅ / ❌ / ➖ / 🚫), and the math lands exactly where the human says.</p></div></div>
+    </div>
+
+    <div class="callout ok">
+      <b>This is the moat.</b> The product gets sharper every day on its own — and it <b>publishes its real monthly hit-rate</b> in the channel. Most cheap-signal sellers never dare show their true accuracy. Transparency is the whole marketing angle.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FLOW ===================== -->
+<section id="flow">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">05 /</span> Start to finish</p>
+    <h2>The life of <em>one signal</em></h2>
+    <p class="lead">From a candle closing on the exchange to a message on your phone — and back again to make the system smarter.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 900 230" role="img" aria-label="Pipeline: candle close, fetch data, five analysts vote, brain decides, gate, Telegram alert, then graded and analysts learn">
+        <defs>
+          <linearGradient id="flowG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+          <marker id="arw" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#7c5cff"/></marker>
+        </defs>
+        <g font-family="var(--mono)" font-size="12.5" fill="#e8eaf6" text-anchor="middle">
+          <g><rect x="10" y="70" rx="12" width="118" height="56" fill="#0e1330" stroke="#22d3ee" stroke-opacity=".45"/><text x="69" y="94">⏰ Candle</text><text x="69" y="112">closes</text></g>
+          <g><rect x="158" y="70" rx="12" width="118" height="56" fill="#0e1330" stroke="#22d3ee" stroke-opacity=".45"/><text x="217" y="94">📡 Fetch</text><text x="217" y="112">market data</text></g>
+          <g><rect x="306" y="70" rx="12" width="118" height="56" fill="#0e1330" stroke="#7c5cff" stroke-opacity=".55"/><text x="365" y="94">🗳️ 5 analysts</text><text x="365" y="112">vote</text></g>
+          <g><rect x="454" y="70" rx="12" width="118" height="56" fill="#0e1330" stroke="#7c5cff" stroke-opacity=".55"/><text x="513" y="94">🧠 Brain</text><text x="513" y="112">decides</text></g>
+          <g><rect x="602" y="70" rx="12" width="118" height="56" fill="#0e1330" stroke="#ffcf5c" stroke-opacity=".5"/><text x="661" y="94">🚦 Worth</text><text x="661" y="112">sending?</text></g>
+          <g><rect x="750" y="70" rx="12" width="130" height="56" fill="rgba(52,245,197,.10)" stroke="#34f5c5"/><text x="815" y="94">📨 Telegram</text><text x="815" y="112">alert</text></g>
+        </g>
+        <g stroke="url(#flowG)" stroke-width="2.5" fill="none" marker-end="url(#arw)">
+          <path d="M128,98 L156,98"/><path d="M276,98 L304,98"/><path d="M424,98 L452,98"/><path d="M572,98 L600,98"/><path d="M720,98 L748,98"/>
+        </g>
+        <!-- learn loop back -->
+        <path d="M815,126 C815,190 400,205 365,205 C200,205 120,205 69,126" stroke="#34f5c5" stroke-opacity=".7" stroke-width="2" stroke-dasharray="5 5" fill="none" marker-end="url(#arw)"/>
+        <text x="440" y="222" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#34f5c5">later: graded against reality → every analyst learns</text>
+      </svg>
+      <p class="figcap">One shared data snapshot feeds all 48 coins at once — efficient and consistent.</p>
+    </div>
+
+    <div class="callout">
+      <b>Most checks never become messages.</b> The gate is strict — only high-conviction calls are sent, so the channel stays signal, not noise. But <b>everything is recorded</b> either way, so nothing escapes grading.
+    </div>
+
+    <h3 style="margin-top:44px;font-family:var(--disp);font-size:22px">What a real alert looks like</h3>
+    <div class="tgwrap">
+      <div class="phone">
+        <div class="tgbar"><div class="tgav">B</div><div><div class="nm">BitReinforceX · Signals</div><div class="st">channel</div></div></div>
+        <div class="tg">
+          <div class="ttl">🚨 SIGNAL ALERT 🚨</div>
+          <div class="row"><span class="k">OVERALL SIGNAL</span><span class="v buy">BUY</span></div>
+          <div class="row"><span class="k">NWE SIGNAL</span><span class="v buy">BUY</span></div>
+          <div class="row"><span class="k">PAIR</span><span class="v">BTCUSDT</span></div>
+          <div class="row"><span class="k">TIMEFRAME</span><span class="v">1h</span></div>
+          <div class="row"><span class="k">CONFIDENCE</span><span class="v">84.21%</span></div>
+          <div class="row"><span class="k">REASON</span><span class="v">NWE trigger</span></div>
+          <div class="row"><span class="k">REGIME</span><span class="v warnv">TRENDING ↑</span></div>
+          <div class="row"><span class="k">TRIGGER</span><span class="v">SuperTrend flip</span></div>
+          <div class="ctx">🧲 <b>Derivs:</b> funding +0.045%/8h, open-interest rising, crowded longs — squeeze risk</div>
+          <div class="ctx">🌡 <b>Sentiment:</b> Fear &amp; Greed 22 (extreme fear), 58% taker buys, trending on CoinGecko</div>
+          <div class="disc">⚠️ This is NOT financial advice. Trading involves risk — do your own research. Sharing or reselling these signals is illegal.</div>
+          <div class="brand">~ BitReinforceX · "Reinforcing your trades with AI power"</div>
+        </div>
+        <div class="kb"><button>✅ Buy</button><button>❌ Sell</button><button>➖ Flat</button><button>🚫</button></div>
+      </div>
+    </div>
+    <p class="figcap" style="margin-top:16px">The buttons below the alert are the operator's — one tap teaches the bot whether it was right. Customers just read the call.</p>
+  </div>
+</section>
+
+<!-- ===================== PRODUCT ===================== -->
+<section id="product">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">06 /</span> The customer's value</p>
+    <h2>What a subscriber <em>actually gets</em></h2>
+    <p class="lead">A private Telegram channel with clear, honest calls — and the confidence numbers to back them.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="n">48</div><div class="l">coins covered</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">timeframes · 1h · 4h · 1d · 1w</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">AI analysts behind each call</div></div>
+      <div class="stat"><div class="n">Monthly</div><div class="l">real accuracy, published</div></div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3 style="font-family:var(--disp);font-size:19px">Every signal carries</h3>
+        <ul class="split-clean" style="list-style:none;padding:0;margin:14px 0 0;color:var(--muted)">
+          <li style="padding:7px 0">✅ A clear <b class="accent">BUY / SELL</b> call</li>
+          <li style="padding:7px 0">📊 A <b class="accent">confidence %</b> — how sure the committee is</li>
+          <li style="padding:7px 0">🧠 The <b class="accent">trigger</b> that fired &amp; the market <b class="accent">regime</b> (trending / ranging)</li>
+          <li style="padding:7px 0">🧲🌡 Plain-English <b class="accent">futures &amp; mood</b> context lines</li>
+          <li style="padding:7px 0">⏱ Fresh at real candle closes — 1h hourly, plus 4h / daily / weekly</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="font-family:var(--disp);font-size:19px">The honest bit (say this proudly)</h3>
+        <p style="color:var(--muted);margin-top:12px">A signal is a <b class="accent">direction + a confidence + context</b> — not a "do exactly this" trade ticket. Behind the scenes the system does track a profit-target and a stop-loss for each call so it can <b class="accent">grade its own accuracy against real targets</b> — and that accuracy is what gets published each month.</p>
+        <p style="color:var(--muted);margin-top:10px">This honesty is the selling point: subscribers see a transparent hit-rate, not empty "100% guaranteed" claims.</p>
+      </div>
+    </div>
+
+    <div class="callout warn"><b>Advisory only, always.</b> Every message ends with "this is NOT financial advice." The product informs decisions — the subscriber makes the trade themselves. This framing protects the business.</div>
+  </div>
+</section>
+
+<!-- ===================== PRICING ===================== -->
+<section id="pricing">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">07 /</span> How we earn</p>
+    <h2>Two products, <em>seven simple plans</em></h2>
+    <p class="lead">The system already runs 24/7 for us. Selling access is pure incremental income on top of a cost we're already paying. Prepaid, self-expiring, dual-currency.</p>
+
+    <div class="products">
+      <div class="prod sig">
+        <div class="tag">Product 1</div>
+        <h3>📨 Signals</h3>
+        <p style="color:var(--muted);margin-top:8px">Access to the private signals channel — the buy/sell calls on all 48 coins. This is the core "money" product.</p>
+        <ul>
+          <li>All signals, all 48 coins, all 4 timeframes</li>
+          <li>Published monthly accuracy</li>
+          <li>Priced from just <b class="accent">₹199</b> to try</li>
+        </ul>
+      </div>
+      <div class="prod pro">
+        <div class="tag">Product 2</div>
+        <h3>🤖 Pro control-bot</h3>
+        <p style="color:var(--muted);margin-top:8px">Instead of waiting for broadcasts, Pro members <b>ask the AI directly</b> in a private chat — 6 commands, fair-use capped at <b class="accent">30 questions/day</b>.</p>
+        <ul>
+          <li><span class="cyanx">/news</span> · <span class="cyanx">/indicator</span> · <span class="cyanx">/research</span></li>
+          <li><span class="cyanx">/context</span> · <span class="cyanx">/regime</span> · <span class="cyanx">/derivs</span></li>
+          <li>Sold on its own or bundled with Signals</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Plan</th><th>Product</th><th>Length</th><th>Price (₹ / UPI)</th><th>Price (USDT)</th><th>Per day</th></tr></thead>
+        <tbody>
+          <tr><td><span class="sku">SIG-7</span></td><td>Signals</td><td>7 days</td><td class="price">₹199</td><td class="price">2.5 <span class="u">USDT</span></td><td>₹28/day</td></tr>
+          <tr><td><span class="sku">SIG-15</span></td><td>Signals</td><td>15 days</td><td class="price">₹349</td><td class="price">4.5 <span class="u">USDT</span></td><td>₹23/day</td></tr>
+          <tr class="best"><td><span class="sku">SIG-30</span></td><td>Signals</td><td>30 days</td><td class="price">₹599</td><td class="price">7 <span class="u">USDT</span></td><td>₹20/day ⭐</td></tr>
+          <tr><td><span class="sku">PRO-15</span></td><td>Pro bot</td><td>15 days</td><td class="price">₹299</td><td class="price">3.5 <span class="u">USDT</span></td><td>₹20/day</td></tr>
+          <tr><td><span class="sku">PRO-30</span></td><td>Pro bot</td><td>30 days</td><td class="price">₹499</td><td class="price">6 <span class="u">USDT</span></td><td>₹17/day</td></tr>
+          <tr><td><span class="sku">BUN-30</span></td><td>Signals + Pro</td><td>30 days</td><td class="price">₹899</td><td class="price">10 <span class="u">USDT</span></td><td>saves ₹199</td></tr>
+          <tr><td><span class="sku">FND-90</span></td><td>Signals + Pro</td><td>90 days</td><td class="price">₹2,199</td><td class="price">25 <span class="u">USDT</span></td><td>Founders tier</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <b>The pricing ladder rewards commitment.</b> The per-day cost drops the longer someone commits (₹28 → ₹23 → ₹20). The ₹199 entry is deliberately cheap — "less than one food-delivery order" — just to let a skeptic verify the signals are real. <b>The profit lives in 30-day renewals and Pro.</b> USDT prices are anchored near ₹88 each and rounded up to absorb crypto swings and network fees.
+    </div>
+    <p style="color:var(--muted)">Want the full pricing rationale, launch tactics and cost breakdown? See the detailed <a class="inline" href="subscription-deck.html">Subscription Deck →</a></p>
+  </div>
+</section>
+
+<!-- ===================== PAYMENTS ===================== -->
+<section id="payments">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">08 /</span> Money in, access out — automatically</p>
+    <h2>How someone pays, and <em>instantly gets in</em></h2>
+    <p class="lead">Two payment rails, both fully automated. No staff, no payment server to babysit. Pay in — you're in. Lapse — you're out. All by itself.</p>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3 style="font-family:var(--disp);font-size:19px">💳 UPI / Cards <span style="font-family:var(--mono);font-size:11px;color:var(--faint)">(Razorpay)</span></h3>
+        <p style="color:var(--muted);margin-top:12px">Tap a plan → the bot hands over a payment link (valid 15 minutes) → pay with any UPI app or card → the bot notices within seconds and unlocks access. Cost to us: a ~2% processing fee.</p>
+      </div>
+      <div class="card">
+        <h3 style="font-family:var(--disp);font-size:19px">🪙 USDT crypto <span style="font-family:var(--mono);font-size:11px;color:var(--faint)">(TRON network)</span></h3>
+        <p style="color:var(--muted);margin-top:12px">The bot asks the buyer to send an <b class="accent">exact odd amount</b> — say <b class="mint">7.013 USDT</b>. That tiny tail is a <b class="accent">fingerprint</b> that ties one blockchain payment to one buyer, with no account linking. A watcher spots it and unlocks access. <b>Zero fees to us.</b> A "/paid" button force-checks the chain if they're impatient.</p>
+      </div>
+    </div>
+
+    <div class="callout ok" style="margin-top:26px"><b>Why the odd amount is clever:</b> crypto payments don't carry a name. By asking for 7.013 instead of 7.000, the tiny difference becomes a receipt the bot can match to exactly one person — automatically, for free.</div>
+
+    <h3 style="margin-top:44px;font-family:var(--disp);font-size:22px">The full lifecycle — hands-free</h3>
+    <div class="steps">
+      <div class="step"><div><h3>Pay → instant personal invite</h3><p>A one-use link, valid 48 hours, just for them.</p></div></div>
+      <div class="step"><div><h3>The database is the real gate</h3><p>Every attempt to join is checked live against active subscriptions — so a <b>leaked or forwarded invite is worthless</b>. Only a paying member gets in.</p></div></div>
+      <div class="step"><div><h3>Renewing just extends — no gap</h3><p>Renew and the clock stretches from where it was. No rejoining, no interruption.</p></div></div>
+      <div class="step"><div><h3>A 24-hour grace cushion</h3><p>A slow renewal (especially crypto) never causes a wrongful lockout.</p></div></div>
+      <div class="step"><div><h3>Auto-remove on lapse</h3><p>Once expired past grace, the bot quietly removes them — "your seat is held, rejoin in one tap." Reminders go out 3 days and 1 day before.</p></div></div>
+      <div class="step"><div><h3>One polite win-back later</h3><p>A single comeback nudge a week after leaving. No spam, ever.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== GROWTH ===================== -->
+<section id="growth">
+  <div class="wrap">
+    <p class="eyebrow"><span class="num">09 /</span> The numbers &amp; your playbook</p>
+    <h2>What it costs, what it earns, <em>how you grow it</em></h2>
+    <p class="lead">The margins are unusually kind, because the expensive part — running the system — is already paid for.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="n">~₹1.7k</div><div class="l">fixed cost / month</div></div>
+      <div class="stat"><div class="n">~3</div><div class="l">subscribers to break even</div></div>
+      <div class="stat"><div class="n">+7</div><div class="l">referral bonus days (automated)</div></div>
+      <div class="stat"><div class="n">0%</div><div class="l">fee on USDT payments</div></div>
+    </div>
+
+    <div class="grid g3" style="margin-top:26px">
+      <div class="card"><h3 style="font-family:var(--disp);color:var(--mint)">Seed</h3><p style="color:var(--muted)">Early days, a handful of subscribers.</p><p style="font-family:var(--disp);font-size:26px;margin-top:6px">~₹6.9k<span style="font-size:14px;color:var(--faint)">/mo profit</span></p></div>
+      <div class="card"><h3 style="font-family:var(--disp);color:var(--cyan)">Traction</h3><p style="color:var(--muted)">Word-of-mouth kicks in, referrals compound.</p><p style="font-family:var(--disp);font-size:26px;margin-top:6px">~₹33.7k<span style="font-size:14px;color:var(--faint)">/mo profit</span></p></div>
+      <div class="card"><h3 style="font-family:var(--disp);color:#a99bff">Steady</h3><p style="color:var(--muted)">A healthy, renewing subscriber base.</p><p style="font-family:var(--disp);font-size:26px;margin-top:6px">~₹91k<span style="font-size:14px;color:var(--faint)">/mo profit</span></p></div>
+    </div>
+    <p class="figcap" style="text-align:left;margin-top:12px">Illustrative scenarios, not promises — actual results depend on how many subscribers we bring in and keep.</p>
+
+    <h3 style="margin-top:44px;font-family:var(--disp);font-size:22px">Your growth levers</h3>
+    <div class="grid g2">
+      <div class="card ok"><h3 style="font-family:var(--disp);font-size:18px;color:var(--mint)">🎁 Referral +7 — real &amp; automatic</h3><p style="color:var(--muted);margin-top:10px">Every member gets a share link. When a referred friend makes their <b>first payment</b>, <b>both</b> sides get <b>+7 free days</b>. Fully built and automated — a zero-cost growth engine you can push hard in marketing.</p></div>
+      <div class="card"><h3 style="font-family:var(--disp);font-size:18px">🚀 Launch tactics</h3><p style="color:var(--muted);margin-top:10px"><b>Founding 50</b> — first 50 subscribers lock the 30-day price for 6 months. <b>Free 15-day pass</b> for our existing beta crew. Great hooks — <b class="amber">note:</b> these two are honored <b>by hand</b> (via an admin command), not yet automated. Promise them, then apply them manually.</p></div>
+    </div>
+
+    <h3 style="margin-top:44px;font-family:var(--disp);font-size:22px">The compliance line — protect the brand</h3>
+    <div class="dd">
+      <div class="card ok"><h3>✅ Do say</h3>
+        <ul>
+          <li>"AI-graded, <b>transparent</b> monthly accuracy"</li>
+          <li>"Five analysts behind every call"</li>
+          <li>"Educational <b>market analysis</b>"</li>
+          <li>"Just ₹199 to try it yourself"</li>
+        </ul>
+      </div>
+      <div class="card no"><h3>🚫 Never say</h3>
+        <ul>
+          <li>"Guaranteed / assured returns"</li>
+          <li>"Risk-free" or "100% accurate"</li>
+          <li>"Financial advice" or "we'll trade for you"</li>
+          <li>Anything implying certain profit</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout warn"><b>One rule keeps us safe:</b> always frame it as <b>"educational market analysis,"</b> never as guaranteed returns or financial advice. (Formal GST registration becomes necessary only past ₹20&nbsp;lakh annual turnover — a good problem to have.)</div>
+
+    <div class="callout" style="margin-top:26px"><b>Status today:</b> the whole subscription system is <b>fully built</b> but ships switched <b>OFF</b> until we flip it on for launch. When you're ready to sell, it's one setting away.</div>
+  </div>
+</section>
+
+</main>
+
+<!-- ===================== FOOTER ===================== -->
+<footer>
+  <div class="wrap">
+    <div class="fbrand">BitReinforceX</div>
+    <p style="color:var(--muted);font-family:var(--mono);font-size:12.5px;margin-top:6px">"Reinforcing your trades with AI power"</p>
+    <div class="flinks">
+      <a href="subscription-deck.html">💳 Subscription Deck</a>
+      <a href="telegram-deck.html">📨 Telegram Deck</a>
+      <a href="dev-deck.html">⚙️ Engineering Deck</a>
+    </div>
+    <p class="disc">Advisory only. BitReinforceX produces educational market analysis and never places trades, holds funds, or gives financial advice. Crypto trading is high-risk; past performance does not predict future results.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- scroll-spy nav ---- */
+  var links = Array.prototype.slice.call(document.querySelectorAll('#nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var spy = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[en.target.id]; if(a) a.classList.add('active');
+      }
+    });
+  }, {rootMargin:'-45% 0px -50% 0px', threshold:0});
+  document.querySelectorAll('section[id]').forEach(function(s){ spy.observe(s); });
+
+  /* ---- 3D pointer tilt on cards ---- */
+  if(!rm){
+    document.querySelectorAll('.tilt').forEach(function(card){
+      card.addEventListener('pointermove', function(e){
+        var r = card.getBoundingClientRect();
+        var px = (e.clientX - r.left)/r.width, py = (e.clientY - r.top)/r.height;
+        card.style.setProperty('--ry', ((px-0.5)*12).toFixed(2)+'deg');
+        card.style.setProperty('--rx', ((0.5-py)*12).toFixed(2)+'deg');
+        card.style.setProperty('--mx', (px*100).toFixed(1)+'%');
+        card.style.setProperty('--my', (py*100).toFixed(1)+'%');
+      });
+      card.addEventListener('pointerleave', function(){
+        card.style.setProperty('--ry','0deg'); card.style.setProperty('--rx','0deg');
+      });
+    });
+    /* ---- subtle aurora parallax ---- */
+    var aur = document.getElementById('aurora');
+    addEventListener('scroll', function(){
+      aur.style.transform = 'translateY(' + (scrollY*0.05).toFixed(1) + 'px)';
+    }, {passive:true});
+  }
+
+  /* ---- hero constellation ---- */
+  var cv = document.getElementById('cv'); if(!cv) return;
+  var ctx = cv.getContext('2d'), W, H, DPR = Math.min(devicePixelRatio||1, 2);
+  var cols = ['#22d3ee','#7c5cff','#ff4d8d','#34f5c5'];
+  var N = 46, pts = [];
+  function resize(){
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  function seed(){
+    pts = [];
+    for(var i=0;i<N;i++){
+      pts.push({x:Math.random()*W, y:Math.random()*H,
+        vx:(Math.random()-0.5)*0.35, vy:(Math.random()-0.5)*0.35,
+        c:cols[i%cols.length], r:Math.random()*1.8+0.8});
+    }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<pts.length;i++){
+      var p = pts[i];
+      for(var j=i+1;j<pts.length;j++){
+        var q = pts[j], dx=p.x-q.x, dy=p.y-q.y, d=Math.sqrt(dx*dx+dy*dy);
+        if(d<128){ ctx.globalAlpha=(1-d/128)*0.22; ctx.strokeStyle=p.c; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.stroke(); }
+      }
+      ctx.globalAlpha=0.9; ctx.fillStyle=p.c;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.2832); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  function step(){
+    for(var i=0;i<pts.length;i++){
+      var p=pts[i]; p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>W) p.vx*=-1; if(p.y<0||p.y>H) p.vy*=-1;
+    }
+    draw(); raf = requestAnimationFrame(step);
+  }
+  var raf;
+  addEventListener('resize', function(){ resize(); seed(); if(rm) draw(); });
+  resize(); seed();
+  if(rm){ draw(); } else { step(); }
+})();
+</script>
+</body>
+</html>

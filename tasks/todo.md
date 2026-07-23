@@ -180,3 +180,24 @@ Universe: preflight freshness check found LRC dead 93d + MKR dead 291d
 - [x] cleanup: dead news_reward plumbing; assert->check; SKU/IST dedup; GC
 - [x] requests 2.31->2.32.4 (pins intact); reset_learning.py + tests
 - [x] 268 tests green x2; logs/ clean
+
+## STATUS 2026-07-24 — v3.7 learning repair + gate upgrade (post-19-day audit)
+
+- [x] Audit: 27,312 prod predictions; grading verified 20/20 vs live Binance;
+      plumbing healthy (0 gaps, 38s median grade latency); learning collapsed
+      (emitted accuracy 55%→14% weekly; indicator trust 2.3e-06; dead
+      sentiment voter top-trusted 0.355; news bandit ±287)
+- [x] fix(brain): softmax(score/2) trust, clamp ±10, 2% floor, active-roster
+      renorm, symmetric trust reward decoupled from bandit map
+- [x] fix(agents): ±5 weight clamp in all 4 bandits; news lr 0.1→0.05
+- [x] fix(grader): elapsed-sized path fetch (cap 1000) + truncated-window guard
+- [x] feat(nightly): last-success marker + NIGHTLY_CATCHUP startup recovery
+- [x] feat(gate): META_GATE live (emitted counterfactual 37.5% vs 17.8%),
+      GATE_CONF_SATURATION=0.97, GATE_1H_MIXED off (2/17)
+- [x] feat(reset): --policies-only (keeps DB learning tables)
+- [x] chore: policy JSONs untracked; docs/v37-learning-repair.md (evidence +
+      manual Oracle deploy notes + 48h monitoring)
+- [x] 353 tests green x2
+- [ ] OPERATOR (manual, on Oracle): archive → pull → --policies-only reset →
+      .env append block (docs/v37-learning-repair.md §Deploy) → restart →
+      48h monitoring; rotate Bot D token if still pending

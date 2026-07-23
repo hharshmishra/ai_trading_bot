@@ -93,3 +93,21 @@
     the worst loss is -4, so wins came out ~5x weaker than wrongs and weights
     ratcheted down. Anchor the win step to the +1 case and the loss step to the
     -4 case (both = historical constants); scale only the in-between losses.
+
+15. **Normalize trust by absolute quality, never by distance from the worst
+    agent.** v3.6's shift-normalize (`w = (score - min)/sum`) crowned whoever
+    was least-punished — in prod that was the DISABLED sentiment voter (score
+    frozen at +1.5 because its conf was always 0), while indicator fell to
+    weight 2.3e-06 in 24h. Corollaries: (a) an agent that never plays must
+    never hold weight mass — exclude inactive agents from decide-time
+    normalization; (b) unbounded score accumulators make recovery impossible —
+    clamp them; (c) an asymmetric reward map (−4 wrong / +1 correct) applied
+    to TRUST bankrupts every voter that dares to vote at realistic base rates
+    and teaches the ensemble to abstain — trust needs a symmetric
+    direction-quality signal even when the bandits keep the asymmetric map.
+
+16. **A flag missing from the live .env is a silent no-op, not an error.**
+    SENTIMENT_ENABLED entered .env.example the same day prod deployed, the
+    live .env predated it, and the 5th voter did nothing for 19 days with no
+    warning anywhere. After adding a flag, diff `.env.example` keys against
+    every deployed `.env` (preflight now the right home for that check).
