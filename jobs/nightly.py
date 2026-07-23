@@ -212,11 +212,37 @@ def run_nightly_training(store) -> Dict[str, Any]:
     except Exception as e:
         logger.error("retention gc failed: %s", e)
 
+    # v3.7: last-success marker (unconditional — inert metadata, so history
+    # exists before NIGHTLY_CATCHUP is ever flipped; manual scripts/run_training
+    # runs count as success too, which is semantically right).
+    try:
+        with open(config.NIGHTLY_MARKER_PATH, "w", encoding="utf-8") as f:
+            json.dump({"last_success_ts": time.time(), "rows": len(rows)}, f)
+    except Exception as e:
+        logger.debug("nightly marker write failed: %s", e)
+
     return {"rows": len(rows), "meta": meta,
             "calibrated_tfs": sorted((calib or {}).get("knots", {})),
             "direct_conf_indicators": sorted((direct_conf or {}).get("conf", {})),
             "ecosystems_refreshed": ecosystems_refreshed,
             "pruned_predictions": pruned}
+
+
+def _needs_catchup(now: Optional[datetime] = None,
+                   hour: Optional[int] = None) -> bool:
+    """True if the most recent NIGHTLY_HOUR_IST boundary has no successful run
+    (marker missing/unreadable or older than that boundary)."""
+    now = now if now is not None else datetime.now(tz=IST)
+    hour = hour if hour is not None else config.NIGHTLY_HOUR_IST
+    boundary = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if boundary > now:
+        boundary -= timedelta(days=1)
+    try:
+        with open(config.NIGHTLY_MARKER_PATH, "r", encoding="utf-8") as f:
+            last = float(json.load(f).get("last_success_ts", 0.0))
+    except Exception:
+        return True
+    return last < boundary.timestamp()
 
 
 _SHADOW_LOGS = ("logs/predictions_log.json", "logs/indicator_predictions.jsonl",
@@ -303,6 +329,12 @@ async def nightly_loop(application, hour_ist: Optional[int] = None) -> None:
     hour = hour_ist if hour_ist is not None else config.NIGHTLY_HOUR_IST
     bd = application.bot_data
     logger.info("nightly trainer started (%02d:00 IST)", hour)
+    if config.NIGHTLY_CATCHUP and _needs_catchup(hour=hour):
+        try:
+            summary = await asyncio.to_thread(run_nightly_training, bd["store"])
+            logger.info("nightly catch-up: %s", summary)
+        except Exception as e:
+            logger.error("nightly catch-up failed: %s", e)
     while True:
         try:
             now = datetime.now(tz=IST)

@@ -179,3 +179,42 @@ class TestTrainServeSkew:
         assert v_live == v_db, [
             (n, a, b) for n, a, b in zip(FEATURE_NAMES, v_live, v_db) if a != b]
         store.close()
+
+
+class TestNightlyCatchup:
+    """v3.7: last-success marker + missed-02:00 recovery."""
+
+    def test_training_writes_marker(self, tmp_path, artifacts):
+        from persistence import Store
+        from jobs.nightly import run_nightly_training
+        store = Store(str(tmp_path / "m.db"))
+        _insert_rows(store, n=60)          # below META_MIN_ROWS is fine
+        run_nightly_training(store)
+        marker = json.loads(Path(config.NIGHTLY_MARKER_PATH).read_text())
+        assert marker["last_success_ts"] > 0 and marker["rows"] == 60
+        store.close()
+
+    def test_needs_catchup_truth_table(self, tmp_path):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        from jobs.nightly import _needs_catchup
+        IST = ZoneInfo("Asia/Kolkata")
+        now = datetime(2026, 7, 24, 10, 0, tzinfo=IST)   # boundary = today 02:00
+        boundary = now.replace(hour=2, minute=0, second=0, microsecond=0)
+
+        # missing marker -> catch up
+        assert _needs_catchup(now=now, hour=2) is True
+        # stale marker (before today's 02:00) -> catch up
+        Path(config.NIGHTLY_MARKER_PATH).write_text(json.dumps(
+            {"last_success_ts": (boundary - timedelta(hours=3)).timestamp()}))
+        assert _needs_catchup(now=now, hour=2) is True
+        # fresh marker (after the boundary) -> no
+        Path(config.NIGHTLY_MARKER_PATH).write_text(json.dumps(
+            {"last_success_ts": (boundary + timedelta(minutes=5)).timestamp()}))
+        assert _needs_catchup(now=now, hour=2) is False
+        # before today's boundary the reference is YESTERDAY's 02:00
+        early = now.replace(hour=1)
+        assert _needs_catchup(now=early, hour=2) is False
+        Path(config.NIGHTLY_MARKER_PATH).write_text(json.dumps(
+            {"last_success_ts": (boundary - timedelta(days=1, hours=1)).timestamp()}))
+        assert _needs_catchup(now=early, hour=2) is True

@@ -202,6 +202,11 @@ NIGHTLY_HOUR_IST = _env_int("NIGHTLY_HOUR_IST", 2)
 META_MODEL_PATH = os.getenv("META_MODEL_PATH", "logs/meta_model.pkl")
 META_METRICS_PATH = os.getenv("META_METRICS_PATH", "logs/meta_metrics.json")
 CALIBRATION_PATH = os.getenv("CALIBRATION_PATH", "logs/calibration.json")
+# v3.7: if the process was down across the NIGHTLY_HOUR_IST boundary, run the
+# missed training once at startup (the in-process loop otherwise skips it
+# silently until the next night). Marker records the last successful run.
+NIGHTLY_CATCHUP = _env_bool("NIGHTLY_CATCHUP", False)
+NIGHTLY_MARKER_PATH = os.getenv("NIGHTLY_MARKER_PATH", "logs/nightly_marker.json")
 
 # --------------------------------------------------------------------------
 # Membership / subscriptions (Bot D). Default OFF: runtime identical to a
