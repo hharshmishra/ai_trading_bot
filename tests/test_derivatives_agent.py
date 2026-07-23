@@ -126,13 +126,24 @@ class TestBrainFourVoters:
                                            "available": True, "rl": {"feats": [0.1] * 8, "action_idx": 0}})
         return dm
 
+    @staticmethod
+    def _wsum(w, with_deriv):
+        # v3.7: decide() renormalizes over the ACTIVE roster only
+        active = ["indicator", "research", "news"]
+        if with_deriv:
+            active.append("derivatives")
+        if config.SENTIMENT_ENABLED:
+            active.append("sentiment")
+        return sum(w[a] for a in active)
+
     def test_flag_on_includes_derivatives_vote(self, tmp_path, monkeypatch):
         monkeypatch.setattr(config, "DERIVATIVES_ENABLED", True)
         dm = self._dm(tmp_path, monkeypatch)
         res = dm.decide("BTCUSDT", "4h")
         w = res["policy"]["weights"]
         expected = (w["indicator"] * 1 * 0.8 + w["research"] * 1 * 0.6
-                    + w["news"] * 0 * 0.5 + w["derivatives"] * -1 * 0.7)
+                    + w["news"] * 0 * 0.5
+                    + w["derivatives"] * -1 * 0.7) / self._wsum(w, True)
         assert res["final"]["score"] == pytest.approx(expected, abs=1e-6)
         assert res["agents"]["derivatives"]["action"] == "sell"
 
@@ -142,7 +153,8 @@ class TestBrainFourVoters:
         res = dm.decide("BTCUSDT", "4h")
         assert res["agents"]["derivatives"]["confidence"] == 0.0
         w = res["policy"]["weights"]
-        expected = w["indicator"] * 1 * 0.8 + w["research"] * 1 * 0.6
+        expected = (w["indicator"] * 1 * 0.8
+                    + w["research"] * 1 * 0.6) / self._wsum(w, False)
         assert res["final"]["score"] == pytest.approx(expected, abs=1e-6)
 
     def test_legacy_policy_absorbs_new_voter(self, tmp_path, monkeypatch):

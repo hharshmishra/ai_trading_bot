@@ -21,27 +21,43 @@ T0 = 1_800_000_000.0
 
 # --------------------------- brain criteria (C1/C2) ------------------------ #
 class TestBrainRewardMap:
+    """v3.7: trust uses the symmetric direction-quality map (brain_trust_delta),
+    decoupled from the bandit reward map and independent of TB_GRADING_ENABLED."""
+
     def _dm(self):
         from brain.decision_maker import DecisionMaker
         return DecisionMaker(prefer_csv=False)
 
-    def test_flat_outcome_uses_v2_timeout_not_full_wrong(self, monkeypatch):
+    def test_flat_outcome_costs_quarter_conf(self, monkeypatch):
         monkeypatch.setattr(config, "TB_GRADING_ENABLED", True)
         dm = self._dm()
         before = dict(dm.policy["scores"])
         results = {"indicator": {"action": "buy", "confidence": 1.0}}
         dm.apply_brain_feedback(results, "skip")
         delta = dm.policy["scores"]["indicator"] - before["indicator"]
-        # v2 map: directional-vs-flat = REWARD_TIMEOUT_FLAT (-1.5), not -4
-        assert delta == pytest.approx(0.05 * config.REWARD_TIMEOUT_FLAT * 1.0)
+        assert delta == pytest.approx(0.05 * -0.25 * 1.0)
 
-    def test_legacy_map_when_tb_off(self, monkeypatch):
+    def test_map_independent_of_tb_flag(self, monkeypatch):
         monkeypatch.setattr(config, "TB_GRADING_ENABLED", False)
         dm = self._dm()
         before = dict(dm.policy["scores"])
         dm.apply_brain_feedback({"indicator": {"action": "buy", "confidence": 1.0}}, "skip")
         delta = dm.policy["scores"]["indicator"] - before["indicator"]
-        assert delta == pytest.approx(0.05 * config.REWARD_WRONG)     # v1: flat wrong
+        # same -0.25*conf as with the flag on — trust no longer reads the bandit map
+        assert delta == pytest.approx(0.05 * -0.25 * 1.0)
+
+    def test_opposite_direction_symmetric_minus_one(self, monkeypatch):
+        dm = self._dm()
+        before = dict(dm.policy["scores"])
+        dm.apply_brain_feedback({"indicator": {"action": "buy", "confidence": 0.6}}, "sell")
+        delta = dm.policy["scores"]["indicator"] - before["indicator"]
+        assert delta == pytest.approx(0.05 * -1.0 * 0.6)
+
+    def test_skip_vote_carries_no_trust_evidence(self):
+        dm = self._dm()
+        before = dict(dm.policy["scores"])
+        dm.apply_brain_feedback({"indicator": {"action": "skip", "confidence": 0.9}}, "buy")
+        assert dm.policy["scores"]["indicator"] == pytest.approx(before["indicator"])
 
     def test_news_scored_once_no_double_count(self, monkeypatch):
         monkeypatch.setattr(config, "TB_GRADING_ENABLED", True)
@@ -50,7 +66,7 @@ class TestBrainRewardMap:
         dm.apply_brain_feedback({"news": {"action": "buy", "confidence": 0.8}}, "buy")
         delta = dm.policy["scores"]["news"] - before["news"]
         # scored exactly once (the old code added the news reward a second time)
-        assert delta == pytest.approx(0.05 * config.REWARD_CORRECT * 0.8)
+        assert delta == pytest.approx(0.05 * 1.0 * 0.8)
 
 
 # ------------------------ indicator criteria (C3) -------------------------- #

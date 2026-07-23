@@ -14,6 +14,7 @@ each agent's own stateless ``apply_reward`` — never here.
 
 from __future__ import annotations
 import json
+import math
 import os
 import time
 from dataclasses import is_dataclass, asdict
@@ -41,6 +42,36 @@ AGENT_NAMES = ("indicator", "research", "news", "derivatives", "sentiment")
 DEFAULT_SCORES = {"indicator": 3.0, "research": 2.0, "news": 1.0,
                   "derivatives": config.DERIV_BRAIN_SCORE,
                   "sentiment": config.SENTIMENT_BRAIN_SCORE}
+
+# Trust dynamics (v3.7). Scores are clamped so no voter is ever
+# mathematically unrecoverable (prod v3.6 let indicator drift to -1525 —
+# ~30k net-correct rows to climb back), and weights come from a softmax so
+# they rank agents absolutely, not by distance from the worst one (the old
+# shift-normalize crowned a never-voting agent with top trust).
+TRUST_TEMPERATURE = 2.0   # softmax temperature over trust scores
+SCORE_CLAMP = 10.0        # trust scores live in [-10, +10]
+WEIGHT_FLOOR = 0.02       # every voter keeps >= 2% voice
+TRUST_LR = 0.05           # 5% adjustment per feedback
+
+
+def brain_trust_delta(pred: str, realized: str, conf: float) -> float:
+    """Direction-quality trust signal, decoupled from the bandit reward map.
+
+    The bandits keep the asymmetric v2 map (-4 confidently-wrong etc.); trust
+    cannot, because at realized base rates (~29% up / ~29% down / ~41% flat)
+    that map bankrupts EVERY directional voter and the brain converges on
+    whoever abstains. Trust asks one question: when this agent speaks, is the
+    direction right? +1*conf correct, -1*conf opposite, -0.25*conf when the
+    market stayed flat; skip votes carry no trust evidence (they already
+    contribute nothing to the weighted vote).
+    """
+    if pred not in ("buy", "sell"):
+        return 0.0
+    if realized == pred:
+        return conf
+    if realized == "skip":
+        return -0.25 * conf
+    return -conf
 
 
 def _ensure_logs_dir():
@@ -88,20 +119,35 @@ class DecisionMaker:
         self._normalize_weights()
 
     def _normalize_weights(self):
-        # Convert raw scores -> normalized positive weights that sum to 1
+        # Raw scores -> softmax(score / T) weights with a per-agent floor.
         scores = self.policy.get("scores", DEFAULT_SCORES.copy())
         # ensure all keys exist (setdefault absorbs newly added voters like
         # "derivatives" into a pre-existing policy file — no migration needed)
         for k in DEFAULT_SCORES.keys():
             scores.setdefault(k, DEFAULT_SCORES[k])
-        # shift to positive
-        minv = min(scores.values())
-        shift = 0.0
-        if minv <= 0:
-            shift = abs(minv) + 0.01
-        pos = {k: float(v) + shift for k, v in scores.items()}
-        total = sum(pos.values()) or 1.0
-        weights = {k: v / total for k, v in pos.items()}
+        # clamp persists back into the policy: self-heals legacy files whose
+        # scores drifted unboundedly under the pre-v3.7 dynamics
+        scores = {k: max(-SCORE_CLAMP, min(SCORE_CLAMP, float(v)))
+                  for k, v in scores.items()}
+        exps = {k: math.exp(v / TRUST_TEMPERATURE) for k, v in scores.items()}
+        total = sum(exps.values()) or 1.0
+        weights = {k: v / total for k, v in exps.items()}
+        # exact floor: floored agents get WEIGHT_FLOOR, the rest re-scale into
+        # the remaining mass; loop because re-scaling can push another under
+        floored: set = set()
+        while len(floored) < len(weights):
+            rest = sum(w for k, w in weights.items() if k not in floored)
+            room = 1.0 - WEIGHT_FLOOR * len(floored)
+            scale = room / rest if rest > 0 else 0.0
+            newly = {k for k in weights
+                     if k not in floored and weights[k] * scale < WEIGHT_FLOOR}
+            if not newly:
+                weights = {k: WEIGHT_FLOOR if k in floored else weights[k] * scale
+                           for k in weights}
+                break
+            floored |= newly
+        else:
+            weights = {k: 1.0 / len(weights) for k in weights}
         self.policy["scores"] = scores
         self.policy["weights"] = weights
         _save_policy(self.policy)
@@ -254,17 +300,26 @@ class DecisionMaker:
                 sent_out = None
         agent_results["sentiment"] = self._coerce_agent_out(sent_out, "sentiment")
 
-        # Weighted aggregation
+        # Weighted aggregation over the ACTIVE roster only — a voter disabled
+        # by flag (or excluded via use_agents) must not hold vote mass, or its
+        # dead weight shrinks everyone else's say against the ±0.05 deadzone.
+        # final_confidence is invariant to this renormalization (ratio).
         weights = self.policy.get("weights", {"indicator": 0.6, "research": 0.3, "news": 0.1})
+        active = [ag for ag in AGENT_NAMES if ag in use_agents]
+        if not config.DERIVATIVES_ENABLED and "derivatives" in active:
+            active.remove("derivatives")
+        if not config.SENTIMENT_ENABLED and "sentiment" in active:
+            active.remove("sentiment")
+        wsum = sum(float(weights.get(ag, 0.0)) for ag in active) or 1.0
         action_map = {"sell": -1.0, "skip": 0.0, "buy": 1.0}
 
         # compute score = sum(weight * action_value * confidence)
         total_score = 0.0
         total_weighted_conf = 0.0
-        for ag in AGENT_NAMES:
+        for ag in active:
             ag_res = agent_results.get(ag, {"action": "skip", "confidence": 0.0})
             val = action_map.get(ag_res["action"], 0.0)
-            w = float(weights.get(ag, 0.0))
+            w = float(weights.get(ag, 0.0)) / wsum
             conf = float(ag_res.get("confidence", 0.0) or 0.0)
             total_score += w * val * conf
             total_weighted_conf += w * conf
@@ -299,56 +354,25 @@ class DecisionMaker:
         }
         return result
     
-    #REACTIVE TO EVERY AWARD/PUNISHMENT
-
-    # def _apply_feedback_to_brain(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str, news_reward: float):
-    #     """Update internal brain scores using child's correctness and confidence, persist weights."""
-    #     true = self._normalize_action(true_outcome)
-    #     # update scores: +1 for correct, -4 for wrong, scaled by confidence
-    #     for ag in ("indicator", "research", "news"):
-    #         res = agent_results.get(ag) or {"action": "skip", "confidence": 0.0}
-    #         pred = res.get("action", "skip")
-    #         conf = float(res.get("confidence", 0.0) or 0.0)
-    #         # reward for brain: use same scheme as agents (1 / -4) scaled by confidence
-    #         delta = (1.0 if pred == true else -4.0) * conf
-    #         self.policy["scores"][ag] = float(self.policy["scores"].get(ag, 0.0)) + delta
-
-    #     # additionally incorporate the explicit numeric news_reward directly into news score
-    #     try:
-    #         self.policy["scores"]["news"] = float(self.policy["scores"].get("news", 0.0)) + float(news_reward)
-    #     except Exception:
-    #         pass
-
-    #     # re-normalize weights and save
-    #     self._normalize_weights() 
-    
     def _apply_feedback_to_brain(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str):
-        """Update scores slowly so Indicator > Research > News stays stable unless
-        long-term evidence suggests otherwise. The delta uses the ACTIVE reward
-        map (grader.active_reward_fn) — the old hardcoded ±1/−4 graded a flat
-        market as a full wrong for every directional agent (the lesson-9 defect
-        class, one layer up). Each agent is scored exactly once.
+        """Update scores slowly so Indicator > Research > News stays stable
+        unless long-term evidence suggests otherwise. Trust uses the symmetric
+        direction-quality map (``brain_trust_delta``) — NOT the bandit reward
+        map — and scores stay clamped so recovery is always possible. Each
+        agent is scored exactly once.
         """
-        from grader import active_reward_fn   # lazy: avoids import cycles
-        reward_fn = active_reward_fn()
         true = self._normalize_action(true_outcome)
-
-        # learning rate controls how fast priorities can change
-        LEARNING_RATE = 0.05  # 5% adjustment per feedback
-
         for ag in AGENT_NAMES:
             res = agent_results.get(ag)
             if res is None:
                 continue  # e.g. pre-Phase-4 rows without a derivatives snapshot
-            pred = res.get("action", "skip")
+            pred = self._normalize_action(res.get("action", "skip"))
             conf = float(res.get("confidence", 0.0) or 0.0)
-
-            delta = reward_fn(pred, true) * conf
-            # apply with slow drift
-            self.policy["scores"][ag] = (
-                float(self.policy["scores"].get(ag, 0.0))
-                + LEARNING_RATE * delta
-            )
+            delta = brain_trust_delta(pred, true, conf)
+            if delta == 0.0:
+                continue  # skip votes carry no trust evidence
+            s = float(self.policy["scores"].get(ag, 0.0)) + TRUST_LR * delta
+            self.policy["scores"][ag] = max(-SCORE_CLAMP, min(SCORE_CLAMP, s))
 
         self._normalize_weights()
 
