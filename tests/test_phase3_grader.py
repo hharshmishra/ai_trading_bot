@@ -153,3 +153,58 @@ def test_manual_corrects_auto(tmp_path):
     # net reward delivered to the news agent (auto + correction) equals the manual verdict
     news_rewards = [c[2] for c in dm.news.calls]      # (feats, idx, reward)
     assert abs(sum(news_rewards) - (-4.0)) < 1e-9
+
+
+# ----- v3.7: elapsed-sized fetch + truncated-window guard ------------------ #
+class _RecordingFetcher:
+    def __init__(self, inner):
+        self.inner, self.limits = inner, []
+
+    def get_ohlcv(self, pair, tf, limit=500):
+        self.limits.append(limit)
+        return self.inner.get_ohlcv(pair, tf, limit=limit)
+
+
+def test_path_after_sizes_fetch_from_elapsed(tmp_path):
+    """A row graded long after entry must request a window that reaches back to
+    the entry candle (pre-v3.7 the fixed limit=50 graded the wrong window)."""
+    from grader import Grader
+    from persistence import Store
+    inner, close_ts = make_fetcher()
+    fetcher = _RecordingFetcher(inner)
+    store = Store(str(tmp_path / "g.db"))
+    g = Grader(FakeDM(), data_fetcher=fetcher, store=store)
+
+    g._path_after("BTCUSDT", "4h", close_ts, 2, now_ts=close_ts + 300 * 14400)
+    lim = fetcher.limits[-1]
+    assert lim >= 300 + 2 + 5
+    assert lim <= 1000 and lim % 50 == 0
+
+    # healthy path (small elapsed) stays bit-identical: limit=50
+    g._path_after("BTCUSDT", "4h", close_ts, 2, now_ts=close_ts + 3 * 14400)
+    assert fetcher.limits[-1] == 50
+    store.close()
+
+
+def test_path_after_truncated_window_returns_none(tmp_path):
+    """If every fetched candle is post-entry AND more were needed, the window
+    is truncated — stay pending instead of grading candle k of the wrong
+    window (the pre-v3.7 silent mislabel)."""
+    from grader import Grader
+    from persistence import Store
+    n = 60
+    ts = pd.date_range("2024-06-01", periods=n, freq="1h")
+    df = pd.DataFrame({"timestamp": ts, "open": [1.0] * n, "high": [1.0] * n,
+                       "low": [1.0] * n, "close": [1.0] * n, "volume": [1.0] * n})
+
+    class _F:
+        def get_ohlcv(self, pair, tf, limit=500):
+            return df.copy()
+
+    # entry close far BEFORE the fetched window; now is far after it
+    close_ts = int((ts[0] - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")) - 5000 * 3600
+    store = Store(str(tmp_path / "g.db"))
+    g = Grader(FakeDM(), data_fetcher=_F(), store=store)
+    now = close_ts + 6000 * 3600
+    assert g._path_after("BTCUSDT", "1h", close_ts, 3, now_ts=now) is None
+    store.close()

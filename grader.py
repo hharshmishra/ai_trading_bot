@@ -14,7 +14,9 @@ the net effect on the policy equals the human's verdict.
 from __future__ import annotations
 
 import logging
+import math
 import threading
+import time
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -22,6 +24,7 @@ import pandas as pd
 import config
 from grading.barriers import triple_barrier
 from persistence import Store, get_store
+from signals import TF_SECONDS
 
 logger = logging.getLogger("grader")
 
@@ -110,7 +113,7 @@ class Grader:
     # realized price
     # ------------------------------------------------------------------ #
     def _path_after(self, pair: str, tf: str, candle_close_ts: Optional[float],
-                    k: int) -> Optional[pd.DataFrame]:
+                    k: int, now_ts: Optional[float] = None) -> Optional[pd.DataFrame]:
         """Post-entry OHLC path, or None until at least k closed candles printed.
 
         Convention (correctness v3): ``candle_close_ts`` is the CLOSE epoch of
@@ -121,11 +124,24 @@ class Grader:
         stored values are numerically identical under both conventions — the
         open of the then-partial candle == the close of the last closed one —
         so no migration is needed.) Shared by the fixed-horizon and
-        triple-barrier graders so both see the same path."""
+        triple-barrier graders so both see the same path.
+
+        v3.7: the fetch is sized from elapsed time (bucketed to multiples of 50
+        so the per-cycle OHLCV cache key stays stable; the healthy path is
+        bit-identical limit=50). The old fixed limit=50 silently graded the
+        WRONG window once the entry candle fell off the fetch (>47h outage on
+        1h rows). If a full fetched window still contains no candle at/before
+        the entry close, the window is truncated — stay pending rather than
+        mislabel; the sized fetch reaches back on a later pass (up to the
+        1000-candle exchange cap)."""
         if self.data is None or candle_close_ts is None:
             return None
+        now = float(now_ts) if now_ts is not None else time.time()
+        elapsed = max(0.0, now - float(candle_close_ts))
+        needed = int(math.ceil(elapsed / TF_SECONDS.get(tf, 3600))) + k + 5
+        limit = max(50, min(1000, int(math.ceil(needed / 50.0)) * 50))
         try:
-            df = self.data.get_ohlcv(pair, tf, limit=max(50, k + 5))
+            df = self.data.get_ohlcv(pair, tf, limit=limit)
         except Exception:
             return None
         if df is None or getattr(df, "empty", True) or "timestamp" not in df.columns:
@@ -133,6 +149,8 @@ class Grader:
         ts = pd.to_datetime(df["timestamp"])
         close_dt = pd.to_datetime(candle_close_ts, unit="s")
         after = df[ts >= close_dt].reset_index(drop=True)
+        if len(after) == len(df) and needed > len(df):
+            return None  # truncated window: iloc[k-1] would not be candle k
         if len(after) < k:
             return None
         return after
@@ -153,19 +171,21 @@ class Grader:
         list of graded results (skips ones still waiting for candles)."""
         graded = []
         for p in self.store.get_due_predictions(now_ts):
-            res = self._grade_prediction(p)
+            res = self._grade_prediction(p, now_ts=now_ts)
             if res is not None:
                 graded.append(res)
         return graded
 
-    def _grade_prediction(self, p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _grade_prediction(self, p: Dict[str, Any],
+                          now_ts: Optional[float] = None) -> Optional[Dict[str, Any]]:
         tf = p["tf"]
         k = HORIZON_K.get(tf, 1)
         th = THRESHOLD.get(tf, 0.01)
         entry = p.get("entry_price")
         if not entry:
             return None
-        path = self._path_after(p["pair"], tf, p.get("candle_close_ts"), k)
+        path = self._path_after(p["pair"], tf, p.get("candle_close_ts"), k,
+                                now_ts=now_ts)
         if path is None:
             return None  # horizon not reached yet; stays pending for a later pass
         fr = (float(path.iloc[k - 1]["close"]) - entry) / entry
