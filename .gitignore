@@ -48,6 +48,11 @@ logs/backtest/*/emissions.json
 # Environment variables / secrets
 .env
 *.env
+# .env backups/variants hold the SAME live secrets but match neither rule
+# above (`*.env` needs the .env suffix). .env.example stays tracked.
+.env.bak-*
+.env.local
+.env.*.bak
 
 # Compiled libraries
 *.so
