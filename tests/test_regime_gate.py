@@ -140,19 +140,22 @@ class TestTrendTriggers:
 
 
 def _res(tf="4h", regime="ranging", final_action="buy", final_conf=0.85,
-         nwe=None, trend_fired=(), vol_ok=True):
+         nwe=None, trend_fired=(), vol_ok=True, vol_pct=None):
     direct = []
     if nwe:
         direct.append({"name": "nwe", "signal": nwe, "confidence": 0.8})
     for name, sig in trend_fired:
         direct.append({"name": name, "signal": sig, "confidence": 0.75})
+    feats = {"vol_ok": vol_ok}
+    if vol_pct is not None:
+        feats["vol_pct"] = vol_pct
     return {
         "chartName": "TESTUSDT", "timeframe": tf,
         "final": {"action": final_action, "confidence": final_conf},
         "agents": {"indicator": {"action": final_action, "confidence": final_conf,
                                  "raw": {"details": {
                                      "regime": regime,
-                                     "regime_feats": {"vol_ok": vol_ok},
+                                     "regime_feats": feats,
                                      "direct_signals": direct}}}},
     }
 
@@ -385,3 +388,43 @@ class TestFlagOffNoOp:
         # regime is still computed and stored (shadow logging), but the
         # trigger set / blend inputs stay legacy
         assert "regime" in dec.details
+
+
+class TestNweVolCeiling:
+    """v3.7.1 GATE_NWE_VOL_MAX: NWE (mean reversion) suppressed in volatility
+    expansions; 0 = off; missing vol_pct never blocks; conf path untouched."""
+
+    def setup_method(self):
+        from signals import should_emit_signal_v2
+        self.gate = should_emit_signal_v2
+
+    def test_flag_off_is_bit_identical(self):
+        emit, *_, reason = self.gate(_res(tf="1h", nwe="buy", vol_pct=0.99))
+        assert emit and reason == "nwe_ranging"
+
+    def test_high_vol_suppresses_1h_nwe(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_VOL_MAX", 0.90)
+        emit, *_, reason = self.gate(_res(tf="1h", nwe="buy", vol_pct=0.95))
+        assert not emit and reason == "nwe_high_vol"
+
+    def test_low_vol_still_emits(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_VOL_MAX", 0.90)
+        emit, *_, reason = self.gate(_res(tf="1h", nwe="buy", vol_pct=0.50))
+        assert emit and reason == "nwe_ranging"
+
+    def test_missing_vol_pct_never_blocks(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_VOL_MAX", 0.90)
+        emit, *_, reason = self.gate(_res(tf="1h", nwe="buy"))
+        assert emit and reason == "nwe_ranging"
+
+    def test_higher_tf_nwe_capped_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_HIGHER_TF", True)
+        monkeypatch.setattr(config, "GATE_NWE_VOL_MAX", 0.90)
+        emit, *_, reason = self.gate(
+            _res(nwe="sell", final_action="sell", final_conf=0.5, vol_pct=0.95))
+        assert not emit and reason == "nwe_high_vol"
+
+    def test_conf_path_not_affected(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_NWE_VOL_MAX", 0.90)
+        emit, *_, reason = self.gate(_res(final_conf=0.85, vol_pct=0.99))
+        assert emit and reason == "conf_over_80"

@@ -112,6 +112,15 @@ def pick_vol_ok(indicator_block: Dict[str, Any]) -> bool:
         return True
 
 
+def pick_vol_pct(indicator_block: Dict[str, Any]) -> Optional[float]:
+    """Volatility percentile from the regime snapshot; None if absent."""
+    try:
+        v = indicator_block["raw"]["details"]["regime_feats"].get("vol_pct")
+        return None if v is None else float(v)
+    except Exception:
+        return None
+
+
 def pick_trigger(indicator_block: Dict[str, Any]) -> Tuple[Optional[str], set]:
     """Majority direction among fired trend triggers, and the set of trigger
     names that voted that direction. Ties -> (None, empty)."""
@@ -158,6 +167,10 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
     nwe_hit = nwe_action in ("buy", "sell")
     conf_hit = final_conf >= _cfg.CONFIDENCE_GATE
     vol_ok = pick_vol_ok(ind_block)
+    vol_pct = pick_vol_pct(ind_block)
+    # v3.7.1: NWE-only volatility ceiling (0 = off; missing vol_pct never blocks)
+    nwe_vol_capped = (_cfg.GATE_NWE_VOL_MAX > 0 and vol_pct is not None
+                      and vol_pct >= _cfg.GATE_NWE_VOL_MAX)
     trend_action, trend_names = pick_trigger(ind_block)
     trending = regime in ("trend_up", "trend_down")
     trend_dir = "buy" if regime == "trend_up" else "sell"
@@ -174,6 +187,8 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
         if nwe_hit:
             if not vol_ok:
                 return out(False, final_action, "low_volume")
+            if nwe_vol_capped:
+                return out(False, final_action, "nwe_high_vol")
             if regime == "mixed" and not _cfg.GATE_1H_MIXED:
                 # v3.7 prod evidence: nwe_mixed emissions graded 2/17 on
                 # direction — off unless explicitly re-enabled.
@@ -209,6 +224,8 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
     # Backtest amendment: NWE on higher TFs graded 12.5% (4h ranging) — NWE
     # emissions stay 1h-only unless explicitly re-enabled; conf path remains.
     nwe_allowed = _cfg.GATE_NWE_HIGHER_TF
+    if nwe_allowed and nwe_hit and nwe_vol_capped:
+        return out(False, final_action, "nwe_high_vol")
     if nwe_allowed and nwe_hit and vol_ok and (regime != "mixed" or final_action == nwe_action):
         return out(True, nwe_action,
                    "nwe_mixed" if regime == "mixed" else "nwe_ranging")

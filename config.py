@@ -81,6 +81,9 @@ META_GATE_ENABLED = _env_bool("META_GATE_ENABLED", False)   # gate on meta_p
 #   1h mixed-regime NWE emissions graded 2/17 on direction.
 GATE_1H_MIXED = _env_bool("GATE_1H_MIXED", False)           # 1h NWE emissions in mixed regime
 GATE_CONF_SATURATION = _env_float("GATE_CONF_SATURATION", 0.0)  # >0: suppress directional emits with conf >= value
+# v3.7.1: >0 suppresses NWE emissions when vol_pct >= value (mean-reversion
+# fails in vol expansions — operator field observation; arm on day-30 evidence)
+GATE_NWE_VOL_MAX = _env_float("GATE_NWE_VOL_MAX", 0.0)
 
 # --------------------------------------------------------------------------
 # Correctness v3 (Phase A)
