@@ -28,6 +28,12 @@ races the scheduler/grader writing to the same files.
     python scripts/reset_learning.py            # show the plan, change nothing
     python scripts/reset_learning.py --yes       # do it
     python scripts/reset_learning.py --yes --wipe-news   # also clear news corpus
+    python scripts/reset_learning.py --yes --policies-only   # v3.7 repair reset
+
+--policies-only (v3.7 learning repair): wipe ONLY the policy files + nightly
+artifacts; KEEP the DB learning tables (they are the meta model's training
+set — wiping them would starve it below META_MIN_ROWS for weeks) and the
+jsonl line logs.
 """
 from __future__ import annotations
 
@@ -107,9 +113,16 @@ def main() -> int:
     ap.add_argument("--yes", action="store_true", help="execute (default: dry run)")
     ap.add_argument("--wipe-news", action="store_true",
                     help="also clear the stored news corpus (news_items)")
+    ap.add_argument("--policies-only", action="store_true",
+                    help="wipe only policy files + nightly artifacts; KEEP the "
+                         "DB learning tables and line logs (v3.7 repair reset)")
     ap.add_argument("--force", action="store_true",
                     help="run even if telegram_app appears to be running")
     args = ap.parse_args()
+
+    if args.policies_only and args.wipe_news:
+        print("REFUSING: --policies-only keeps the DB; it cannot combine with --wipe-news.")
+        return 2
 
     if _running() and not args.force:
         print("REFUSING: telegram_app.py looks like it is running. Stop it first "
@@ -117,17 +130,19 @@ def main() -> int:
         return 2
 
     db_path = _db_path()
-    tables = LEARNING_TABLES + (NEWS_TABLES if args.wipe_news else [])
+    tables = ([] if args.policies_only
+              else LEARNING_TABLES + (NEWS_TABLES if args.wipe_news else []))
     policy_files = _files_present(POLICY_FILES)
     backups = _files_present([os.path.join(POLICY_BACKUPS_GLOB, f)
                               for f in os.listdir(POLICY_BACKUPS_GLOB)
                               if ".bak-" in f]) if os.path.isdir(POLICY_BACKUPS_GLOB) else []
     artifacts = _files_present(_nightly_artifacts())
-    line_logs = _files_present(LINE_LOGS)
+    line_logs = [] if args.policies_only else _files_present(LINE_LOGS)
     counts = _table_counts(db_path, tables)
 
     print("=" * 64)
-    print("RESET LEARNING TO ZERO" + ("" if args.yes else "   (DRY RUN — nothing will change)"))
+    print(("RESET POLICIES ONLY" if args.policies_only else "RESET LEARNING TO ZERO")
+          + ("" if args.yes else "   (DRY RUN — nothing will change)"))
     print("=" * 64)
     print("\nWILL DELETE (after backup):")
     for p in policy_files + backups + artifacts + line_logs:
@@ -135,9 +150,13 @@ def main() -> int:
     for t, n in counts.items():
         print(f"   table  {db_path}:{t}  ({n} rows -> 0)")
     print("\nWILL KEEP (untouched):")
-    for keep in ("data/  (market OHLCV cache)", f"{config.MEMBERSHIP_DB}  (customers)",
-                 "macro_snapshots" + ("" if args.wipe_news else " + news corpus"),
-                 config.ECOSYSTEMS_CACHE_PATH, ".env"):
+    keeps = ["data/  (market OHLCV cache)", f"{config.MEMBERSHIP_DB}  (customers)",
+             "macro_snapshots" + ("" if args.wipe_news else " + news corpus"),
+             config.ECOSYSTEMS_CACHE_PATH, ".env"]
+    if args.policies_only:
+        keeps.insert(0, f"{db_path}  (ALL tables — meta training data)")
+        keeps.insert(1, "jsonl line logs")
+    for keep in keeps:
         print(f"   {keep}")
 
     if not args.yes:
@@ -154,7 +173,7 @@ def main() -> int:
             shutil.copy2(p, os.path.join(backup_dir, os.path.basename(p)))
         except Exception as e:
             print(f"   ! backup failed for {p}: {e}")
-    if os.path.exists(db_path):
+    if not args.policies_only and os.path.exists(db_path):
         shutil.copy2(db_path, os.path.join(backup_dir, os.path.basename(db_path)))
     print(f"\nBacked up to {backup_dir}/")
 

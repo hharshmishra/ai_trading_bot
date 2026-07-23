@@ -117,3 +117,30 @@ def test_refuses_when_running(tree, monkeypatch):
     monkeypatch.setattr(rl, "_running", lambda: True)
     monkeypatch.setattr(sys, "argv", ["reset_learning.py", "--yes"])
     assert rl.main() == 2                                     # refused, no --force
+
+
+def test_policies_only_keeps_db_and_line_logs(tree, monkeypatch):
+    """v3.7 repair reset: policies + nightly artifacts go, the DB learning
+    tables (meta training data) and line logs stay."""
+    tmp, db, subs = tree
+    assert _run(monkeypatch, "--yes", "--policies-only") == 0
+
+    for f in ("brain_policy.json", "news_agent_policy.json",
+              "sentiment_agent_policy.json", "news_agent_policy.json.bak-5dim",
+              "meta_model.pkl"):
+        assert not (tmp / "logs" / f).exists(), f
+
+    # line logs and every DB table untouched
+    assert (tmp / "logs" / "predictions_log.json").exists()
+    c = _counts(db, ["predictions", "outcomes", "rewards", "sessions",
+                     "news_items", "macro_snapshots"])
+    assert all(n == 1 for n in c.values()), c
+
+    # backup written for the policies (not the DB — it was untouched)
+    backups = list((tmp / "logs").glob("pre-reset-*"))
+    assert backups and (backups[0] / "brain_policy.json").exists()
+    assert not (backups[0] / "bitreinforcex.db").exists()
+
+
+def test_policies_only_refuses_wipe_news(tree, monkeypatch):
+    assert _run(monkeypatch, "--yes", "--policies-only", "--wipe-news") == 2
