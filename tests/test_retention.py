@@ -116,3 +116,58 @@ class TestPreflightMembership:
         fn = self._run(monkeypatch, True, [1], "")
         out = fn()
         assert "WARN" in out and "1 admin" in out
+
+
+class TestPreflightEnvParity:
+    """v3.7: a key that never reaches the box's .env is a silent default —
+    the failure mode that kept the 5th voter dead for 19 days."""
+
+    def _fn(self):
+        # slice the function out of the script so importing never runs it
+        src = (ROOT / "scripts" / "preflight.py").read_text()
+        ns = {"os": __import__("os"), "Path": Path, "ROOT": ROOT}
+        exec(src[src.index("def _env_parity"):src.index("def _membership")], ns)
+        return ns["_env_parity"]
+
+    def _example(self, tmp_path, body):
+        p = tmp_path / ".env.example"
+        p.write_text(body)
+        return p
+
+    def test_all_present(self, tmp_path, monkeypatch):
+        ex = self._example(tmp_path, "ALPHA=1\nBETA=false   # inline comment\n")
+        monkeypatch.setenv("ALPHA", "1")
+        monkeypatch.setenv("BETA", "true")
+        out = self._fn()(example=ex)
+        assert "all present" in out and "WARN" not in out
+
+    def test_missing_key_warns_and_names_it(self, tmp_path, monkeypatch):
+        ex = self._example(tmp_path, "ALPHA=1\nSENTIMENT_ENABLED=false\n")
+        monkeypatch.setenv("ALPHA", "1")
+        monkeypatch.delenv("SENTIMENT_ENABLED", raising=False)
+        out = self._fn()(example=ex)          # WARN, never raises
+        assert out.startswith("WARN") and "SENTIMENT_ENABLED" in out
+        assert "1/2" in out
+
+    def test_empty_value_counts_as_present(self, tmp_path, monkeypatch):
+        """T2_EXTRA_VOTES= is a legitimate empty value, not a missing key."""
+        ex = self._example(tmp_path, "T2_EXTRA_VOTES=\n")
+        monkeypatch.setenv("T2_EXTRA_VOTES", "")
+        assert "all present" in self._fn()(example=ex)
+
+    def test_comments_and_prose_ignored(self, tmp_path, monkeypatch):
+        ex = self._example(tmp_path,
+                           "# HEADER=ignored\n\n  # spaced comment=x\n"
+                           "see KEY=value in the docs\nALPHA=1\n")
+        monkeypatch.setenv("ALPHA", "1")
+        out = self._fn()(example=ex)
+        assert "1 keys" in out and "WARN" not in out
+
+    def test_missing_example_file_is_skipped(self, tmp_path):
+        out = self._fn()(example=tmp_path / "nope.example")
+        assert "skipped" in out
+
+    def test_repo_example_parses_real_keys(self):
+        """Guards the parser against the real file's formatting."""
+        out = self._fn()(example=ROOT / ".env.example")
+        assert "SENTIMENT_ENABLED" in out or "all present" in out

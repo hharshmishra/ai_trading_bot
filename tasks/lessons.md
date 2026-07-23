@@ -111,3 +111,7 @@
     live .env predated it, and the 5th voter did nothing for 19 days with no
     warning anywhere. After adding a flag, diff `.env.example` keys against
     every deployed `.env` (preflight now the right home for that check).
+    **Fixed in v3.7:** `preflight._env_parity()` diffs `.env.example` key names
+    against the live environment and WARNs per missing key — presence, not
+    truthiness (`T2_EXTRA_VOTES=` is legitimately empty), names only, never
+    values. Run preflight after every `.env` edit.

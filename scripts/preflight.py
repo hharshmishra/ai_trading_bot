@@ -3,7 +3,8 @@
 
     ./venv/bin/python scripts/preflight.py
 
-Checks core imports, SQLite init + CRUD, the RAG embedder, and required env vars.
+Checks core imports, SQLite init + CRUD, the RAG embedder, required env vars,
+and .env/.env.example key parity.
 Exit 0 = ready, 1 = problems found.
 """
 import os
@@ -11,7 +12,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -78,6 +80,35 @@ def _env():
     return f"required set; channels: {chans or 'NONE (no signals will send)'}"
 
 
+def _env_parity(example=None):
+    """Every key in .env.example must be present in the live environment.
+
+    An ABSENT flag silently falls back to its code default — that is how the
+    v3.5 sentiment voter sat dead in production for 19 days: SENTIMENT_ENABLED
+    reached .env.example but never the box's .env, so the 5th voter cast zero
+    votes with nothing anywhere reporting it. PRESENCE is the test, not
+    truthiness (``T2_EXTRA_VOTES=`` is a legitimate empty value). WARN rather
+    than fail — a deployment may omit optional keys deliberately. Key names
+    only; values are never read or printed.
+    """
+    path = Path(example) if example else ROOT / ".env.example"
+    if not path.exists():
+        return f"skipped ({path.name} not found)"
+    keys = []
+    for line in path.read_text().splitlines():
+        if line.lstrip().startswith("#") or "=" not in line:
+            continue
+        k = line.split("=", 1)[0].strip()
+        if k and k.isupper() and " " not in k and k not in keys:
+            keys.append(k)
+    missing = [k for k in keys if k not in os.environ]
+    if missing:
+        return (f"WARN: {len(missing)}/{len(keys)} key(s) from {path.name} absent "
+                f"from the environment — running on code defaults: "
+                + ", ".join(missing))
+    return f"{len(keys)} keys from {path.name} all present"
+
+
 def _membership():
     """Rent-out mode misconfig fails BEFORE start, not at the first /grant.
     Token missing is a WARN (storefront degrades by design, Pro gate stays on);
@@ -121,6 +152,7 @@ check("sklearn", _sklearn)
 check("database", _db)
 check("rag embedder", _embedder)
 check("env vars", _env)
+check("env parity", _env_parity)
 check("membership", _membership)
 check("universe", _universe)
 

@@ -94,7 +94,9 @@ Order matters — **archive before any git operation**:
    NIGHTLY_CATCHUP=true
    ```
 6. `venv/bin/python scripts/preflight.py` → READY, then
-   `sudo systemctl start bitreinforcex`.
+   `sudo systemctl start bitreinforcex`. **Check the `env parity` line** — it
+   names every `.env.example` key missing from the box's environment. If step 5
+   was pasted incompletely it says so here instead of costing another 19 days.
 7. Expect within minutes: a `nightly catch-up:` line (marker absent →
    immediate training regenerates `meta_model.pkl`/`calibration.json`, so the
    meta gate is never silently inert), a fresh `logs/brain_policy.json` at the
@@ -117,6 +119,21 @@ Order matters — **archive before any git operation**:
 Suppressed rows record `emitted=0` with `trigger_source=NULL` (the suppress
 reason is not persisted) — monitor via the `meta_p` / `final_confidence`
 columns, not `trigger_source`.
+
+## Why it stayed invisible for 19 days
+
+Nothing checked that a deployed `.env` still matched `.env.example`. The
+sentiment flag entered the example on Jul 5 (`754451d`), hours before the
+production box was deployed from an `.env` that predated it; `config.py`
+supplied `False` and the voter cast zero votes for 19 days without a single
+warning. v3.6's commit titled "env parity" only made the two `.env.example`
+files identical — it added no runtime guard.
+
+v3.7 adds `_env_parity()` to `scripts/preflight.py`: it reads the key names
+from `.env.example`, diffs them against the live environment, and **warns**
+(never fails — a box may omit optional keys deliberately) naming each missing
+key. Presence is the test, not truthiness, so `T2_EXTRA_VOTES=` counts as set.
+Values are never read or printed. Run preflight after any `.env` edit.
 
 ## Known follow-ups
 

@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-353%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -69,11 +69,11 @@ git clone https://github.com/hharshmishra/ai_trading_bot.git && cd ai_trading_bo
 python3.11 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt        # installs the vendored pandas_ta too
 cp .env.example .env                   # fill in: OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, chat IDs
-python scripts/preflight.py            # must print READY (checks pins, DB, universe freshness)
+python scripts/preflight.py            # must print READY (pins, DB, universe freshness, .env parity)
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **353 passing**.
+Tests (no network / keys needed): `pytest -q` → **359 passing**.
 
 ## 🎓 How it learns
 
@@ -178,7 +178,10 @@ Backups: nightly `deploy/backup.sh` (WAL-safe) or continuous Litestream (`deploy
 > (vendored `pandas_ta` in `vendor/` — upstream is deleted from PyPI/GitHub),
 > `scikit-learn==1.3.2`, `scipy==1.11.4` (newer pulls numpy 2.x and breaks the ABI).
 > `preflight.py` asserts all of it, plus that every universe pair still trades
-> (it has already caught LUNA, LRC and MKR delistings).
+> (it has already caught LUNA, LRC and MKR delistings) and that every
+> `.env.example` key is present in the environment — a flag missing from a
+> deployed `.env` silently falls back to its code default, which is how the
+> 5th voter sat dead in production for 19 days.
 
 ## 💼 Renting it out (membership mode)
 
