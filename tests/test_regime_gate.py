@@ -175,11 +175,20 @@ class TestGateV2TruthTable:
         emit, *_ = self.gate(_res(tf="1h", final_conf=0.95))
         assert not emit
 
-    def test_1h_mixed_needs_brain_agreement(self):
+    def test_1h_mixed_disabled_by_default(self):
+        # v3.7 prod evidence: nwe_mixed emissions graded 2/17 on direction
         r = _res(tf="1h", regime="mixed", nwe="buy", final_action="buy")
-        assert self.gate(r)[0]
+        emit, *_, reason = self.gate(r)
+        assert not emit and reason == "nwe_mixed_disabled"
+
+    def test_1h_mixed_needs_brain_agreement_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(config, "GATE_1H_MIXED", True)
+        r = _res(tf="1h", regime="mixed", nwe="buy", final_action="buy")
+        emit, *_, reason = self.gate(r)
+        assert emit and reason == "nwe_mixed"
         r2 = _res(tf="1h", regime="mixed", nwe="buy", final_action="sell")
-        assert not self.gate(r2)[0]
+        emit2, *_, reason2 = self.gate(r2)
+        assert not emit2 and reason2 == "no_brain_agreement"
 
     def test_1h_trending_nwe_suppressed(self):
         r = _res(tf="1h", regime="trend_up", nwe="sell")

@@ -76,6 +76,11 @@ TB_GRADING_ENABLED = _env_bool("TB_GRADING_ENABLED", False)  # triple-barrier re
 DERIVATIVES_ENABLED = _env_bool("DERIVATIVES_ENABLED", False)  # 4th voter
 META_SHADOW = _env_bool("META_SHADOW", True)                # stamp meta_p/calibrated_conf
 META_GATE_ENABLED = _env_bool("META_GATE_ENABLED", False)   # gate on meta_p
+# v3.7 prod-evidence amendments (19-day run):
+#   conf==1.0 = unanimity herd, emitted 1 correct / 7 wrong / 15 flat;
+#   1h mixed-regime NWE emissions graded 2/17 on direction.
+GATE_1H_MIXED = _env_bool("GATE_1H_MIXED", False)           # 1h NWE emissions in mixed regime
+GATE_CONF_SATURATION = _env_float("GATE_CONF_SATURATION", 0.0)  # >0: suppress directional emits with conf >= value
 
 # --------------------------------------------------------------------------
 # Correctness v3 (Phase A)

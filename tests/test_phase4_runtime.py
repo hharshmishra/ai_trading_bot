@@ -298,3 +298,39 @@ def test_migration_backfills_legacy_session_links(tmp_path):
     reopened = Store(db)                                    # _migrate runs
     assert reopened.get_session(sid)["prediction_id"] == pid
     reopened.close()
+
+
+def test_run_cycle_conf_saturation_gate(tmp_path, monkeypatch):
+    """v3.7: unanimity-saturated confidence (>= GATE_CONF_SATURATION) is
+    suppressed before broadcast; 0 disables and keeps legacy behavior."""
+    import config
+    from persistence import Store
+    from cycle import run_cycle
+
+    store = Store(str(tmp_path / "c.db"))
+    df = pd.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=10, freq="4h"),
+                       "open": 1.0, "high": 1.0, "low": 1.0, "close": 100.0, "volume": 1.0})
+    fetcher = SimpleNamespace(get_ohlcv=lambda s, tf, limit=500: df.copy())
+    dm = SimpleNamespace(indicator=None, news=None, research=None,
+                         decide=lambda sym, tf, ua, ctx: make_decision(sym, tf, "buy", 1.0))
+    broadcasts = []
+
+    async def fake_broadcast(**kw):
+        broadcasts.append(kw["pair"])
+        return "sess"
+
+    monkeypatch.setattr(config, "GATE_CONF_SATURATION", 0.97)
+    summary = asyncio.run(run_cycle(
+        ["4h"], dm=dm, data_fetcher=fetcher, broadcast=fake_broadcast,
+        symbols=["AUSDT"], store=store, build_context=lambda *a, **k: None))
+    assert summary["emitted"] == 0 and broadcasts == []
+    with store._lock:
+        assert store.conn.execute(
+            "SELECT emitted FROM predictions").fetchone()["emitted"] == 0
+
+    monkeypatch.setattr(config, "GATE_CONF_SATURATION", 0.0)
+    summary2 = asyncio.run(run_cycle(
+        ["4h"], dm=dm, data_fetcher=fetcher, broadcast=fake_broadcast,
+        symbols=["AUSDT"], store=store, build_context=lambda *a, **k: None))
+    assert summary2["emitted"] == 1 and broadcasts == ["AUSDT"]
+    store.close()

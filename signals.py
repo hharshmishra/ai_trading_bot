@@ -174,6 +174,10 @@ def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, s
         if nwe_hit:
             if not vol_ok:
                 return out(False, final_action, "low_volume")
+            if regime == "mixed" and not _cfg.GATE_1H_MIXED:
+                # v3.7 prod evidence: nwe_mixed emissions graded 2/17 on
+                # direction — off unless explicitly re-enabled.
+                return out(False, final_action, "nwe_mixed_disabled")
             if regime == "mixed" and final_action != nwe_action:
                 return out(False, final_action, "no_brain_agreement")
             return out(True, nwe_action,

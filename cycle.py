@@ -154,6 +154,13 @@ async def run_cycle(
                     except Exception:
                         meta_p = calibrated = None
 
+                # Confidence-saturation gate (v3.7): conf==1.0 is unanimity,
+                # and the prod herd was an anti-signal (1c/7w/15f emitted).
+                if (emit and config.GATE_CONF_SATURATION > 0
+                        and overall in ("buy", "sell")
+                        and conf >= config.GATE_CONF_SATURATION):
+                    emit, reason = False, "conf_saturated"
+
                 # Meta gate (only when explicitly enabled after shadow evidence).
                 if (emit and config.META_GATE_ENABLED and meta_p is not None
                         and meta_p < config.META_GATE_THRESHOLD):
