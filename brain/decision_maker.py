@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import threading
 import time
 from dataclasses import is_dataclass, asdict
 from typing import Any, Dict, Optional, Tuple
@@ -108,10 +109,19 @@ def _load_policy() -> Dict[str, Any]:
     return pol
 
 
+# Serializes every brain-policy mutation in-process. The grader thread updates
+# scores on each graded row while the nightly thread applies decay_trust —
+# without this, decay's read-modify-write can drop a concurrent feedback
+# nudge, and two unsynchronized json.dump calls can interleave on the file.
+_POLICY_LOCK = threading.Lock()
+
+
 def _save_policy(pol: Dict[str, Any]):
     pol["updated_at"] = time.time()
-    with open(POLICY_PATH, "w", encoding="utf-8") as f:
+    tmp = POLICY_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(pol, f, indent=2)
+    os.replace(tmp, POLICY_PATH)   # atomic on POSIX — no torn reads ever
 
 
 class DecisionMaker:
@@ -378,25 +388,26 @@ class DecisionMaker:
         agent is scored exactly once.
         """
         true = self._normalize_action(true_outcome)
-        baselines = self.policy.setdefault("baseline", {})
-        for ag in AGENT_NAMES:
-            res = agent_results.get(ag)
-            if res is None:
-                continue  # e.g. pre-Phase-4 rows without a derivatives snapshot
-            pred = self._normalize_action(res.get("action", "skip"))
-            conf = float(res.get("confidence", 0.0) or 0.0)
-            out = brain_trust_outcome(pred, true)
-            if out is None:
-                continue  # skip votes carry no trust evidence
-            b = float(baselines.get(ag, 0.0))
-            delta = conf * (out - b)
-            # baseline updates AFTER the delta so the first vote after a reset
-            # is judged against 0 (neutral), not against itself
-            baselines[ag] = (1.0 - TRUST_BASELINE_ALPHA) * b + TRUST_BASELINE_ALPHA * out
-            s = float(self.policy["scores"].get(ag, 0.0)) + TRUST_LR * delta
-            self.policy["scores"][ag] = max(-SCORE_CLAMP, min(SCORE_CLAMP, s))
+        with _POLICY_LOCK:
+            baselines = self.policy.setdefault("baseline", {})
+            for ag in AGENT_NAMES:
+                res = agent_results.get(ag)
+                if res is None:
+                    continue  # e.g. pre-Phase-4 rows without a derivatives snapshot
+                pred = self._normalize_action(res.get("action", "skip"))
+                conf = float(res.get("confidence", 0.0) or 0.0)
+                out = brain_trust_outcome(pred, true)
+                if out is None:
+                    continue  # skip votes carry no trust evidence
+                b = float(baselines.get(ag, 0.0))
+                delta = conf * (out - b)
+                # baseline updates AFTER the delta so the first vote after a
+                # reset is judged against 0 (neutral), not against itself
+                baselines[ag] = (1.0 - TRUST_BASELINE_ALPHA) * b + TRUST_BASELINE_ALPHA * out
+                s = float(self.policy["scores"].get(ag, 0.0)) + TRUST_LR * delta
+                self.policy["scores"][ag] = max(-SCORE_CLAMP, min(SCORE_CLAMP, s))
 
-        self._normalize_weights()
+            self._normalize_weights()
 
     def apply_brain_feedback(self, agent_results: Dict[str, Dict[str, Any]], true_outcome: str):
         """Public entry for the grader / Telegram handler to update the brain's
@@ -416,6 +427,7 @@ class DecisionMaker:
         f = config.TRUST_DECAY if factor is None else float(factor)
         if not (0.0 < f < 1.0):
             return
-        scores = self.policy.get("scores") or {}
-        self.policy["scores"] = {k: float(v) * f for k, v in scores.items()}
-        self._normalize_weights()
+        with _POLICY_LOCK:      # nightly thread vs grader feedback thread
+            scores = self.policy.get("scores") or {}
+            self.policy["scores"] = {k: float(v) * f for k, v in scores.items()}
+            self._normalize_weights()

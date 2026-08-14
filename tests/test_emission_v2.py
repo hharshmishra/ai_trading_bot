@@ -94,6 +94,68 @@ class TestLedgerVerdict:
         ok, why, _ = ledger_verdict(None, "nwe", "1h", "mixed", 0.5)
         assert not ok and why == "ledger_missing"
 
+    def test_provisional_tier_blocks_wounded_source(self):
+        """Review finding: a 5.9%-hit trend source at n=17 (< MIN_N) must get
+        a provisional below-floor verdict, NOT a fresh new-source probation
+        budget of LEDGER_PROBATION_N junk emissions."""
+        led = build_ledger(_rows("trend", "4h", "trend_up", 0.5, 17, 1,
+                                 emitted=17))
+        ok, why, st = ledger_verdict(led, "trend", "4h", "trend_up", 0.5)
+        assert not ok and why == "ledger_below_floor"
+        assert st["probation"] == "provisional"
+
+    def test_provisional_tier_passes_good_small_source(self):
+        led = build_ledger(_rows("sms_bos", "1h", "mixed", 0.8, 12, 6))  # 50%
+        ok, why, st = ledger_verdict(led, "sms_bos", "1h", "mixed", 0.8)
+        assert ok and why == "ledger_ok" and st["probation"] == "provisional"
+
+
+class TestLegacySynthesis:
+    """Review finding (CONFIRMED): synthesis must live inside build_ledger so
+    the nightly rebuild reproduces the seeded cohorts instead of overwriting
+    them with an empty table (which re-armed probation for every source)."""
+
+    def _legacy(self, gate_reason, nwe=None, final="skip", conf=0.0,
+                label="sell", emitted=0):
+        return {"candidate_trigger": None, "candidate_action": None,
+                "gate_reason": gate_reason, "nwe_action": nwe,
+                "final_action": final, "final_confidence": conf,
+                "realized_label": label, "tf": "1h", "regime": "mixed",
+                "regime_feats": {"vol_pct": 0.8}, "emitted": emitted}
+
+    def test_nightly_rebuild_preserves_seeded_nwe_cohort(self):
+        rows = [self._legacy("nwe_mixed_disabled", nwe="sell") for _ in range(30)]
+        led = build_ledger(rows)
+        assert led["cohorts"]["nwe|1h|mixed|elevated"]["n"] == 30
+
+    def test_conf_saturated_recovers_nwe_before_conf_prefix(self):
+        """Review finding (CONFIRMED): 'conf_saturated' matched the
+        startswith('conf') branch first and mis-credited the conf cohort
+        with the brain-final direction."""
+        from jobs.ledger import synthesize_candidate
+        row = self._legacy("conf_saturated", nwe="sell", final="buy", conf=1.0)
+        assert synthesize_candidate(row) == ("nwe", "sell")
+        row2 = self._legacy("conf_saturated", final="buy", conf=1.0)
+        assert synthesize_candidate(row2) == ("conf", "buy")
+
+    def test_meta_gate_same_recovery(self):
+        from jobs.ledger import synthesize_candidate
+        assert synthesize_candidate(
+            self._legacy("meta_gate", nwe="buy", final="sell", conf=0.9)
+        ) == ("nwe", "buy")
+
+    def test_suppressed_trend_rows_not_guessed(self):
+        from jobs.ledger import synthesize_candidate
+        assert synthesize_candidate(
+            self._legacy("counter_trend_no_flip", final="buy")) == (None, None)
+
+    def test_native_v38_rows_bypass_synthesis(self):
+        rows = [dict(self._legacy("nwe_ranging", nwe="sell"),
+                     candidate_trigger="nwe", candidate_action="buy")]
+        led = build_ledger(rows)
+        # native candidate_action (buy) wins over what synthesis would say
+        assert led["cohorts"]["nwe|1h|mixed|elevated"]["hit"] == 0
+
 
 class TestLedgerArtifact:
     def test_save_load_cache(self, tmp_path, monkeypatch):

@@ -4,15 +4,9 @@
 Builds logs/emission_ledger.json from the box's graded history so the
 edge-first gate starts with earned cohorts instead of an empty table.
 v3.8 rows carry candidate_trigger/candidate_action natively; legacy rows
-(v3.7.1) are synthesized conservatively from the recorded funnel telemetry:
-
-  gate_reason nwe_* / no_brain_agreement            -> ("nwe", nwe_action)
-  low_volume with a directional nwe_action          -> ("nwe", nwe_action)
-  conf_* / counter_trend_conf (directional final)   -> ("conf", final_action)
-  meta_gate/conf_saturated: nwe_action if present,
-    else conf when final_confidence cleared the gate -> best recoverable
-  trend rows: only emitted ones carry a trustworthy direction (the final);
-    suppressed trend candidates are skipped rather than guessed.
+(v3.7.1) are synthesized by jobs.ledger.synthesize_candidate — the SAME code
+path the nightly rebuild uses, so the artifact this writes and the one the
+02:00 job regenerates are identical (mapping documented on that function).
 
 Usage:
   venv/bin/python scripts/seed_ledger.py            # dry run (prints table)
@@ -33,34 +27,6 @@ from jobs.ledger import build_ledger, save_ledger  # noqa: E402
 from persistence import Store  # noqa: E402
 
 
-def synth_candidate(r: dict) -> dict:
-    if r.get("candidate_trigger") and r.get("candidate_action"):
-        return r
-    reason = (r.get("gate_reason") or "").lower()
-    nwe = (r.get("nwe_action") or "").lower()
-    final = (r.get("final_action") or "").lower()
-    conf = float(r.get("final_confidence") or 0.0)
-    src = act = None
-    if reason.startswith("nwe") or reason == "no_brain_agreement":
-        src, act = "nwe", nwe
-    elif reason == "low_volume" and nwe in ("buy", "sell"):
-        src, act = "nwe", nwe
-    elif reason.startswith("conf") or reason == "counter_trend_conf":
-        src, act = "conf", final
-    elif reason in ("meta_gate", "conf_saturated"):
-        if nwe in ("buy", "sell"):
-            src, act = "nwe", nwe
-        elif final in ("buy", "sell") and conf >= config.CONFIDENCE_GATE:
-            src, act = "conf", final
-    elif (reason.startswith(("trend", "reversal", "counter_trend"))
-          and r.get("emitted") and final in ("buy", "sell")):
-        src, act = "trend", final
-    if src and act in ("buy", "sell"):
-        r = dict(r)
-        r["candidate_trigger"], r["candidate_action"] = src, act
-    return r
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--yes", action="store_true", help="write the artifact")
@@ -68,7 +34,7 @@ def main() -> int:
     args = ap.parse_args()
 
     store = Store(os.getenv("BITREINFORCEX_DB", "logs/bitreinforcex.db"))
-    rows = [synth_candidate(r) for r in store.training_rows()]
+    rows = store.training_rows()   # build_ledger synthesizes legacy rows itself
     led = build_ledger(rows)
     cohorts = led.get("cohorts") or {}
 

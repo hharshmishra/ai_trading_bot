@@ -70,12 +70,55 @@ def _key(source: str, tf: str, rg: str, vb: str) -> str:
     return "|".join((source, tf, rg, vb))
 
 
+def synthesize_candidate(r: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """(source, action) for a LEGACY row (pre-v3.8: candidate columns NULL),
+    reconstructed conservatively from the v3.7.1 funnel telemetry. Lives here
+    — inside the builder's own code path — so the nightly rebuild produces
+    the SAME cohorts as the deploy-time seed; when it lived only in the seed
+    script, the first nightly overwrote the seeded ledger with empty cohorts
+    and every source fell back to new-source probation.
+
+      nwe_* / no_brain_agreement                  -> ("nwe", nwe_action)
+      low_volume with a directional nwe_action    -> ("nwe", nwe_action)
+      meta_gate / conf_saturated (checked BEFORE the conf prefix — the final
+        suppressor overwrote the reason): nwe_action first, else conf when
+        final_confidence cleared the gate
+      conf_* / counter_trend_conf                 -> ("conf", final_action)
+      trend rows: only EMITTED ones, direction approximated by the brain
+        final (the sent trend_action was not persisted pre-v3.8 — a known
+        approximation; suppressed trend candidates are skipped, not guessed)
+    """
+    reason = (r.get("gate_reason") or "").lower()
+    nwe = (r.get("nwe_action") or "").lower()
+    final = (r.get("final_action") or "").lower()
+    conf = float(r.get("final_confidence") or 0.0)
+    src = act = None
+    if reason.startswith("nwe") or reason == "no_brain_agreement":
+        src, act = "nwe", nwe
+    elif reason == "low_volume" and nwe in ("buy", "sell"):
+        src, act = "nwe", nwe
+    elif reason in ("meta_gate", "conf_saturated"):
+        if nwe in ("buy", "sell"):
+            src, act = "nwe", nwe
+        elif final in ("buy", "sell") and conf >= config.CONFIDENCE_GATE:
+            src, act = "conf", final
+    elif reason.startswith("conf") or reason == "counter_trend_conf":
+        src, act = "conf", final
+    elif (reason.startswith(("trend", "reversal", "counter_trend"))
+          and r.get("emitted") and final in ("buy", "sell")):
+        src, act = "trend", final
+    if src and act in ("buy", "sell"):
+        return src, act
+    return None, None
+
+
 def build_ledger(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Aggregate graded candidate rows into the cohort table.
 
-    ``rows`` are Store.training_rows() dicts (prediction JOIN outcome). Only
-    rows with a directional candidate_action count — the ledger measures the
-    candidates the gate actually ruled on.
+    ``rows`` are Store.training_rows() dicts (prediction JOIN outcome). v3.8
+    rows carry candidate_trigger/candidate_action natively; legacy rows are
+    synthesized (see synthesize_candidate) so seed and nightly rebuilds are
+    one code path.
     """
     cohorts: Dict[str, Dict[str, int]] = {}
     emitted_by_source: Dict[str, int] = {}
@@ -83,7 +126,10 @@ def build_ledger(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         src = (r.get("candidate_trigger") or "").lower()
         act = (r.get("candidate_action") or "").lower()
         if not src or act not in ("buy", "sell"):
-            continue
+            s2, a2 = synthesize_candidate(r)
+            if not s2:
+                continue
+            src, act = s2, a2
         label = (r.get("realized_label") or "").lower()
         tf = (r.get("tf") or "").lower()
         rf = r.get("regime_feats") or {}
@@ -171,6 +217,18 @@ def ledger_verdict(ledger: Optional[Dict[str, Any]], source: str, tf: str,
         stats.update({"cohort": gk, "n": glob["n"], "lb": glob["lb"],
                       "rate": glob["rate"], "probation": "global"})
         if _passes(glob):
+            return True, "ledger_ok", stats
+        return False, "ledger_below_floor", stats
+    # Provisional tier: a source with SOME evidence (n in [MIN_N/3, MIN_N))
+    # is judged on its rate alone — it must never slide back into the
+    # new-source probation budget (a 5.9%-hit trend source at n=17 would
+    # otherwise get a fresh 40-emission allowance). Suppressed candidates
+    # keep getting graded, so a good source revives at n >= MIN_N.
+    prov_n = max(8, config.LEDGER_MIN_N // 3)
+    if glob and glob["n"] >= prov_n:
+        stats.update({"cohort": gk, "n": glob["n"], "lb": glob["lb"],
+                      "rate": glob["rate"], "probation": "provisional"})
+        if glob["rate"] >= config.LEDGER_FLOOR:
             return True, "ledger_ok", stats
         return False, "ledger_below_floor", stats
     emitted = (ledger.get("emitted_by_source") or {}).get(src, 0)

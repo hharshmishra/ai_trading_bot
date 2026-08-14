@@ -207,6 +207,40 @@ class TestTrustAdvantage:
         dm.decay_trust(-2.0)
         assert dm.policy["scores"] == before
 
+    def test_decay_and_feedback_are_serialized(self, dm, tmp_path):
+        """Review finding: nightly decay_trust races the grader's feedback
+        thread — both now hold _POLICY_LOCK and the save is atomic, so the
+        policy file must never be torn/invalid under interleaving."""
+        import json
+        import threading
+        import brain.decision_maker as dmm
+        res = {"indicator": {"action": "buy", "confidence": 1.0}}
+        errors = []
+
+        def feedback():
+            try:
+                for i in range(150):
+                    dm.apply_brain_feedback(
+                        {"indicator": dict(res["indicator"])},
+                        "buy" if i % 3 else "sell")
+            except Exception as e:            # pragma: no cover
+                errors.append(e)
+
+        def decay():
+            try:
+                for _ in range(150):
+                    dm.decay_trust(0.999)
+            except Exception as e:            # pragma: no cover
+                errors.append(e)
+
+        threads = [threading.Thread(target=feedback), threading.Thread(target=decay)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        assert not errors
+        with open(dmm.POLICY_PATH, encoding="utf-8") as f:
+            pol = json.load(f)                # never torn — atomic replace
+        assert all(abs(v) <= 10.0 for v in pol["scores"].values())
+
     @pytest.fixture
     def dm(self, tmp_path, monkeypatch):
         import brain.decision_maker as dmm
