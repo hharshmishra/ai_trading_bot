@@ -23,7 +23,7 @@ from jobs.nightly import apply_calibration, meta_probability
 from market_context import build_market_context
 from persistence import get_store
 from signals import (TF_SECONDS, derive_candidate, should_emit_signal,
-                     should_emit_signal_v2)
+                     should_emit_signal_v2, should_emit_signal_v3)
 
 # Default pair universe (48 USDT pairs).
 # Stale-universe prevention (correctness v3, A6): LUNA -> SUI, and the new
@@ -109,9 +109,6 @@ async def run_cycle(
                 k = HORIZON_K.get(tf, 1)
                 grade_due = (close_ts + k * TF_SECONDS.get(tf, 3600)) if close_ts else None
 
-                gate = should_emit_signal_v2 if config.GATE_V2_ENABLED else should_emit_signal
-                emit, overall, nwe, conf, reason = gate(res)
-
                 agents_blk = res.get("agents") or {}
                 ind_details = ((agents_blk.get("indicator") or {})
                                .get("raw") or {}).get("details") or {}
@@ -119,12 +116,19 @@ async def run_cycle(
                 atr = regime_feats.get("atr")
                 final_action = (res.get("final") or {}).get("action")
 
-                # v3.8: the candidate the gate ruled on, derived from the
-                # PRE-suppression reason (saturation/meta overwrite it below).
-                # Persisted on every row so meta training sees the same vector
+                # v3.8: the candidate the gate ruled on is persisted on every
+                # row (pre-suppression) so meta training sees the same vector
                 # the gate was served, and the ledger grades every candidate.
-                cand_trigger, cand_action = derive_candidate(
-                    reason, agents_blk.get("indicator") or {}, final_action)
+                ledger_stats = {}
+                if config.EMISSION_V2_ENABLED:
+                    (emit, overall, nwe, conf, reason,
+                     cand_trigger, cand_action, ledger_stats) = should_emit_signal_v3(res)
+                else:
+                    gate = (should_emit_signal_v2 if config.GATE_V2_ENABLED
+                            else should_emit_signal)
+                    emit, overall, nwe, conf, reason = gate(res)
+                    cand_trigger, cand_action = derive_candidate(
+                        reason, agents_blk.get("indicator") or {}, final_action)
 
                 # Meta shadow stamps (Phase 5): calibrated confidence + p(correct)
                 # from the nightly artifacts. Identity/None until they exist.
@@ -187,7 +191,8 @@ async def run_cycle(
 
                 session_id = None
                 if emit and broadcast is not None:
-                    res["meta"] = {"meta_p": meta_p, "calibrated_conf": calibrated}
+                    res["meta"] = {"meta_p": meta_p, "calibrated_conf": calibrated,
+                                   "ledger": ledger_stats or None}
                     session_id = await broadcast(pair=sym, tf=tf, overall=overall, nwe=nwe,
                                                  conf=conf, reason=reason, decision=res)
                     summary["emitted"] += 1

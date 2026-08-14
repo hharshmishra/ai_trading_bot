@@ -93,11 +93,15 @@ class Broadcaster:
         except Exception:
             s_note = None
         meta = decision.get("meta") or {}
+        from signals import ledger_note_from, sms_note_from
         text = fmt_signal_message(
             pair, tf, overall, nwe, conf, reason,
             regime=ind_details.get("regime"),
             trigger=reason if reason.startswith("trend_") else None,
             calibrated_conf=meta.get("calibrated_conf"),
+            meta_p=meta.get("meta_p"),
+            ledger_note=ledger_note_from(meta.get("ledger")),
+            sms_note=sms_note_from(ind_details),
             deriv_note=note,
             sentiment_note=s_note)
 

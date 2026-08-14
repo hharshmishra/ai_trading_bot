@@ -92,8 +92,12 @@ GATE_NWE_VOL_MAX = _env_float("GATE_NWE_VOL_MAX", 0.0)
 # per-cohort Wilson-lower-bound ledger. Flag off => v3.7.1 path byte-identical.
 # --------------------------------------------------------------------------
 EMISSION_V2_ENABLED = _env_bool("EMISSION_V2_ENABLED", False)
-LEDGER_FLOOR = _env_float("LEDGER_FLOOR", 0.38)        # min Wilson LB to emit (strict posture)
-LEDGER_MIN_N = _env_int("LEDGER_MIN_N", 25)            # cohort sample floor before LB is trusted
+# Strict posture, two-part test (a pure Wilson-LB>=0.38 floor emits NOTHING at
+# 21d sample sizes — n=129 @ 42.6% has LB 34.4%): the measured hit-rate must
+# clear FLOOR and the pessimistic bound must stay above random (~0.30).
+LEDGER_FLOOR = _env_float("LEDGER_FLOOR", 0.38)        # min measured hit-rate to emit
+LEDGER_LB_GUARD = _env_float("LEDGER_LB_GUARD", 0.30)  # min Wilson LB (anti-fluke guard)
+LEDGER_MIN_N = _env_int("LEDGER_MIN_N", 25)            # cohort sample floor before the test is trusted
 LEDGER_PROBATION_N = _env_int("LEDGER_PROBATION_N", 40)  # emit budget for brand-new sources
 LEDGER_PATH = os.getenv("LEDGER_PATH", "logs/emission_ledger.json")
 TRUST_DECAY = _env_float("TRUST_DECAY", 0.98)          # nightly score pull toward 0 (1=off)

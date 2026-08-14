@@ -190,6 +190,17 @@ def run_nightly_training(store, dm=None) -> Dict[str, Any]:
     calib = fit_calibration(rows)
     direct_conf = fit_direct_conf(rows)
 
+    # v3.8: evidence ledger — the edge-first gate's cohort table. Best-effort:
+    # a build failure keeps yesterday's artifact (gate stays consistent).
+    ledger_cohorts = 0
+    try:
+        from jobs.ledger import build_ledger, save_ledger
+        led = build_ledger(rows)
+        save_ledger(led)
+        ledger_cohorts = len(led.get("cohorts") or {})
+    except Exception as e:
+        logger.error("ledger build failed: %s", e)
+
     # v3.8: geometric trust decay — rails are temporary (see decay_trust).
     # In-process via the live DecisionMaker; file surgery would race its
     # in-memory policy copy.
@@ -237,6 +248,7 @@ def run_nightly_training(store, dm=None) -> Dict[str, Any]:
             "direct_conf_indicators": sorted((direct_conf or {}).get("conf", {})),
             "ecosystems_refreshed": ecosystems_refreshed,
             "trust_decayed": trust_decayed,
+            "ledger_cohorts": ledger_cohorts,
             "pruned_predictions": pruned}
 
 

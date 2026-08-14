@@ -190,18 +190,109 @@ def derive_candidate(reason: str, indicator_block: Dict[str, Any],
     return group, act if act in ("buy", "sell") else None
 
 
-def pick_sms_signal(indicator_block: Dict[str, Any]) -> Optional[str]:
-    """Smart Money Structure direct signal (v3.8); None when SMS did not fire."""
+def pick_sms(indicator_block: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """(source_name, direction) of the fired Smart Money Structure signal
+    (v3.8) — sms / sms_bos / sms_choch — or (None, None)."""
     try:
         direct = indicator_block["raw"]["details"]["direct_signals"]
         for d in direct:
-            if str(d.get("name", "")).lower() in ("sms", "sms_bos", "sms_choch"):
+            name = str(d.get("name", "")).lower()
+            if name in ("sms", "sms_bos", "sms_choch"):
                 sig = str(d.get("signal", "skip")).lower()
                 if sig in ("buy", "sell"):
-                    return sig
+                    return name, sig
     except Exception:
-        return None
-    return None
+        return None, None
+    return None, None
+
+
+def pick_sms_signal(indicator_block: Dict[str, Any]) -> Optional[str]:
+    """Direction only — convenience wrapper over pick_sms."""
+    return pick_sms(indicator_block)[1]
+
+
+def collect_candidates(res: Dict[str, Any]) -> list:
+    """Every emission candidate this cycle, one dict per source:
+    [{"source": "nwe"|"sms"|"sms_bos"|"sms_choch"|"trend"|"conf",
+      "action": "buy"|"sell"}] in informativeness order (nwe first — the only
+    prod-proven source; conf last). The edge-first gate ranks them by ledger
+    evidence; this order only breaks ties among unmeasured sources.
+    """
+    import config as _cfg
+    out = []
+    ind = (res.get("agents") or {}).get("indicator") or {}
+    nwe = pick_nwe_signal(ind)
+    if nwe in ("buy", "sell"):
+        out.append({"source": "nwe", "action": nwe})
+    sms_name, sms_dir = pick_sms(ind)
+    if sms_name and sms_dir:
+        out.append({"source": sms_name, "action": sms_dir})
+    trend_action, trend_names = pick_trigger(ind)
+    if trend_action in ("buy", "sell") and trend_names:
+        out.append({"source": "trend", "action": trend_action})
+    final_action = str((res.get("final") or {}).get("action", "skip")).lower()
+    final_conf = float((res.get("final") or {}).get("confidence", 0.0) or 0.0)
+    if final_action in ("buy", "sell") and final_conf >= _cfg.CONFIDENCE_GATE:
+        out.append({"source": "conf", "action": final_action})
+    return out
+
+
+def should_emit_signal_v3(res: Dict[str, Any]) -> Tuple[bool, str, str, float, str,
+                                                        Optional[str], Optional[str],
+                                                        Dict[str, Any]]:
+    """Edge-first gate (v3.8, behind EMISSION_V2_ENABLED).
+
+    candidates -> evidence-ledger verdict per candidate -> emit the candidate
+    with the strongest earned evidence (Wilson LB); probation covers cohorts
+    the ledger has not measured yet. No regime/volume hand rules — those
+    judgments live in the ledger cohorts, with n instead of anecdotes. The
+    meta gate still applies afterwards in cycle (meta_p as ranker).
+
+    Returns (emit, action, nwe_action, conf, reason,
+             candidate_trigger, candidate_action, ledger_stats).
+    SMS shadow mode (SMS_EMIT=false): sms candidates are recorded and graded
+    but never emitted — and never steal the slot from an eligible source.
+    """
+    import config as _cfg
+    from jobs.ledger import ledger_verdict, load_ledger_cached
+
+    ind = (res.get("agents") or {}).get("indicator") or {}
+    nwe_action = pick_nwe_signal(ind) or "skip"
+    final_action = str((res.get("final") or {}).get("action", "skip")).lower()
+    final_conf = float((res.get("final") or {}).get("confidence", 0.0) or 0.0)
+    tf = str(res.get("timeframe", "")).lower()
+    regime = pick_regime(ind)
+    vol_pct = pick_vol_pct(ind)
+
+    cands = collect_candidates(res)
+    if not cands:
+        return (False, final_action, nwe_action, final_conf, "",
+                None, None, {})
+
+    ledger = load_ledger_cached()
+    eligible, shadow_or_blocked = [], []
+    for c in cands:
+        allowed_to_emit = not (c["source"].startswith("sms") and not _cfg.SMS_EMIT)
+        ok, why, stats = ledger_verdict(ledger, c["source"], tf, regime, vol_pct)
+        entry = dict(c, verdict=why, stats=stats)
+        if ok and allowed_to_emit:
+            eligible.append(entry)
+        else:
+            if not allowed_to_emit:
+                entry["verdict"] = "sms_shadow"
+            shadow_or_blocked.append(entry)
+
+    if eligible:
+        # earned evidence outranks probation; ties by candidate order (nwe first)
+        eligible.sort(key=lambda e: (-(e["stats"].get("lb") or 0.0),
+                                     e["verdict"] == "ledger_probation"))
+        best = eligible[0]
+        return (True, best["action"], nwe_action, final_conf, best["source"],
+                best["source"], best["action"], best["stats"])
+
+    best = shadow_or_blocked[0]           # candidate order = informativeness
+    return (False, final_action, nwe_action, final_conf, best["verdict"],
+            best["source"], best["action"], best["stats"])
 
 
 def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, str]:
@@ -312,6 +403,13 @@ _REASON_TEXT = {
     "trend_reversal": "SuperTrend reversal",
     "trend_1h": "Trend trigger (1h)",
     "conf_over_80": "Confidence > 80%",
+    # v3.8 edge-first gate: reason == the emitting source
+    "nwe": "NWE crossing (evidence-gated)",
+    "sms": "Smart Money momentum (evidence-gated)",
+    "sms_bos": "Smart Money BOS (evidence-gated)",
+    "sms_choch": "Smart Money CHoCH (evidence-gated)",
+    "trend": "Trend trigger (evidence-gated)",
+    "conf": "Brain consensus (evidence-gated)",
 }
 
 
@@ -321,7 +419,10 @@ def fmt_signal_message(pair: str, tf: str, overall_action: str, nwe_action: str,
                        trigger: Optional[str] = None,
                        calibrated_conf: Optional[float] = None,
                        deriv_note: Optional[str] = None,
-                       sentiment_note: Optional[str] = None) -> str:
+                       sentiment_note: Optional[str] = None,
+                       sms_note: Optional[str] = None,
+                       ledger_note: Optional[str] = None,
+                       meta_p: Optional[float] = None) -> str:
     reason_text = _REASON_TEXT.get(reason, "NWE" if reason == "nwe_direct" else "Confidence > 80%")
     conf_pc = f"{conf * 100:.2f}%"
     extra = ""
@@ -333,6 +434,12 @@ def fmt_signal_message(pair: str, tf: str, overall_action: str, nwe_action: str,
         extra += f"🎯 <b>TRIGGER:</b> {trigger}\n"
     if calibrated_conf is not None:
         extra += f"🎚 <b>CAL. CONFIDENCE:</b> {calibrated_conf * 100:.0f}%\n"
+    if meta_p is not None:
+        extra += f"🤖 <b>MODEL P(CORRECT):</b> {meta_p * 100:.0f}%\n"
+    if ledger_note:
+        extra += f"📚 <b>TRACK RECORD:</b> {ledger_note}\n"
+    if sms_note:
+        extra += f"🏛 <b>MARKET STRUCTURE:</b> {sms_note}\n"
     if deriv_note:
         extra += f"🧲 <b>DERIVS:</b> {deriv_note}\n"
     if sentiment_note:
@@ -353,6 +460,42 @@ def fmt_signal_message(pair: str, tf: str, overall_action: str, nwe_action: str,
         "Sharing or reselling these signals is illegal.</i>\n\n"
         "~ <b>BitReinforceX</b>\n  \"Reinforcing your trades with AI power\""
     )
+
+
+def sms_note_from(details: Optional[Dict[str, Any]]) -> Optional[str]:
+    """One-line trend-matrix context for the signal message (v3.8), from
+    IndicatorAgent details["sms"]; None when the matrix is absent."""
+    m = (details or {}).get("sms")
+    if not m:
+        return None
+    arrows = {1: "▲", -1: "▼", 0: "━"}
+    try:
+        tf_bits = " ".join(f"{tf} {arrows.get(v, '━')}"
+                           for tf, v in (m.get("trend") or {}).items())
+        note = f"{tf_bits} · strength {m.get('strength'):+.0f}"
+        if m.get("confidence") is not None:
+            note += f" · conf {m['confidence']:.0f}%"
+        return note
+    except Exception:
+        return None
+
+
+def ledger_note_from(stats: Optional[Dict[str, Any]]) -> Optional[str]:
+    """One-line evidence summary for the signal message (v3.8)."""
+    if not stats:
+        return None
+    try:
+        if stats.get("probation") == "new_source":
+            return f"{stats.get('source')}: probation (new source)"
+        if stats.get("rate") is None:
+            return None
+        note = (f"{stats.get('source')}: {stats['rate'] * 100:.0f}% hit "
+                f"(n={stats.get('n')}, LB {stats.get('lb', 0) * 100:.0f}%)")
+        if stats.get("probation") == "global":
+            note += " · source-global"
+        return note
+    except Exception:
+        return None
 
 
 def fmt_brain_dump(res: Dict[str, Any], outcome: Optional[Dict[str, Any]] = None) -> str:

@@ -124,6 +124,26 @@ def _membership():
     return f"enabled, {len(_c.ADMIN_USER_IDS)} admin(s)" + ("; " + "; ".join(notes) if notes else "")
 
 
+def _ledger():
+    """v3.8 edge-first gate: without the ledger artifact NOTHING emits except
+    new-source probation — a fresh deploy that skipped scripts/seed_ledger.py
+    would go silent for up to 24h (until the nightly rebuild). WARN, not fail:
+    the artifact self-heals nightly."""
+    import config as _c
+    if not _c.EMISSION_V2_ENABLED:
+        return "disabled (EMISSION_V2_ENABLED off)"
+    if not os.path.exists(_c.LEDGER_PATH):
+        return (f"WARN: {_c.LEDGER_PATH} missing — run scripts/seed_ledger.py "
+                "--yes or expect near-zero emissions until the nightly build")
+    try:
+        import json as _json
+        with open(_c.LEDGER_PATH, "r", encoding="utf-8") as f:
+            n = len((_json.load(f).get("cohorts")) or {})
+        return f"{n} cohorts (floor {_c.LEDGER_FLOOR}, min_n {_c.LEDGER_MIN_N})"
+    except Exception as e:
+        return f"WARN: {_c.LEDGER_PATH} unreadable ({e})"
+
+
 def _universe():
     """Every SYMBOLS pair must have a fresh 1h candle — delisted/halted pairs
     (the LUNA/TON class of rot) fail loudly here instead of silently skipping
@@ -153,6 +173,7 @@ check("database", _db)
 check("rag embedder", _embedder)
 check("env vars", _env)
 check("env parity", _env_parity)
+check("emission ledger", _ledger)
 check("membership", _membership)
 check("universe", _universe)
 
