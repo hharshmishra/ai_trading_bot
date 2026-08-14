@@ -97,7 +97,8 @@ def _isolated_policy_paths(tmp_path, monkeypatch):
                        ("ECOSYSTEMS_CACHE_PATH", "ecosystems_cache.json"),
                        ("META_MODEL_PATH", "meta_model.pkl"),
                        ("META_METRICS_PATH", "meta_metrics.json"),
-                       ("CALIBRATION_PATH", "calibration.json")]:
+                       ("CALIBRATION_PATH", "calibration.json"),
+                       ("LEDGER_PATH", "emission_ledger.json")]:
         monkeypatch.setattr(config, attr, str(tmp_path / name))
 
     yield
