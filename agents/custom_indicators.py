@@ -829,3 +829,209 @@ def fib_confluence_vote(df: pd.DataFrame, w: int = 3,
         return out
     except Exception:
         return out
+
+# ---------------------------------------------------------------------------
+# Smart Money Structure (v3.8) — port of "Smart Money Structure | GainzAlgo"
+# (Pine v5, operator-supplied). Three independent direct-signal sources:
+#   sms       — the chart's BUY/SELL labels: vol-adaptive momentum burst
+#               confirmed by volume expansion + N-bar breakout + min distance
+#   sms_bos   — Break of Structure: close-colored breach of the PREVIOUS
+#               confirmed pivot (continuation flavor)
+#   sms_choch — Change of Character: colored cross of the CURRENT pivot level
+#               (early-reversal flavor)
+# Deliberate deviations from the Pine source, documented for the audit trail:
+#   * the multi-timeframe EMA/VWAP trend FILTERS are not applied to the
+#     signals (Pine defaults pointed them at 5-minute data — meaningless for
+#     a 1h+ system); the trend matrix ships as METRICS instead
+#     (sms_trend_matrix) and the v3.8 evidence ledger prices each source per
+#     regime/vol cohort, which is the honest version of the same idea.
+#   * `restrict_repeated_signals` (stateful, needs the 5M trend) is replaced
+#     by min-distance + the crossing nature of BOS/CHoCH (same inherent
+#     cooldown the NWE event mode uses).
+#   * ATR is the codebase's simple rolling-mean TR, not Pine's RMA.
+# All computations are causal with bounded lookback, so full-series output
+# equals per-window output for bars past warmup (backtest-vectorizable, same
+# argument as the NWE vectorization).
+# ---------------------------------------------------------------------------
+
+def sms_structure(df: pd.DataFrame, pivot_len: int = 5,
+                  momentum_base: float = 0.01, min_dist: int = 5,
+                  vol_long: int = 50, vol_short: int = 5,
+                  breakout_len: int = 5) -> Optional[pd.DataFrame]:
+    """Adds per-bar SMS columns; returns the df (copy) or None if too short.
+
+    Columns: sms_last_high/sms_last_low (confirmed pivot state),
+    sms_bos_buy/sms_bos_sell/sms_choch_buy/sms_choch_sell (structure events),
+    sms_buy/sms_sell (filtered BUY/SELL label events).
+    """
+    need = max(2 * pivot_len + 2, vol_long + 1, breakout_len + 2, 16)
+    if df is None or len(df) < need:
+        return None
+    d = df.copy()
+    high = d["high"].astype(float)
+    low = d["low"].astype(float)
+    close = d["close"].astype(float)
+    opn = d["open"].astype(float)
+    vol = d["volume"].astype(float) if "volume" in d else pd.Series(0.0, index=d.index)
+
+    # --- confirmed pivots (ta.pivothigh/low(len,len)): a STRICT local
+    # extreme vs both len-bar sides, visible only len bars later. Strictness
+    # (not >=) keeps flat stretches from minting a pivot on every bar. ---
+    left_hi = high.rolling(pivot_len).max().shift(1)
+    right_hi = high.iloc[::-1].rolling(pivot_len).max().iloc[::-1].shift(-1)
+    left_lo = low.rolling(pivot_len).min().shift(1)
+    right_lo = low.iloc[::-1].rolling(pivot_len).min().iloc[::-1].shift(-1)
+    piv_hi = high.where((high > left_hi) & (high > right_hi))
+    piv_lo = low.where((low < left_lo) & (low < right_lo))
+    last_high = piv_hi.shift(pivot_len).ffill()
+    last_low = piv_lo.shift(pivot_len).ffill()
+    d["sms_last_high"] = last_high
+    d["sms_last_low"] = last_low
+
+    red = close < opn
+    green = close > opn
+
+    def _xunder(a: pd.Series, b: pd.Series) -> pd.Series:
+        return (a.shift(1) >= b.shift(1)) & (a < b)
+
+    def _xover(a: pd.Series, b: pd.Series) -> pd.Series:
+        return (a.shift(1) <= b.shift(1)) & (a > b)
+
+    d["sms_choch_sell"] = (_xunder(low, last_high) & red).fillna(False)
+    d["sms_choch_buy"] = (_xover(high, last_low) & green).fillna(False)
+    prev_ll = last_low.shift(1)
+    prev_lh = last_high.shift(1)
+    d["sms_bos_sell"] = (_xunder(low, prev_ll) & (low < prev_ll) & red).fillna(False)
+    d["sms_bos_buy"] = (_xover(high, prev_lh) & (high > prev_lh) & green).fillna(False)
+
+    # --- BUY/SELL label conditions: vol-adaptive momentum + filters ---
+    pc = close.pct_change() * 100.0
+    tr = pd.concat([high - low, (high - close.shift(1)).abs(),
+                    (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(14).mean()
+    atr = atr.fillna(high - low)                    # Pine's na fallback
+    vf = (atr / close).clip(lower=0.0)
+    thr = momentum_base * (1.0 + 2.0 * vf)
+    early_buy = pc > thr
+    early_sell = pc < -thr
+
+    vol_sma_long = vol.rolling(vol_long).mean()
+    vol_sma_short = vol.rolling(vol_short).mean()
+    vol_ok = (vol > vol_sma_long) & (vol_sma_short.diff() > 0)
+
+    hi_roll = high.rolling(breakout_len).max().shift(1)
+    lo_roll = low.rolling(breakout_len).min().shift(1)
+    brk_buy = close > hi_roll
+    brk_sell = close < lo_roll
+
+    raw_buy = (early_buy & vol_ok & brk_buy).fillna(False).to_numpy()
+    raw_sell = (early_sell & vol_ok & brk_sell).fillna(False).to_numpy()
+
+    # min-signal-distance state machine (shared bar counter, as in Pine)
+    buy_out = np.zeros(len(d), dtype=bool)
+    sell_out = np.zeros(len(d), dtype=bool)
+    last_bar = -min_dist - 1
+    for i in range(len(d)):
+        if i - last_bar < min_dist:
+            continue
+        if raw_sell[i]:
+            sell_out[i] = True
+            last_bar = i
+        elif raw_buy[i]:
+            buy_out[i] = True
+            last_bar = i
+    d["sms_buy"] = buy_out
+    d["sms_sell"] = sell_out
+    return d
+
+
+def sms_signal_from(df: pd.DataFrame, pivot_len: int = 5,
+                    momentum_base: float = 0.01, min_dist: int = 5,
+                    vol_long: int = 50, vol_short: int = 5,
+                    breakout_len: int = 5) -> Optional[Dict[str, Any]]:
+    """Direct signal for the LAST CLOSED bar, or None when nothing fired.
+    Priority when several fire on one bar: label (fullest confluence) > BOS
+    > CHoCH. Confidence is a static prior; the EB direct-conf layer replaces
+    it once >=30 graded fires exist (same contract as every direct signal).
+    """
+    d = sms_structure(df, pivot_len=pivot_len, momentum_base=momentum_base,
+                      min_dist=min_dist, vol_long=vol_long,
+                      vol_short=vol_short, breakout_len=breakout_len)
+    if d is None:
+        return None
+    last = d.iloc[-1]
+    if last["sms_buy"]:
+        return {"signal": "buy", "confidence": 0.62, "name": "sms"}
+    if last["sms_sell"]:
+        return {"signal": "sell", "confidence": 0.62, "name": "sms"}
+    if last["sms_bos_buy"]:
+        return {"signal": "buy", "confidence": 0.60, "name": "sms_bos"}
+    if last["sms_bos_sell"]:
+        return {"signal": "sell", "confidence": 0.60, "name": "sms_bos"}
+    if last["sms_choch_buy"]:
+        return {"signal": "buy", "confidence": 0.58, "name": "sms_choch"}
+    if last["sms_choch_sell"]:
+        return {"signal": "sell", "confidence": 0.58, "name": "sms_choch"}
+    return None
+
+
+def _sms_vwap_daily(d: pd.DataFrame) -> pd.Series:
+    """Session (UTC-day) anchored VWAP over hlc3 — Pine's ta.vwap analogue."""
+    ts = pd.to_datetime(d["timestamp"])
+    hlc3 = (d["high"].astype(float) + d["low"].astype(float)
+            + d["close"].astype(float)) / 3.0
+    vol = d["volume"].astype(float)
+    day = ts.dt.floor("D")
+    pv = (hlc3 * vol).groupby(day).cumsum()
+    vv = vol.groupby(day).cumsum().replace(0.0, np.nan)
+    return pv / vv
+
+
+def sms_trend_matrix(fetcher, symbol: str, tfs=("1h", "4h", "1d"),
+                     ema_len: int = 20, cvd_window: int = 96) -> Optional[Dict[str, Any]]:
+    """EMA20 + daily-VWAP alignment per timeframe (the Pine table, remapped
+    from its 1M..1D set to the system's own TFs) plus a scale-normalized CVD.
+
+      trend[tf] = +1 close above both / -1 below both / 0 mixed
+      strength  = mean(trends) * 100            (-100 .. +100)
+      conf      = 90 all agree / 75 two / 60 one / 50 none  (Pine tiers)
+      cvd_norm  = rolling sum(sign(dClose)*vol) / rolling sum(vol) on tfs[0]
+                  (Pine's absolute 10K/50K cutoffs are symbol-scale-dependent;
+                  the ratio is comparable across the whole universe)
+
+    Live-path only (network fetches); returns None on any failure — metrics
+    are context, never load-bearing.
+    """
+    trends: Dict[str, int] = {}
+    cvd_norm = None
+    try:
+        for i, tf in enumerate(tfs):
+            d = fetcher.get_ohlcv(symbol, tf, limit=max(ema_len * 6, cvd_window + 8))
+            if d is None or len(d) < ema_len + 2:
+                trends[tf] = 0
+                continue
+            close = d["close"].astype(float)
+            ema = close.ewm(span=ema_len, adjust=False).mean()
+            vwap = _sms_vwap_daily(d)
+            c = float(close.iloc[-1])
+            e = float(ema.iloc[-1])
+            v = float(vwap.iloc[-1]) if np.isfinite(vwap.iloc[-1]) else e
+            trends[tf] = 1 if (c > e and c > v) else (-1 if (c < e and c < v) else 0)
+            if i == 0 and "volume" in d:
+                vol = d["volume"].astype(float)
+                sign = np.sign(close.diff()).fillna(0.0)
+                num = (sign * vol).rolling(cvd_window).sum().iloc[-1]
+                den = vol.rolling(cvd_window).sum().iloc[-1]
+                if np.isfinite(num) and np.isfinite(den) and den > 0:
+                    cvd_norm = float(np.clip(num / den, -1.0, 1.0))
+    except Exception:
+        return None
+    if not trends:
+        return None
+    s = sum(trends.values())
+    n = len(trends)
+    strength = round(100.0 * s / n, 1)
+    a = abs(s)
+    conf = 90.0 if a == n else (75.0 if a == n - 1 else (60.0 if a >= 1 else 50.0))
+    return {"trend": trends, "strength": strength, "confidence": conf,
+            "cvd_norm": cvd_norm}

@@ -187,6 +187,19 @@ class IndicatorAgent:
 
         regime_feats = regime_snap.feats()
         regime_feats["vol_ok"] = vol_ok
+
+        # SMS trend-matrix metrics (v3.8): live path only — ohlcv-passed calls
+        # (backtest replay) must never trigger cross-TF network fetches. The
+        # metrics ride in regime_feats because that JSON column is what both
+        # the meta featurizer and the nightly trainer read back from the DB.
+        sms_matrix = None
+        if config.SMS_ENABLED and ohlcv is None:
+            sms_matrix = ci.sms_trend_matrix(self.data, symbol)
+            if sms_matrix:
+                regime_feats["sms_strength"] = sms_matrix["strength"]
+                regime_feats["sms_conf"] = sms_matrix["confidence"]
+                if sms_matrix.get("cvd_norm") is not None:
+                    regime_feats["cvd_norm"] = sms_matrix["cvd_norm"]
         out = IndicatorDecision(
             agent="indicator_agent",
             chartName=symbol, timeframe=timeframe,
@@ -199,6 +212,7 @@ class IndicatorAgent:
                 "direct_signals": direct_signals,
                 "regime": regime_snap.regime,
                 "regime_feats": regime_feats,
+                "sms": sms_matrix,
             }
         )
         if log:
@@ -495,6 +509,17 @@ class IndicatorAgent:
             sq = ci.squeeze_release_signal(df)
             if sq and sq["signal"] in ("buy", "sell"):
                 signals.append(sq)
+
+        # Smart Money Structure (v3.8): fires in EVERY regime — the evidence
+        # ledger prices each source per regime/vol cohort, so regime fit is
+        # learned, not hardcoded. SMS_EMIT (not this flag) governs emission.
+        if config.SMS_ENABLED:
+            sms = ci.sms_signal_from(df, pivot_len=config.SMS_PIVOT_LEN,
+                                     momentum_base=config.SMS_MOMENTUM_BASE,
+                                     min_dist=config.SMS_MIN_DIST)
+            if sms and sms["signal"] in ("buy", "sell"):
+                sms["confidence"] = _direct_conf(sms["name"], sms["confidence"])
+                signals.append(sms)
 
         # Each entry: {"signal":"buy"/"sell"/"skip", "confidence": float, "name": ...}
         return signals

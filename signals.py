@@ -195,7 +195,7 @@ def pick_sms_signal(indicator_block: Dict[str, Any]) -> Optional[str]:
     try:
         direct = indicator_block["raw"]["details"]["direct_signals"]
         for d in direct:
-            if str(d.get("name", "")).lower() in ("sms_bos", "sms_choch"):
+            if str(d.get("name", "")).lower() in ("sms", "sms_bos", "sms_choch"):
                 sig = str(d.get("signal", "skip")).lower()
                 if sig in ("buy", "sell"):
                     return sig
