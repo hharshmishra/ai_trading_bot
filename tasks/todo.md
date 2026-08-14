@@ -1,7 +1,7 @@
 # v3.8 — Edge-First Emission + SMS + Learning Repair II
 (plan: ~/.claude/plans/tender-wondering-garden.md · evidence: docs/v38-emission-redesign.md)
 
-STATUS 2026-08-14: implementation COMPLETE, 436 tests green.
+STATUS 2026-08-14: implementation COMPLETE, 444 tests green.
 
 - [x] 21-day audit (31,728 rows; grading live-verified 20/20 via ccxt)
 - [x] Phase 1 — meta train/serve skew + `emitted` leakage fix (candidate_trigger/
