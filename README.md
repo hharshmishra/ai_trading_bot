@@ -7,7 +7,7 @@
 *"Reinforcing your trades with AI power"*
 
 ![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-367%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-436%20passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-gpt--4o--mini-8A2BE2)
 ![Cost](https://img.shields.io/badge/data%20cost-%240%2Fmo-success)
 ![Deploy](https://img.shields.io/badge/deploy-Oracle%20ARM%20%2B%20systemd-orange)
@@ -73,7 +73,7 @@ python scripts/preflight.py            # must print READY (pins, DB, universe fr
 python telegram_app.py                 # runs scheduler + grader + nightly in one process
 ```
 
-Tests (no network / keys needed): `pytest -q` → **367 passing**.
+Tests (no network / keys needed): `pytest -q` → **436 passing**.
 
 ## 🎓 How it learns
 
@@ -90,10 +90,18 @@ Tests (no network / keys needed): `pytest -q` → **367 passing**.
 4. **Nightly self-training**: logistic meta-model p(correct | regime, agreement, positioning, …),
    per-TF isotonic confidence calibration (runtime = `np.interp` on JSON knots — zero sklearn on
    the hot path), and shrunk win-rate confidences replacing hardcoded ones. All shadow-first.
-5. **Brain trust (v3.7)**: agent priority = `softmax(score/2)` with scores clamped ±10 and a 2%
-   floor — trust learns from a *symmetric* direction-quality signal (±1·conf, −0.25·conf on flat),
-   never the bandit's asymmetric map, so one bad stretch can't permanently mute a voter. Full
-   post-mortem of the 19-day v3.6 collapse: [docs/v37-learning-repair.md](docs/v37-learning-repair.md).
+5. **Brain trust (v3.8)**: agent priority = `softmax(score/2)` with scores clamped ±10 and a 2%
+   floor — trust learns an *advantage* signal, `conf·(outcome − per-agent EMA baseline)`, plus a
+   nightly decay toward 0, so a bad market regime can't sink every voter to the rails (the v3.7
+   symmetric map was still negative-sum at real base rates: 21 days pinned derivatives at −10).
+   Post-mortems: [docs/v37-learning-repair.md](docs/v37-learning-repair.md),
+   [docs/v38-emission-redesign.md](docs/v38-emission-redesign.md).
+6. **Edge-first emission (v3.8)**: every candidate signal (`nwe`, `sms*`, `trend`, `conf`) is
+   judged by the **evidence ledger** — measured hit-rate ≥ 38% AND Wilson lower bound ≥ 30% in its
+   `(source, tf, regime, vol)` cohort — then by the meta gate. Suppressed candidates are still
+   recorded + graded, so cohorts earn their way in (or out) without emitting. Hand-tuned per-source
+   flags stopped deciding anything; 21 days of them had suppressed the one proven signal
+   (NWE crossings, 40–50% outside calm vol) to ~1.5 emissions/day.
 
 ## 🚦 Signal gate
 
@@ -147,11 +155,13 @@ All knobs live in [`.env.example`](.env.example) (40+ keys, every one commented)
 | `NWE_EVENT_MODE` | ✅ on | −25–36% duplicate emissions, precision non-inferior |
 | `MACRO_PRICES_ENABLED` | ✅ on | SPX via stooq keyless; DXY once `FRED_API_KEY` set |
 | `BRAIN_DEADZONE_V2` | 🌒 shadow | enable if suppressed cohort shows negative expectancy (≥2wk) |
-| `META_GATE_ENABLED` | ✅ on (v3.7) | prod counterfactual on emitted: meta_p≥0.55 → 37.5% vs 17.8% hit. Honesty note: holdout AUC 0.579 < the 0.60 bar — enabled on the emitted-subset lift, retrains nightly, env-revertible ([evidence](docs/v37-learning-repair.md)) |
+| `EMISSION_V2_ENABLED` | ✅ on (v3.8) | edge-first gate: evidence ledger (rate≥0.38 ∧ WilsonLB≥0.30, n≥25 per cohort) + meta ranker. Seeded from 21d history; off restores the v3.7.1 truth table byte-for-byte ([evidence](docs/v38-emission-redesign.md)) |
+| `SMS_ENABLED` / `SMS_EMIT` | ✅ on / 🌒 shadow (v3.8) | Smart Money Structure port (BOS/CHoCH/momentum label + trend matrix). Backtest (39k events, pre-registered rule): base+0.2–1.5pts → records + grades but does NOT emit; day-20 prod data re-judges |
+| `META_GATE_ENABLED` | ✅ on (v3.7) | meta_p≥0.55 as ranker on candidates. v3.8 fixed the train/serve skew (`emitted` leakage feature dropped, candidate one-hots persisted on every row) that had it serving 0.97s on a 37% cohort |
 | `GATE_CONF_SATURATION` | ✅ 0.97 (v3.7) | conf==1.0 unanimity herds graded 1c/7w/15f emitted — suppressed (0 = off) |
-| `GATE_1H_MIXED` | ❌ off (v3.7) | 1h mixed-regime NWE emissions graded 2/17 on direction |
+| `GATE_1H_MIXED` | ⚰️ superseded (v3.8) | the n=17 verdict was refuted at n=96 (40.6% hit) — the ledger owns regime/vol fit now; flag only matters with `EMISSION_V2_ENABLED=false` |
 | `NIGHTLY_CATCHUP` | ✅ on (v3.7) | runs a missed 02:00 IST training once at startup |
-| `GATE_NWE_VOL_MAX` | ⏸ 0/off (v3.7.1) | NWE volatility ceiling — 19d test found hit-rate FLAT across vol buckets (31/31/31/34%), so off; day-30 emitted-path data decides. Funnel now records `gate_reason`+`nwe_action` on every row |
+| `GATE_NWE_VOL_MAX` | ⚰️ superseded (v3.8) | 21d data inverted the premise: NWE is BEST in elevated/extreme vol (45.7/42.6%) and worst in calm (23.5%) — exactly what the ledger's vol-band cohorts encode |
 | `MONEY_FLOW_V2` `NEWS_EVENTS_ENABLED` `ECOSYSTEMS_AUTO` | ⏸ off | enable after shadow sanity |
 | `DIVERGENCE_VOTES` `GATE_TREND_REVERSAL` `GATE_NWE_HIGHER_TF` `GATE_1H_TREND` | ❌ off | measured: no benefit / harmful |
 | `EMPIRICAL_DIRECT_CONF` | ⏸ off | self-arms once ≥30 graded direct-fires exist |

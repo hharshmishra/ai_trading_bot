@@ -115,3 +115,26 @@
     against the live environment and WARNs per missing key — presence, not
     truthiness (`T2_EXTRA_VOTES=` is legitimately empty), names only, never
     values. Run preflight after every `.env` edit.
+
+17. **A verdict from n=17 is an anecdote, not evidence — and it WILL get
+    refuted.** v3.7 hard-disabled 1h mixed-regime NWE on 2/17; 21 days later
+    the same cohort measured 40.6% on n=96 (the system's best signal,
+    suppressed by its own flag). Same story for the 4h NWE ban (12.5% tiny-n
+    → 43.8% @ n=16 and climbing). Fix shipped in v3.8: per-source hand flags
+    replaced by the evidence ledger (cohort rate + Wilson LB + sample floor),
+    and any future threshold decision needs the pre-registered-rule treatment
+    the SMS backtest got (rule written into the plan BEFORE the run).
+
+18. **Never let a mid-pipeline value into a persisted feature.** cycle passed
+    `emitted`/`trigger_source` into the meta vector BEFORE the final gates
+    ran; training rows carried post-gate values. The single-code-path
+    featurizer everyone trusted couldn't help — the SKEW WAS IN THE INPUT
+    DICT. Rule: every feature must be persisted on every row exactly as
+    served (candidate_trigger pattern), and gate outcomes (emitted) are
+    labels-adjacent, never features.
+
+19. **Grade the thing the customer received.** Emitted type-1 signals carried
+    the trigger's direction while barriers + labels used the brain's internal
+    final (ALGOUSDT: sent SELL, graded BUY/tp). Any pipeline where "what we
+    sent" and "what we scored" can diverge needs a column that records the
+    sent artifact itself (candidate_action) and a grader anchored on it.

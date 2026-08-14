@@ -71,3 +71,6 @@ brain/__pycache__
 
 # backups
 backups/
+
+# old logs
+logs.24July/
