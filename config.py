@@ -86,6 +86,27 @@ GATE_CONF_SATURATION = _env_float("GATE_CONF_SATURATION", 0.0)  # >0: suppress d
 GATE_NWE_VOL_MAX = _env_float("GATE_NWE_VOL_MAX", 0.0)
 
 # --------------------------------------------------------------------------
+# v3.8 — edge-first emission (evidence ledger) + trust dynamics + SMS
+# 21-day prod audit: emission stack self-suppressed to ~1.5/day while NWE
+# crossings measured 40-50% hit outside calm vol; hand flags replaced by a
+# per-cohort Wilson-lower-bound ledger. Flag off => v3.7.1 path byte-identical.
+# --------------------------------------------------------------------------
+EMISSION_V2_ENABLED = _env_bool("EMISSION_V2_ENABLED", False)
+LEDGER_FLOOR = _env_float("LEDGER_FLOOR", 0.38)        # min Wilson LB to emit (strict posture)
+LEDGER_MIN_N = _env_int("LEDGER_MIN_N", 25)            # cohort sample floor before LB is trusted
+LEDGER_PROBATION_N = _env_int("LEDGER_PROBATION_N", 40)  # emit budget for brand-new sources
+LEDGER_PATH = os.getenv("LEDGER_PATH", "logs/emission_ledger.json")
+TRUST_DECAY = _env_float("TRUST_DECAY", 0.98)          # nightly score pull toward 0 (1=off)
+# Smart Money Structure (GainzAlgo port): BOS/CHoCH direct signals + trend
+# matrix metrics. SMS_EMIT separately controls emission eligibility so the
+# source can run in shadow (recorded + graded, never sent).
+SMS_ENABLED = _env_bool("SMS_ENABLED", False)
+SMS_EMIT = _env_bool("SMS_EMIT", False)
+SMS_PIVOT_LEN = _env_int("SMS_PIVOT_LEN", 5)
+SMS_MOMENTUM_BASE = _env_float("SMS_MOMENTUM_BASE", 0.01)
+SMS_MIN_DIST = _env_int("SMS_MIN_DIST", 5)
+
+# --------------------------------------------------------------------------
 # Correctness v3 (Phase A)
 # --------------------------------------------------------------------------
 CLOSED_CANDLES_ONLY = _env_bool("CLOSED_CANDLES_ONLY", True)  # drop in-progress candle in live fetches

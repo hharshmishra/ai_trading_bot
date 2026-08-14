@@ -184,11 +184,22 @@ def fit_direct_conf(rows: List[Dict[str, Any]], m: int = 20,
     return payload
 
 
-def run_nightly_training(store) -> Dict[str, Any]:
+def run_nightly_training(store, dm=None) -> Dict[str, Any]:
     rows = store.training_rows()
     meta = train_meta_model(rows)
     calib = fit_calibration(rows)
     direct_conf = fit_direct_conf(rows)
+
+    # v3.8: geometric trust decay — rails are temporary (see decay_trust).
+    # In-process via the live DecisionMaker; file surgery would race its
+    # in-memory policy copy.
+    trust_decayed = False
+    if dm is not None:
+        try:
+            dm.decay_trust()
+            trust_decayed = True
+        except Exception as e:
+            logger.error("trust decay failed: %s", e)
 
     # Ecosystem refresh (B4): best-effort — network failures keep the current
     # (cached or hardcoded) lists; reload applies the new cache in-process.
@@ -225,6 +236,7 @@ def run_nightly_training(store) -> Dict[str, Any]:
             "calibrated_tfs": sorted((calib or {}).get("knots", {})),
             "direct_conf_indicators": sorted((direct_conf or {}).get("conf", {})),
             "ecosystems_refreshed": ecosystems_refreshed,
+            "trust_decayed": trust_decayed,
             "pruned_predictions": pruned}
 
 
@@ -331,7 +343,8 @@ async def nightly_loop(application, hour_ist: Optional[int] = None) -> None:
     logger.info("nightly trainer started (%02d:00 IST)", hour)
     if config.NIGHTLY_CATCHUP and _needs_catchup(hour=hour):
         try:
-            summary = await asyncio.to_thread(run_nightly_training, bd["store"])
+            summary = await asyncio.to_thread(run_nightly_training, bd["store"],
+                                              bd.get("dm"))
             logger.info("nightly catch-up: %s", summary)
         except Exception as e:
             logger.error("nightly catch-up failed: %s", e)
@@ -343,7 +356,8 @@ async def nightly_loop(application, hour_ist: Optional[int] = None) -> None:
                 nxt += timedelta(days=1)
             await asyncio.sleep((nxt - now).total_seconds())
 
-            summary = await asyncio.to_thread(run_nightly_training, bd["store"])
+            summary = await asyncio.to_thread(run_nightly_training, bd["store"],
+                                              bd.get("dm"))
             logger.info("nightly training: %s", summary)
             dev_chat = getattr(bd.get("broadcaster"), "dev_chat_id", None)
             if dev_chat:

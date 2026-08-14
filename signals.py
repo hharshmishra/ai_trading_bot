@@ -140,6 +140,70 @@ def pick_trigger(indicator_block: Dict[str, Any]) -> Tuple[Optional[str], set]:
     return action, votes[action]
 
 
+# gate-reason prefix -> candidate trigger group. `low_volume` is ambiguous
+# (both the 1h NWE path and the 4h+ trend path emit it) and is resolved by
+# whether an NWE crossing fired this cycle.
+_REASON_TRIGGER = {
+    "nwe": "nwe",
+    "no_brain_agreement": "nwe",
+    "trend": "trend",
+    "reversal_disabled": "trend",
+    "counter_trend_no_flip": "trend",
+    "counter_trend_conf": "conf",
+    "conf": "conf",
+    "sms": "sms",
+}
+
+
+def derive_candidate(reason: str, indicator_block: Dict[str, Any],
+                     final_action: str) -> Tuple[Optional[str], Optional[str]]:
+    """(candidate_trigger, candidate_action) for the candidate the gate ruled
+    on, from its PRE-suppression reason string — v3.8 telemetry recorded on
+    every row so the meta model and the evidence ledger train on the exact
+    vector served at decide time (the emitted-only trigger_source caused
+    train/serve skew), and so emitted rows grade the direction actually sent.
+
+    Returns (None, None) when the cycle had no candidate (empty reason).
+    Never derive from `meta_gate`/`conf_saturated` — cycle derives BEFORE
+    those suppressors overwrite the reason.
+    """
+    if not reason:
+        return None, None
+    group = None
+    for prefix, g in _REASON_TRIGGER.items():
+        if reason.startswith(prefix):
+            group = g
+            break
+    nwe_action = pick_nwe_signal(indicator_block)
+    if reason == "low_volume":
+        group = "nwe" if nwe_action in ("buy", "sell") else "trend"
+    if group is None:
+        return None, None
+    if group == "nwe":
+        act = nwe_action
+    elif group == "trend":
+        act, _ = pick_trigger(indicator_block)
+    elif group == "sms":
+        act = pick_sms_signal(indicator_block)
+    else:  # conf: the brain's own directional final is the candidate
+        act = final_action
+    return group, act if act in ("buy", "sell") else None
+
+
+def pick_sms_signal(indicator_block: Dict[str, Any]) -> Optional[str]:
+    """Smart Money Structure direct signal (v3.8); None when SMS did not fire."""
+    try:
+        direct = indicator_block["raw"]["details"]["direct_signals"]
+        for d in direct:
+            if str(d.get("name", "")).lower() in ("sms_bos", "sms_choch"):
+                sig = str(d.get("signal", "skip")).lower()
+                if sig in ("buy", "sell"):
+                    return sig
+    except Exception:
+        return None
+    return None
+
+
 def should_emit_signal_v2(res: Dict[str, Any]) -> Tuple[bool, str, str, float, str]:
     """Regime-gated signal gate (Phase 2, behind GATE_V2_ENABLED).
 

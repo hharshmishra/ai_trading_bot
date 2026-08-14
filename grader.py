@@ -195,16 +195,22 @@ class Grader:
         # get a path-aware label. Always RECORDED (shadow evidence); only drives
         # rewards when TB_GRADING_ENABLED. Legacy rows (NULL tp_price) keep the
         # fixed-horizon path forever.
+        # v3.8: emitted rows anchor on the direction actually SENT
+        # (candidate_action — cycle places their barriers on the same side);
+        # the 21d run graded emitted trigger SELLs against the brain's BUY.
+        # Old emitted rows (candidate_action NULL) keep the final_action path.
         label_tb = hit_idx = exit_price = None
         final_action = _norm_action(p.get("final_action"))
-        if p.get("tp_price") and p.get("sl_price") and final_action in ("buy", "sell"):
-            out = triple_barrier(path, entry, final_action,
+        sent = _norm_action(p.get("candidate_action")) if p.get("emitted") else "skip"
+        tb_dir = sent if sent in ("buy", "sell") else final_action
+        if p.get("tp_price") and p.get("sl_price") and tb_dir in ("buy", "sell"):
+            out = triple_barrier(path, entry, tb_dir,
                                  float(p["tp_price"]), float(p["sl_price"]), k)
             if out.label_tb != "incomplete":
                 label_tb, hit_idx, exit_price = out.label_tb, out.hit_idx, out.exit_price
 
         if config.TB_GRADING_ENABLED and label_tb in ("tp", "sl"):
-            label = final_action if label_tb == "tp" else _opposite(final_action)
+            label = tb_dir if label_tb == "tp" else _opposite(tb_dir)
         else:
             label = label_fixed
 

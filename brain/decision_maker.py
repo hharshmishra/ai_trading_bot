@@ -52,26 +52,42 @@ TRUST_TEMPERATURE = 2.0   # softmax temperature over trust scores
 SCORE_CLAMP = 10.0        # trust scores live in [-10, +10]
 WEIGHT_FLOOR = 0.02       # every voter keeps >= 2% voice
 TRUST_LR = 0.05           # 5% adjustment per feedback
+# v3.8: EMA horizon of the per-agent advantage baseline (~50 directional
+# votes). The v3.7 symmetric map was still negative-sum at realized base
+# rates (~28% correct / 29% opposite / 43% flat => E ~ -0.11*conf per vote):
+# in 21 prod days every score sank and derivatives pinned at the -10 rail.
+# Subtracting each agent's own running average makes trust zero-sum around
+# "your recent self" — only being BETTER than your own base rate raises trust.
+TRUST_BASELINE_ALPHA = 0.02
 
 
-def brain_trust_delta(pred: str, realized: str, conf: float) -> float:
-    """Direction-quality trust signal, decoupled from the bandit reward map.
+def brain_trust_outcome(pred: str, realized: str) -> Optional[float]:
+    """Direction-quality outcome score for one vote, or None for skip votes
+    (they carry no trust evidence — they already hold no vote mass)."""
+    if pred not in ("buy", "sell"):
+        return None
+    if realized == pred:
+        return 1.0
+    if realized == "skip":
+        return -0.25
+    return -1.0
+
+
+def brain_trust_delta(pred: str, realized: str, conf: float,
+                      baseline: float = 0.0) -> float:
+    """Advantage-style trust signal, decoupled from the bandit reward map.
 
     The bandits keep the asymmetric v2 map (-4 confidently-wrong etc.); trust
-    cannot, because at realized base rates (~29% up / ~29% down / ~41% flat)
-    that map bankrupts EVERY directional voter and the brain converges on
-    whoever abstains. Trust asks one question: when this agent speaks, is the
-    direction right? +1*conf correct, -1*conf opposite, -0.25*conf when the
-    market stayed flat; skip votes carry no trust evidence (they already
-    contribute nothing to the weighted vote).
+    cannot, because at realized base rates that map bankrupts EVERY directional
+    voter and the brain converges on whoever abstains. Trust asks one question:
+    when this agent speaks, is the direction right MORE OFTEN THAN ITS OWN
+    RECENT AVERAGE? delta = conf * (outcome_score - baseline), outcome_score
+    = +1 correct / -1 opposite / -0.25 flat; skip votes -> 0.
     """
-    if pred not in ("buy", "sell"):
+    out = brain_trust_outcome(pred, realized)
+    if out is None:
         return 0.0
-    if realized == pred:
-        return conf
-    if realized == "skip":
-        return -0.25 * conf
-    return -conf
+    return conf * (out - baseline)
 
 
 def _ensure_logs_dir():
@@ -362,15 +378,21 @@ class DecisionMaker:
         agent is scored exactly once.
         """
         true = self._normalize_action(true_outcome)
+        baselines = self.policy.setdefault("baseline", {})
         for ag in AGENT_NAMES:
             res = agent_results.get(ag)
             if res is None:
                 continue  # e.g. pre-Phase-4 rows without a derivatives snapshot
             pred = self._normalize_action(res.get("action", "skip"))
             conf = float(res.get("confidence", 0.0) or 0.0)
-            delta = brain_trust_delta(pred, true, conf)
-            if delta == 0.0:
+            out = brain_trust_outcome(pred, true)
+            if out is None:
                 continue  # skip votes carry no trust evidence
+            b = float(baselines.get(ag, 0.0))
+            delta = conf * (out - b)
+            # baseline updates AFTER the delta so the first vote after a reset
+            # is judged against 0 (neutral), not against itself
+            baselines[ag] = (1.0 - TRUST_BASELINE_ALPHA) * b + TRUST_BASELINE_ALPHA * out
             s = float(self.policy["scores"].get(ag, 0.0)) + TRUST_LR * delta
             self.policy["scores"][ag] = max(-SCORE_CLAMP, min(SCORE_CLAMP, s))
 
@@ -382,3 +404,18 @@ class DecisionMaker:
         ``agent_results`` = {agent: {"action": str, "confidence": float}}.
         """
         self._apply_feedback_to_brain(agent_results, true_outcome)
+
+    def decay_trust(self, factor: Optional[float] = None):
+        """Nightly geometric pull of every trust score toward 0 (v3.8).
+
+        The +/-10 clamp made scores recoverable but not un-stuck: a voter
+        pinned at a rail needs the same volume of counter-evidence back.
+        Decay guarantees rails are temporary (0.98/night ~ half-life 34 days)
+        while leaving day-to-day ordering intact. Factor <=0 or >=1 no-ops.
+        """
+        f = config.TRUST_DECAY if factor is None else float(factor)
+        if not (0.0 < f < 1.0):
+            return
+        scores = self.policy.get("scores") or {}
+        self.policy["scores"] = {k: float(v) * f for k, v in scores.items()}
+        self._normalize_weights()

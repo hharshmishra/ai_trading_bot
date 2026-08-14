@@ -22,7 +22,8 @@ from grading.barriers import barrier_prices
 from jobs.nightly import apply_calibration, meta_probability
 from market_context import build_market_context
 from persistence import get_store
-from signals import TF_SECONDS, should_emit_signal, should_emit_signal_v2
+from signals import (TF_SECONDS, derive_candidate, should_emit_signal,
+                     should_emit_signal_v2)
 
 # Default pair universe (48 USDT pairs).
 # Stale-universe prevention (correctness v3, A6): LUNA -> SUI, and the new
@@ -111,20 +112,19 @@ async def run_cycle(
                 gate = should_emit_signal_v2 if config.GATE_V2_ENABLED else should_emit_signal
                 emit, overall, nwe, conf, reason = gate(res)
 
-                # Barrier prices for the triple-barrier grader (Phase 3): every
-                # directional prediction gets them, emitted or not — the RL loop
-                # grades them all.
                 agents_blk = res.get("agents") or {}
                 ind_details = ((agents_blk.get("indicator") or {})
                                .get("raw") or {}).get("details") or {}
                 regime_feats = ind_details.get("regime_feats") or {}
                 atr = regime_feats.get("atr")
                 final_action = (res.get("final") or {}).get("action")
-                tp_price = sl_price = None
-                if entry and atr and final_action in ("buy", "sell"):
-                    tp_mult, sl_mult = config.BARRIER_MULTS.get(tf, (1.5, 1.0))
-                    tp_price, sl_price = barrier_prices(entry, atr, final_action,
-                                                        tp_mult, sl_mult)
+
+                # v3.8: the candidate the gate ruled on, derived from the
+                # PRE-suppression reason (saturation/meta overwrite it below).
+                # Persisted on every row so meta training sees the same vector
+                # the gate was served, and the ledger grades every candidate.
+                cand_trigger, cand_action = derive_candidate(
+                    reason, agents_blk.get("indicator") or {}, final_action)
 
                 # Meta shadow stamps (Phase 5): calibrated confidence + p(correct)
                 # from the nightly artifacts. Identity/None until they exist.
@@ -134,8 +134,9 @@ async def run_cycle(
                     row_like = {
                         "regime": ind_details.get("regime"), "regime_feats": regime_feats,
                         "atr": atr, "entry_price": entry, "tf": tf,
-                        "candle_close_ts": close_ts, "emitted": emit,
-                        "trigger_source": reason if emit else None,
+                        "candle_close_ts": close_ts,
+                        "candidate_trigger": cand_trigger,
+                        "candidate_action": cand_action,
                         "final_action": final_action,
                         "final_confidence": (res.get("final") or {}).get("confidence"),
                         "indicator_action": (agents_blk.get("indicator") or {}).get("action"),
@@ -166,6 +167,24 @@ async def run_cycle(
                         and meta_p < config.META_GATE_THRESHOLD):
                     emit, reason = False, "meta_gate"
 
+                # Barrier prices for the triple-barrier grader (Phase 3/v3.8).
+                # Emitted rows anchor barriers on the direction actually SENT
+                # (`overall` — the trigger's side may differ from the brain
+                # final; 21d prod had emitted SELLs graded as brain BUYs).
+                # Non-emitted directional finals keep the shadow-grading path.
+                tp_price = sl_price = None
+                if emit:
+                    # candidate first so grader (which reads candidate_action)
+                    # and barriers always agree; overall is its emit-path alias
+                    barrier_dir = (cand_action if cand_action in ("buy", "sell")
+                                   else overall)
+                else:
+                    barrier_dir = final_action
+                if entry and atr and barrier_dir in ("buy", "sell"):
+                    tp_mult, sl_mult = config.BARRIER_MULTS.get(tf, (1.5, 1.0))
+                    tp_price, sl_price = barrier_prices(entry, atr, barrier_dir,
+                                                        tp_mult, sl_mult)
+
                 session_id = None
                 if emit and broadcast is not None:
                     res["meta"] = {"meta_p": meta_p, "calibrated_conf": calibrated}
@@ -183,7 +202,9 @@ async def run_cycle(
                     # (incl. conf_saturated/meta_gate suppressions) + the NWE
                     # direction, so the day-30 analysis can grade both.
                     gate_reason=reason or None,
-                    nwe_action=nwe if nwe in ("buy", "sell") else None)
+                    nwe_action=nwe if nwe in ("buy", "sell") else None,
+                    candidate_trigger=cand_trigger,
+                    candidate_action=cand_action)
                 if session_id and pid:
                     # session was created pre-record (keyboard needs its id);
                     # link back so REWARD buttons can find the prediction.

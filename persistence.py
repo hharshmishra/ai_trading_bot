@@ -156,6 +156,15 @@ _MIGRATION_COLS = {
         # plus the NWE direction so its hit-rate is measurable per regime/vol.
         ("gate_reason", "TEXT"),
         ("nwe_action", "TEXT"),
+        # v3.8: candidate telemetry on EVERY row the gate evaluated a type-1/2
+        # candidate for, emitted or not. candidate_trigger is the source group
+        # (nwe/sms_bos/sms_choch/trend/conf) and candidate_action its direction
+        # — the meta model and the evidence ledger both train on these, so the
+        # serve-time vector finally matches the train-time vector (the v3.7
+        # emitted-only trigger_source caused train/serve skew), and emitted
+        # rows are graded against the direction that was actually SENT.
+        ("candidate_trigger", "TEXT"),
+        ("candidate_action", "TEXT"),
     ],
     "outcomes": [
         ("label_tb", "TEXT"),              # tp | sl | timeout
@@ -245,6 +254,8 @@ class Store:
         calibrated_conf: Optional[float] = None,
         gate_reason: Optional[str] = None,
         nwe_action: Optional[str] = None,
+        candidate_trigger: Optional[str] = None,
+        candidate_action: Optional[str] = None,
     ) -> str:
         """Insert one prediction, snapshotting each child agent's RL replay data.
 
@@ -294,7 +305,10 @@ class Store:
             "final_score": final.get("score"),
             "final_action_v2": final.get("action_v2"),
             "emitted": 1 if emitted else 0,
-            "news_action": news_raw.get("action"),
+            # normalized: NewsAgent emits UPPERCASE actions; every SQL consumer
+            # (funnel audits, the ledger) compares against lowercase labels
+            "news_action": (news_raw.get("action") or None)
+                            and str(news_raw["action"]).lower(),
             "news_action_idx": news_rl.get("action_idx"),
             "news_feats": _dumps(news_rl.get("features")),
             "news_conf": (agents.get("news") or {}).get("confidence"),
@@ -327,6 +341,8 @@ class Store:
             "calibrated_conf": calibrated_conf,
             "gate_reason": gate_reason,
             "nwe_action": nwe_action,
+            "candidate_trigger": candidate_trigger,
+            "candidate_action": candidate_action,
         }
         cols = ", ".join(row.keys())
         ph = ", ".join(["?"] * len(row))

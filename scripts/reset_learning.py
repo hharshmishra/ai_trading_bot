@@ -70,9 +70,13 @@ NEWS_TABLES = ["news_items"]                    # only with --wipe-news
 
 
 def _nightly_artifacts():
-    # resolved at call time so a reload/monkeypatch of config is honoured
+    # resolved at call time so a reload/monkeypatch of config is honoured.
+    # The marker is included deliberately: deleting it makes NIGHTLY_CATCHUP
+    # retrain at the very next startup, so a reset never leaves a stale meta
+    # model (v3.8 changed the feature vector — an old pkl would serve None).
     return [config.META_MODEL_PATH, config.META_METRICS_PATH,
-            config.CALIBRATION_PATH, config.INDICATOR_CONF_PATH]
+            config.CALIBRATION_PATH, config.INDICATOR_CONF_PATH,
+            config.NIGHTLY_MARKER_PATH]
 
 
 def _db_path():

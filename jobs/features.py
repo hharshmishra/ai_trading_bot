@@ -15,8 +15,13 @@ from typing import Any, Dict, List, Optional
 
 REGIMES = ("trend_up", "trend_down", "ranging", "mixed")
 TFS = ("1h", "4h", "1d", "1w")
-TRIGGER_GROUPS = ("nwe", "trend", "conf")   # + none -> all zeros
+TRIGGER_GROUPS = ("nwe", "sms", "trend", "conf")   # + none -> all zeros
 
+# v3.8 (feature-set v2): `emitted` REMOVED — it was outcome-of-the-gate
+# leakage (train rows only carried it when every gate passed; serve rows
+# carried the mid-gate value → meta_p 0.97-1.0 streaks on a ~37%-hit cohort).
+# Trigger one-hots now read `candidate_trigger`, which cycle persists on
+# every candidate row pre-suppression, so train == serve by construction.
 FEATURE_NAMES: List[str] = (
     [f"regime_{r}" for r in REGIMES]
     + ["adx", "chop", "vol_pct", "atr_pct", "vol_ok"]
@@ -26,7 +31,8 @@ FEATURE_NAMES: List[str] = (
     + [f"tf_{t}" for t in TFS]
     + ["hour_sin", "hour_cos"]
     + [f"trigger_{g}" for g in TRIGGER_GROUPS]
-    + ["emitted"]
+    + ["candidate_side", "vol_x_nwe"]
+    + ["sms_strength", "sms_confidence", "cvd_norm"]
 )
 
 
@@ -42,6 +48,8 @@ def _trigger_group(trigger: Optional[str]) -> Optional[str]:
     t = (trigger or "").lower()
     if t.startswith("nwe"):
         return "nwe"
+    if t.startswith("sms"):
+        return "sms"
     if t.startswith("trend"):
         return "trend"
     if t.startswith("conf"):
@@ -97,9 +105,23 @@ def meta_features_from_prediction_row(p: Dict[str, Any]) -> List[float]:
     hour = (float(ts) % 86400.0) / 3600.0
     feats += [math.sin(2 * math.pi * hour / 24.0), math.cos(2 * math.pi * hour / 24.0)]
 
-    group = _trigger_group(p.get("trigger_source"))
+    # candidate_trigger holds the group name directly (v3.8 rows, train AND
+    # serve); trigger_source (a reason string, emitted rows only) is the
+    # fallback so pre-v3.8 training rows keep their one-hots.
+    group = _trigger_group(p.get("candidate_trigger") or p.get("trigger_source"))
     feats += [1.0 if group == g else 0.0 for g in TRIGGER_GROUPS]
-    feats += [1.0 if p.get("emitted") else 0.0]
+
+    side = str(p.get("candidate_action") or "").lower()
+    vol_pct_f = _f(rf.get("vol_pct"), 0.5)
+    feats += [
+        1.0 if side == "buy" else 0.0 if side == "sell" else 0.5,
+        vol_pct_f if group == "nwe" else 0.0,
+    ]
+    feats += [
+        max(-1.0, min(1.0, _f(rf.get("sms_strength")) / 100.0)),
+        _f(rf.get("sms_conf"), 50.0) / 100.0,
+        max(-1.0, min(1.0, _f(rf.get("cvd_norm")))),
+    ]
 
     assert len(feats) == len(FEATURE_NAMES)
     return feats
